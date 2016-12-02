@@ -38,6 +38,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/blobporter/pipeline"
+	"github.com/Azure/blobporter/util"
 )
 
 ////////////////////////////////////////////////////////////
@@ -96,13 +97,14 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 
 		req.Header.Set("Range", header)
 
-		if res, err = client.Do(req); err != nil {
-			log.Fatal(err)
-		}
+		util.RetriableOperation(func() error {
+			if res, err = client.Do(req); err != nil {
+				return err
+			}
+			return nil
+		})
 
 		b := make([]byte, p.BytesToRead)
-
-		//fmt.Printf("Header: %v Data: %d  CT: %d\n", header, n, res.ContentLength)
 
 		if b, err = ioutil.ReadAll(res.Body); err != nil {
 			log.Fatal(err)

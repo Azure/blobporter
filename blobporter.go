@@ -71,7 +71,7 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "2016.11.23.A" // version number to show in help
+	programVersion           = "0.1.0" // version number to show in help
 )
 
 func init() {
@@ -97,7 +97,7 @@ func init() {
 		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. "+
 		"Maximum of "+blockSizeStr)
 	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, "display verbose output (Version="+programVersion+")")
-	util.BoolVarAlias(&profile, "p", "profile", false, "display verbose output (Version="+programVersion+")")
+	util.BoolVarAlias(&profile, "p", "profile", false, "enables CPU profiling.")
 	util.StringVarAlias(&storageAccountName, "a", "account_name", "", ""+
 		"storage account name (e.g. mystorage). "+
 		"Can also be specified via the "+storageAccountNameEnvVar+" environment variable.")

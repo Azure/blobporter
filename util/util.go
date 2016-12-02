@@ -83,7 +83,7 @@ func PrintSize(bytes uint64) string {
 		}
 	}
 
-	return str + suffix
+	return str + suffix + fmt.Sprintf(" (%v)", bytes)
 }
 
 // ByteCountFromSizeString - accept byte count, or integer suffixed with B, KB, MB, GB.
