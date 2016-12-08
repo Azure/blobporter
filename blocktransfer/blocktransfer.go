@@ -84,6 +84,7 @@ type WorkerResult struct {
 	DuplicateOfBlockOrdinal int
 	Ordinal                 int
 	Offset                  uint64
+	Retries                 int
 }
 
 // getBlobStorageClient - internal utility function to get a properly-primed
@@ -276,14 +277,14 @@ func (w *BlockWorker) startWorker() {
 				// This block is a duplicate of another, so don't upload it.
 				// Instead, just reflect it (with it's "duplicate" status)
 				// onwards in the completion channel
-				w.recordStatus(tb, time.Now(), 0, "Success")
+				w.recordStatus(tb, time.Now(), 0, "Success", 0)
 				continue
 			}
 
 			// otherwise, actually kick off an upload of the block.
 			bc = getBlobStorageClient(w.Info.TargetCredentials)
 
-			util.RetriableOperation(func() error {
+			util.RetriableOperation(func(r int) error {
 				t0 := time.Now()
 				if err := bc.PutBlock(w.Info.TargetContainerName, w.Info.TargetBlobName, tb.BlockID, tb.Data); err != nil {
 					if util.Verbose {
@@ -296,7 +297,8 @@ func (w *BlockWorker) startWorker() {
 				}
 				t1 := time.Now()
 				blocksHandled++
-				w.recordStatus(tb, t0, t1.Sub(t0), "Success")
+
+				w.recordStatus(tb, t0, t1.Sub(t0), "Success", r)
 				return nil
 			})
 		}
@@ -305,7 +307,7 @@ func (w *BlockWorker) startWorker() {
 
 // recordStatus -- record the upload status for a completed block to the results Queue.
 // ... Can be executed sync or async.
-func (w *BlockWorker) recordStatus(tb pipeline.Part, startTime time.Time, d time.Duration, status string) {
+func (w *BlockWorker) recordStatus(tb pipeline.Part, startTime time.Time, d time.Duration, status string, retries int) {
 	*w.Result <- WorkerResult{
 		BlockSize:               int(tb.BytesToRead),
 		Result:                  status,
@@ -316,7 +318,7 @@ func (w *BlockWorker) recordStatus(tb pipeline.Part, startTime time.Time, d time
 		Offset:                  tb.Offset,
 		StartTime:               startTime,
 		Duration:                d,
-	}
+		Retries:                 retries}
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -369,7 +371,7 @@ func PutBlobBlockList(blobInfo *SourceAndTargetInfo, resultsQ *chan WorkerResult
 		}
 	}
 
-	util.RetriableOperation(func() error {
+	util.RetriableOperation(func(r int) error {
 		var bc = getBlobStorageClient(blobInfo.TargetCredentials)
 
 		t0 := time.Now()

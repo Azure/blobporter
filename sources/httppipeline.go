@@ -97,7 +97,7 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 
 		req.Header.Set("Range", header)
 
-		util.RetriableOperation(func() error {
+		util.RetriableOperation(func(r int) error {
 			if res, err = client.Do(req); err != nil {
 				return err
 			}

@@ -42,6 +42,8 @@ import (
 	"sync"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/Azure/blobporter/blocktransfer"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/sources"
@@ -71,7 +73,7 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "0.1.0" // version number to show in help
+	programVersion           = "0.1.01" // version number to show in help
 )
 
 func init() {
@@ -114,6 +116,7 @@ func init() {
 }
 
 var dataTransfered int64
+var targetRetries int32
 
 func main() {
 
@@ -152,10 +155,12 @@ func main() {
 
 	defer func() { // final wrap-up summary
 		fmt.Printf("\nThe process took %v to run.\n", t1.Sub(t0))
+		fmt.Printf("Retry avg: %v Retries %d\n", float32(targetRetries)/float32(numOfBlocks), targetRetries)
 		MBs := float64(fileSize) / MiByte / t1.Sub(t0).Seconds()
 		fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
 		fmt.Printf("Configuration: R=%d, W=%d, MP=%d DataSize=%s, Blocks=%d\n",
 			numberOfReaders, numberOfWorkers, threadTarget, util.PrintSize(fileSize), numOfBlocks)
+
 	}()
 
 	// Boost thread count up from GO default of one thread per core
@@ -293,6 +298,8 @@ func createProgressDelegation(resultQ *chan blocktransfer.WorkerResult,
 	// callback for each block uploaded
 	finalCommitQueue *chan blocktransfer.WorkerResult, fileSize uint64) {
 	blocktransfer.ProcessProgress(resultQ, func(r blocktransfer.WorkerResult) {
+
+		atomic.AddInt32(&targetRetries, int32(r.Retries))
 		if false && util.Verbose {
 			blockID, _ := base64.StdEncoding.DecodeString(r.ItemID)
 			fmt.Fprintf(os.Stdout, "|%v|%v duration: %v \n", r.WorkerID, string(blockID), r.Duration)
