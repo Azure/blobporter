@@ -44,10 +44,11 @@ import (
 )
 
 const (
-	BlockSizeMax  = 4 * util.MB // no block blob blocks larger than this
 	scriptVersion = "2016.11.09.A"
 
-	LargeBlockSizeMax    = 100 * util.MB
+	//LargeBlockSizeMax maximum block size
+	LargeBlockSizeMax = 100 * util.MB
+	//LargeBlockAPIVersion storage API version that supports large block blobs
 	LargeBlockAPIVersion = "2016-05-31"
 )
 
@@ -139,8 +140,11 @@ const (
 	ZeroOnly                       // Only check for blocks with all zero bytes
 	Full                           // Compute MD5s and look for matches on that
 )
+
+//DupeCheckLevelStr list of duplicate blob check strategies
 const DupeCheckLevelStr = "None, ZeroOnly, Full" //TODO: package this better so it can stay in sync w/declaration
 
+//SourceTypeStr list of source types
 const SourceTypeStr = "File, HTTP" //TODO: enum??
 
 // ToString - printable representation of duplicate level values
