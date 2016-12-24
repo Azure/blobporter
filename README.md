@@ -18,7 +18,7 @@ Storage account name (e.g. mystorage). Can also be specified via the ACCOUNT_NAM
 - `-b` string  
 `--block_size` string  
 Desired size of each blob block. 
-Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. Maximum of 4MB (default "4MB")
+Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB (default "4MB").
 
 - `-c` string  
 `--container_name` string  
