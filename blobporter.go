@@ -73,7 +73,7 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "0.1.01" // version number to show in help
+	programVersion           = "0.1.02" // version number to show in help
 )
 
 func init() {
@@ -96,8 +96,7 @@ func init() {
 	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, ""+
 		"number of threads for parallel reading of the input file")
 	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, "desired size of each blob block. "+
-		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. "+
-		"Maximum of "+blockSizeStr)
+		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
 	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, "display verbose output (Version="+programVersion+")")
 	util.BoolVarAlias(&profile, "p", "profile", false, "enables CPU profiling.")
 	util.StringVarAlias(&storageAccountName, "a", "account_name", "", ""+
@@ -252,8 +251,6 @@ func parseAndValidate() {
 		//TODO: should do more vetting of the blob name
 		basename := strings.ToLower(filepath.Base(sourceURI))
 		blobName = basename
-	} else {
-		blobName = strings.ToLower(blobName) // Azure storage name restriction
 	}
 
 	// wasn't specified, try the environment variable
@@ -279,8 +276,11 @@ func parseAndValidate() {
 	if errx != nil {
 		log.Fatal("Invalid block size specified: " + blockSizeStr)
 	}
-	if blockSize > blocktransfer.BlockSizeMax {
-		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blocktransfer.BlockSizeMax))
+
+	blockSizeMax := blocktransfer.LargeBlockSizeMax
+
+	if blockSize > blockSizeMax {
+		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blockSizeMax))
 	}
 
 	dedupeLevel, errx = blocktransfer.ParseDupeCheckLevel(dedupeLevelOptStr)

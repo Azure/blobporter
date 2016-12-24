@@ -46,6 +46,9 @@ import (
 const (
 	BlockSizeMax  = 4 * util.MB // no block blob blocks larger than this
 	scriptVersion = "2016.11.09.A"
+
+	LargeBlockSizeMax    = 100 * util.MB
+	LargeBlockAPIVersion = "2016-05-31"
 )
 
 //SourceAndTargetInfo -
@@ -89,6 +92,7 @@ type WorkerResult struct {
 
 // getBlobStorageClient - internal utility function to get a properly-primed
 // ... Azure Storage SDK Blob Client.
+
 func getBlobStorageClient(creds *StorageAccountCredentials) storage.BlobStorageClient {
 	var bc storage.BlobStorageClient
 	var client storage.Client
@@ -108,13 +112,23 @@ func getBlobStorageClient(creds *StorageAccountCredentials) storage.BlobStorageC
 		log.Fatal("Storage account and/or key not specified via options or in environment variables ACCOUNT_NAME and ACCOUNT_KEY")
 	}
 
-	if client, err = storage.NewBasicClient(accountName, accountKey); err != nil {
+	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
 		log.Fatal(err)
 	}
 
 	bc = client.GetBlobService()
+
 	return bc
 }
+
+//GetBlockSizeMax TODO
+//func GetBlockSizeMax(largeBlock bool) uint64 {
+//	if largeBlock {
+//		return LargeBlockSizeMax
+//	}
+//
+//	return BlockSizeMax
+//}
 
 // DupeCheckLevel -- degree to which we'll try to check for duplicate blocks
 type DupeCheckLevel int
