@@ -38,10 +38,16 @@ import (
 	"github.com/Azure/blobporter/util"
 )
 
-//SourcePipeline  TODO
+//SourcePipeline  Operations to create the channel of parts and the reader execution
 type SourcePipeline interface {
 	ConstructBlockInfoQueue(blockSize uint64) (blockQ *chan Part, numOfBlocks int, Size uint64)
 	ExecuteReader(partsQ *chan Part, workerQ *chan Part, id int, wg *sync.WaitGroup)
+}
+
+//TargetPipeline  Operations write to target
+type TargetPipeline interface {
+	Commit(blockSize uint64) (blockQ *chan Part, numOfBlocks int, Size uint64)
+	ExecuteWriter(partsQ *chan Part, workerQ *chan Part, id int, wg *sync.WaitGroup)
 }
 
 // MD5ToBlockID - Simple lookup table mapping an MD5 string to a blockID

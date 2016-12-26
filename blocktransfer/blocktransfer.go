@@ -44,8 +44,12 @@ import (
 )
 
 const (
-	BlockSizeMax  = 4 * util.MB // no block blob blocks larger than this
 	scriptVersion = "2016.11.09.A"
+
+	//LargeBlockSizeMax maximum block size
+	LargeBlockSizeMax = 100 * util.MB
+	//LargeBlockAPIVersion storage API version that supports large block blobs
+	LargeBlockAPIVersion = "2016-05-31"
 )
 
 //SourceAndTargetInfo -
@@ -84,10 +88,12 @@ type WorkerResult struct {
 	DuplicateOfBlockOrdinal int
 	Ordinal                 int
 	Offset                  uint64
+	Retries                 int
 }
 
 // getBlobStorageClient - internal utility function to get a properly-primed
 // ... Azure Storage SDK Blob Client.
+
 func getBlobStorageClient(creds *StorageAccountCredentials) storage.BlobStorageClient {
 	var bc storage.BlobStorageClient
 	var client storage.Client
@@ -107,13 +113,23 @@ func getBlobStorageClient(creds *StorageAccountCredentials) storage.BlobStorageC
 		log.Fatal("Storage account and/or key not specified via options or in environment variables ACCOUNT_NAME and ACCOUNT_KEY")
 	}
 
-	if client, err = storage.NewBasicClient(accountName, accountKey); err != nil {
+	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
 		log.Fatal(err)
 	}
 
 	bc = client.GetBlobService()
+
 	return bc
 }
+
+//GetBlockSizeMax TODO
+//func GetBlockSizeMax(largeBlock bool) uint64 {
+//	if largeBlock {
+//		return LargeBlockSizeMax
+//	}
+//
+//	return BlockSizeMax
+//}
 
 // DupeCheckLevel -- degree to which we'll try to check for duplicate blocks
 type DupeCheckLevel int
@@ -124,8 +140,11 @@ const (
 	ZeroOnly                       // Only check for blocks with all zero bytes
 	Full                           // Compute MD5s and look for matches on that
 )
+
+//DupeCheckLevelStr list of duplicate blob check strategies
 const DupeCheckLevelStr = "None, ZeroOnly, Full" //TODO: package this better so it can stay in sync w/declaration
 
+//SourceTypeStr list of source types
 const SourceTypeStr = "File, HTTP" //TODO: enum??
 
 // ToString - printable representation of duplicate level values
@@ -276,14 +295,14 @@ func (w *BlockWorker) startWorker() {
 				// This block is a duplicate of another, so don't upload it.
 				// Instead, just reflect it (with it's "duplicate" status)
 				// onwards in the completion channel
-				w.recordStatus(tb, time.Now(), 0, "Success")
+				w.recordStatus(tb, time.Now(), 0, "Success", 0)
 				continue
 			}
 
 			// otherwise, actually kick off an upload of the block.
 			bc = getBlobStorageClient(w.Info.TargetCredentials)
 
-			util.RetriableOperation(func() error {
+			util.RetriableOperation(func(r int) error {
 				t0 := time.Now()
 				if err := bc.PutBlock(w.Info.TargetContainerName, w.Info.TargetBlobName, tb.BlockID, tb.Data); err != nil {
 					if util.Verbose {
@@ -296,7 +315,8 @@ func (w *BlockWorker) startWorker() {
 				}
 				t1 := time.Now()
 				blocksHandled++
-				w.recordStatus(tb, t0, t1.Sub(t0), "Success")
+
+				w.recordStatus(tb, t0, t1.Sub(t0), "Success", r)
 				return nil
 			})
 		}
@@ -305,7 +325,7 @@ func (w *BlockWorker) startWorker() {
 
 // recordStatus -- record the upload status for a completed block to the results Queue.
 // ... Can be executed sync or async.
-func (w *BlockWorker) recordStatus(tb pipeline.Part, startTime time.Time, d time.Duration, status string) {
+func (w *BlockWorker) recordStatus(tb pipeline.Part, startTime time.Time, d time.Duration, status string, retries int) {
 	*w.Result <- WorkerResult{
 		BlockSize:               int(tb.BytesToRead),
 		Result:                  status,
@@ -316,7 +336,7 @@ func (w *BlockWorker) recordStatus(tb pipeline.Part, startTime time.Time, d time
 		Offset:                  tb.Offset,
 		StartTime:               startTime,
 		Duration:                d,
-	}
+		Retries:                 retries}
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -369,7 +389,7 @@ func PutBlobBlockList(blobInfo *SourceAndTargetInfo, resultsQ *chan WorkerResult
 		}
 	}
 
-	util.RetriableOperation(func() error {
+	util.RetriableOperation(func(r int) error {
 		var bc = getBlobStorageClient(blobInfo.TargetCredentials)
 
 		t0 := time.Now()
