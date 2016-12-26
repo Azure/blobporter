@@ -155,7 +155,7 @@ const retryLimit = 10                             // max retries for an operatio
 const retrySleepDuration = time.Millisecond * 200 // Retry wait interval in retriableOperation
 
 // RetriableOperation - execute the function, retrying up to "retryLimit" times
-func RetriableOperation(operation func() error) {
+func RetriableOperation(operation func(r int) error) {
 	var err error
 	var retries int
 
@@ -165,7 +165,7 @@ func RetriableOperation(operation func() error) {
 			panic(err)
 		}
 
-		if err = operation(); err == nil {
+		if err = operation(retries); err == nil {
 			return
 		}
 		retries++

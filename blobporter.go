@@ -42,6 +42,8 @@ import (
 	"sync"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/Azure/blobporter/blocktransfer"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/sources"
@@ -71,7 +73,7 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "0.1.0" // version number to show in help
+	programVersion           = "0.1.02" // version number to show in help
 )
 
 func init() {
@@ -94,8 +96,7 @@ func init() {
 	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, ""+
 		"number of threads for parallel reading of the input file")
 	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, "desired size of each blob block. "+
-		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. "+
-		"Maximum of "+blockSizeStr)
+		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
 	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, "display verbose output (Version="+programVersion+")")
 	util.BoolVarAlias(&profile, "p", "profile", false, "enables CPU profiling.")
 	util.StringVarAlias(&storageAccountName, "a", "account_name", "", ""+
@@ -114,6 +115,7 @@ func init() {
 }
 
 var dataTransfered int64
+var targetRetries int32
 
 func main() {
 
@@ -152,10 +154,12 @@ func main() {
 
 	defer func() { // final wrap-up summary
 		fmt.Printf("\nThe process took %v to run.\n", t1.Sub(t0))
+		fmt.Printf("Retry avg: %v Retries %d\n", float32(targetRetries)/float32(numOfBlocks), targetRetries)
 		MBs := float64(fileSize) / MiByte / t1.Sub(t0).Seconds()
 		fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
 		fmt.Printf("Configuration: R=%d, W=%d, MP=%d DataSize=%s, Blocks=%d\n",
 			numberOfReaders, numberOfWorkers, threadTarget, util.PrintSize(fileSize), numOfBlocks)
+
 	}()
 
 	// Boost thread count up from GO default of one thread per core
@@ -247,8 +251,6 @@ func parseAndValidate() {
 		//TODO: should do more vetting of the blob name
 		basename := strings.ToLower(filepath.Base(sourceURI))
 		blobName = basename
-	} else {
-		blobName = strings.ToLower(blobName) // Azure storage name restriction
 	}
 
 	// wasn't specified, try the environment variable
@@ -274,8 +276,11 @@ func parseAndValidate() {
 	if errx != nil {
 		log.Fatal("Invalid block size specified: " + blockSizeStr)
 	}
-	if blockSize > blocktransfer.BlockSizeMax {
-		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blocktransfer.BlockSizeMax))
+
+	blockSizeMax := blocktransfer.LargeBlockSizeMax
+
+	if blockSize > blockSizeMax {
+		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blockSizeMax))
 	}
 
 	dedupeLevel, errx = blocktransfer.ParseDupeCheckLevel(dedupeLevelOptStr)
@@ -293,6 +298,8 @@ func createProgressDelegation(resultQ *chan blocktransfer.WorkerResult,
 	// callback for each block uploaded
 	finalCommitQueue *chan blocktransfer.WorkerResult, fileSize uint64) {
 	blocktransfer.ProcessProgress(resultQ, func(r blocktransfer.WorkerResult) {
+
+		atomic.AddInt32(&targetRetries, int32(r.Retries))
 		if false && util.Verbose {
 			blockID, _ := base64.StdEncoding.DecodeString(r.ItemID)
 			fmt.Fprintf(os.Stdout, "|%v|%v duration: %v \n", r.WorkerID, string(blockID), r.Duration)
