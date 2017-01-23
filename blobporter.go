@@ -73,7 +73,7 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "0.1.02" // version number to show in help
+	programVersion           = "0.1.04" // version number to show in help
 )
 
 func init() {
@@ -249,8 +249,7 @@ func parseAndValidate() {
 
 	if blobName == "" {
 		//TODO: should do more vetting of the blob name
-		basename := strings.ToLower(filepath.Base(sourceURI))
-		blobName = basename
+		blobName = filepath.Base(sourceURI)
 	}
 
 	// wasn't specified, try the environment variable
@@ -317,7 +316,9 @@ func createProgressDelegation(resultQ *chan blocktransfer.WorkerResult,
 
 				ind = ind + pchar
 			}
-			fmt.Fprintf(os.Stdout, "\r --> %3d %% [%v]", p, ind)
+			if !util.Verbose {
+				fmt.Fprintf(os.Stdout, "\r --> %3d %% [%v]", p, ind)
+			}
 		}
 		// add result to final result queue for use by blob block commit
 		//*finalCommitQueue <- r

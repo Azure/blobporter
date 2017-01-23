@@ -28,7 +28,6 @@ package blocktransfer
 //
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -306,15 +305,17 @@ func (w *BlockWorker) startWorker() {
 				t0 := time.Now()
 				if err := bc.PutBlock(w.Info.TargetContainerName, w.Info.TargetBlobName, tb.BlockID, tb.Data); err != nil {
 					if util.Verbose {
-						data, _ := base64.StdEncoding.DecodeString(tb.BlockID)
-						fmt.Println(string(data))
-						fmt.Print(err.Error())
+						fmt.Printf("EP|S|%v|%v|%v|%v\n", tb.BlockID, w.Info.IdealBlockSize, len(tb.Data), err.Error())
 					}
 					bc = getBlobStorageClient(w.Info.TargetCredentials) // reset to a fresh client for the retry
 					return err
 				}
 				t1 := time.Now()
 				blocksHandled++
+
+				if util.Verbose {
+					fmt.Printf("OK|S|%v|%v|%v|%v\n", tb.BlockID, tb.Offset, len(tb.Data), t1.Sub(t0))
+				}
 
 				w.recordStatus(tb, t0, t1.Sub(t0), "Success", r)
 				return nil
@@ -381,7 +382,7 @@ func PutBlobBlockList(blobInfo *SourceAndTargetInfo, resultsQ *chan WorkerResult
 		}
 	}
 
-	if false { //TODO: should add option to turn on this level of tracing
+	if util.Verbose { //TODO: should add option to turn on this level of tracing
 		fmt.Printf("Final BlockList:\n")
 		for j := 0; j < numberOfBlocks; j++ {
 			fmt.Printf("   [%2d]: ID=%s, Status=%s, Start=%v, Duration=%v\n",

@@ -37,6 +37,8 @@ import (
 
 	"fmt"
 
+	"io"
+
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -59,7 +61,10 @@ func NewHTTPPipeline(sourceURI string) pipeline.SourcePipeline {
 	resp, err := client.Head(sourceURI)
 
 	if err != nil || resp.StatusCode != 200 {
-		log.Fatalf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
+		if resp != nil {
+			log.Fatalf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
+		}
+		log.Fatalf("HEAD request failed. Please check the URL. Error: %v", err)
 	}
 
 	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
@@ -98,19 +103,39 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 		req.Header.Set("Range", header)
 
 		util.RetriableOperation(func(r int) error {
-			if res, err = client.Do(req); err != nil {
+			if res, err = client.Do(req); err != nil || res.StatusCode != 206 {
+				var status int
+
+				if res != nil {
+					status = res.StatusCode
+					err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
+				}
+
+				if util.Verbose {
+					fmt.Printf("EH|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, status, err, header)
+				}
 				return err
+			}
+			if util.Verbose {
+				fmt.Printf("OK|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 			}
 			return nil
 		})
 
 		b := make([]byte, p.BytesToRead)
 
-		if b, err = ioutil.ReadAll(res.Body); err != nil {
+		if b, err = ioutil.ReadAll(res.Body); err != nil && err != io.EOF {
 			log.Fatal(err)
 		}
-		res.Body.Close()
+		if err = res.Body.Close(); err != nil {
+			log.Fatal(err)
+		}
+
 		p.Data = b
+
+		//h := md5.New()
+		//h.Write(p.Data)
+		//md5Value := hex.EncodeToString(h.Sum(nil))
 
 		*workerQ <- p
 		blocksHandled++
