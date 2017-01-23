@@ -382,7 +382,7 @@ func PutBlobBlockList(blobInfo *SourceAndTargetInfo, resultsQ *chan WorkerResult
 		}
 	}
 
-	if true { //TODO: should add option to turn on this level of tracing
+	if util.Verbose { //TODO: should add option to turn on this level of tracing
 		fmt.Printf("Final BlockList:\n")
 		for j := 0; j < numberOfBlocks; j++ {
 			fmt.Printf("   [%2d]: ID=%s, Status=%s, Start=%v, Duration=%v\n",
