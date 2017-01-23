@@ -151,7 +151,7 @@ func BoolVarAlias(varPtr *bool, shortflag string, longflag string, defaultVal bo
 // Retriable execution of a function -- used for Azure Storage requests
 ///////////////////////////////////////////////////////////////////
 
-const retryLimit = 10                             // max retries for an operation in retriableOperation
+const retryLimit = 20                             // max retries for an operation in retriableOperation
 const retrySleepDuration = time.Millisecond * 200 // Retry wait interval in retriableOperation
 
 // RetriableOperation - execute the function, retrying up to "retryLimit" times
