@@ -61,7 +61,10 @@ func NewHTTPPipeline(sourceURI string) pipeline.SourcePipeline {
 	resp, err := client.Head(sourceURI)
 
 	if err != nil || resp.StatusCode != 200 {
-		log.Fatalf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
+		if resp != nil {
+			log.Fatalf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
+		}
+		log.Fatalf("HEAD request failed. Please check the URL. Error: %v", err)
 	}
 
 	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
