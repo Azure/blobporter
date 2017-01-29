@@ -52,7 +52,7 @@ func NewBytesBufferChan(bufferSize uint64) *chan []byte {
 //SourcePipeline  Operations to create the channel of parts and the reader execution
 type SourcePipeline interface {
 	ConstructBlockInfoQueue(blockSize uint64) (blockQ *chan Part, numOfBlocks int, Size uint64)
-	ExecuteReader(partsQ *chan Part, workerQ *chan Part, id int, wg *sync.WaitGroup)
+	ExecuteReader(partsQ *chan Part, readPartsQ *chan Part, id int, wg *sync.WaitGroup)
 	GetSourcesInfo() []string
 }
 
