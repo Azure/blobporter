@@ -34,20 +34,57 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/Azure/blobporter/util"
 )
+
+//NewBytesBufferChan TODO
+func NewBytesBufferChan(bufferSize uint64) *chan []byte {
+
+	c := make(chan []byte, util.BufferQCapacity)
+	for index := 0; index < util.BufferQCapacity; index++ {
+		c <- make([]byte, bufferSize)
+	}
+	return &c
+}
 
 //SourcePipeline  Operations to create the channel of parts and the reader execution
 type SourcePipeline interface {
 	ConstructBlockInfoQueue(blockSize uint64) (blockQ *chan Part, numOfBlocks int, Size uint64)
 	ExecuteReader(partsQ *chan Part, workerQ *chan Part, id int, wg *sync.WaitGroup)
+	GetSourcesInfo() []string
 }
 
 //TargetPipeline  Operations write to target
 type TargetPipeline interface {
-	Commit(blockSize uint64) (blockQ *chan Part, numOfBlocks int, Size uint64)
-	ExecuteWriter(partsQ *chan Part, workerQ *chan Part, id int, wg *sync.WaitGroup)
+	CommitList(listInfo *TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error)
+	WritePart(part *Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error)
+	ProcessWrittenPart(result *WorkerResult, listInfo *TargetCommittedListInfo) (requeue bool, err error)
+	//ExecuteWriter(partsQ *chan Part, workerQ *chan Part, id int, wg *sync.WaitGroup)
+}
+
+// WorkerResult represents the result of a single block upload
+type WorkerResult struct {
+	BlockSize               int
+	Result                  string //TODO: could cut down on the number of members
+	WorkerID                int
+	Duration                time.Duration
+	StartTime               time.Time
+	ItemID                  string
+	DuplicateOfBlockOrdinal int
+	Ordinal                 int
+	Offset                  uint64
+	Retries                 int
+	SourceURI               string
+	NumberOfBlocks          int
+	TargetName              string
+}
+
+//TargetCommittedListInfo TODO
+type TargetCommittedListInfo struct {
+	Info *SourceAndTargetInfo
+	List interface{}
 }
 
 // MD5ToBlockID - Simple lookup table mapping an MD5 string to a blockID
@@ -58,7 +95,6 @@ var MD5ToBlockIDLock sync.RWMutex
 
 // Part -- Description of and data for a block of the input
 type Part struct {
-	//Info                    *SourceAndTargetInfo
 	Offset                  uint64
 	BytesToRead             uint32
 	Data                    []byte // The data for the block.  Can be nil if not yet read from the source
@@ -66,17 +102,33 @@ type Part struct {
 	DuplicateOfBlockOrdinal int    // -1 if not a duplicate of another, already read, block.
 	Ordinal                 int    // sequentially assigned at creation time to enable chunk ordering (0,1,2)
 	md5Value                string // internal copy of computed MD5, initially empty string
+	SourceURI               string
+	SourceName              string
+	NumberOfBlocks          int
+	BufferQ                 *chan []byte
+	//Info                    *SourceAndTargetInfo
 }
 
-//PartOperations operations on the part
-type PartOperations interface {
-	ToString() string
-	MD5() string
-	LookupMD5DupeOrdinal() (ordinal int)
+//SourceAndTargetInfo -
+type SourceAndTargetInfo struct {
+	SourceURI           string
+	TargetContainerName string
+	TargetBlobName      string
+	TargetCredentials   *StorageAccountCredentials
+	IdealBlockSize      uint32 // Azure storage block norm, usually 4MB in bytes
+	NumberOfBlocks      int
+	SourceType          int
+	TargetType          int
+}
+
+// StorageAccountCredentials - a central location for account info.
+type StorageAccountCredentials struct {
+	AccountName string // short name of the storage account.  e.g., mystore
+	AccountKey  string // Base64-encoded storage account key
 }
 
 //ConstructPartsQueue  TODO
-func ConstructPartsQueue(size uint64, blockSize uint64) (partsQ *chan Part, numOfBlocks int, commmitList []string) {
+func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, sourceName string) (partsQ *chan Part, numOfBlocks int, commmitList []string) {
 	var bsib = blockSize
 	numOfBlocks = int((size + (bsib - 1)) / bsib)
 
@@ -85,32 +137,42 @@ func ConstructPartsQueue(size uint64, blockSize uint64) (partsQ *chan Part, numO
 		log.Fatalf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
 	}
 
-	Qcopy := make(chan Part, numOfBlocks)
+	//Qcopy := make(chan Part, numOfBlocks)
+	Qcopy := make(chan Part)
 
 	var curFileOffset uint64
 	var bytesLeft = size
 	bsbu64 := blockSize
 
 	var curCommitList = make([]string, numOfBlocks)
-
-	for i := 0; i < numOfBlocks; i++ {
-		var chunkSize = bsbu64
-		if bytesLeft < bsbu64 { // last is a short block
-			chunkSize = bytesLeft
-		}
-
-		fp := NewPart(curFileOffset, uint32(chunkSize), i)
-
-		Qcopy <- fp // put it on the channel for the Readers
-		curFileOffset = curFileOffset + bsbu64
-		bytesLeft = bytesLeft - chunkSize
-		curCommitList[i] = string(i)
-	}
-
 	commmitList = curCommitList
 
-	close(Qcopy) // indicate end of the block list
+	bufferQ := NewBytesBufferChan(blockSize)
 
+	go func() {
+		for i := 0; i < numOfBlocks; i++ {
+			var chunkSize = bsbu64
+			if bytesLeft < bsbu64 { // last is a short block
+				chunkSize = bytesLeft
+			}
+
+			fp := NewPart(curFileOffset, uint32(chunkSize), i, sourceURI, sourceName)
+			fp.NumberOfBlocks = numOfBlocks
+			fp.BufferQ = bufferQ
+			Qcopy <- fp // put it on the channel for the Readers
+
+			curFileOffset = curFileOffset + bsbu64
+			bytesLeft = bytesLeft - chunkSize
+			curCommitList[i] = string(i)
+		}
+
+		//commmitList = curCommitList
+
+		//instead of closing, use Zero length part as the signal that the queue is closed.
+		close(Qcopy) // indicate end of the block list
+		//fp := NewPart(0, 0, -1, sourceURI, sourceName)
+		//Qcopy <- fp
+	}()
 	partsQ = &Qcopy
 
 	return
@@ -118,24 +180,20 @@ func ConstructPartsQueue(size uint64, blockSize uint64) (partsQ *chan Part, numO
 
 //NewPart TODO
 //func NewPart(srcDesc *SourceAndTargetInfo, offset uint64, bytesCount uint32, ordinal int) Part {
-func NewPart(offset uint64, bytesCount uint32, ordinal int) Part {
+func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, sourceName string) Part {
 
-	var res Part
-
-	//res.Info = srcDesc
-	res.Offset = offset
-	res.BytesToRead = bytesCount
-	res.Data = nil
-
-	// Use the offset of the block start as the block ID
 	var idStr = fmt.Sprintf("%016x", offset)
-	res.BlockID = base64.StdEncoding.EncodeToString([]byte(idStr))
+	//res.BlockID = base64.StdEncoding.EncodeToString([]byte(idStr))
 
-	res.Ordinal = ordinal
-
-	res.DuplicateOfBlockOrdinal = -1 // no data read yet, so can't yet detect duplicate blocks
-
-	return res
+	return Part{
+		Offset:                  offset,
+		BytesToRead:             bytesCount,
+		Data:                    nil,
+		BlockID:                 base64.StdEncoding.EncodeToString([]byte(idStr)),
+		Ordinal:                 ordinal,
+		SourceURI:               sourceURI,
+		SourceName:              sourceName,
+		DuplicateOfBlockOrdinal: -1}
 
 }
 
@@ -143,6 +201,19 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int) Part {
 func (p *Part) ToString() string {
 	str := fmt.Sprintf("  [FileChunk(%s):(Offset=%v,Size=%vB)]\n", p.BlockID, p.Offset, p.BytesToRead)
 	return str
+}
+
+//GetBuffer TODO
+func (p *Part) GetBuffer() {
+	p.Data = <-(*p.BufferQ)
+	p.Data = p.Data[:p.BytesToRead]
+}
+
+//ReturnBuffer TODO
+func (p *Part) ReturnBuffer() {
+	p.Data = p.Data[0:0]
+
+	(*p.BufferQ) <- p.Data
 }
 
 // MD5 - return computed MD5 for this block or empty string if no data yet.

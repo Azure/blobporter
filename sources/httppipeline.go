@@ -49,10 +49,11 @@ import (
 type HTTPPipeline struct {
 	SourceURI  string
 	SourceSize uint64
+	SourceName string
 }
 
 // NewHTTPPipeline TODO
-func NewHTTPPipeline(sourceURI string) pipeline.SourcePipeline {
+func NewHTTPPipeline(sourceURI string, sourceName string) pipeline.SourcePipeline {
 
 	client := &http.Client{}
 
@@ -68,11 +69,20 @@ func NewHTTPPipeline(sourceURI string) pipeline.SourcePipeline {
 		log.Fatalf("Content-Length is invalid. Expected a numeric value greater than zero. Error: %v", err)
 	}
 
-	return HTTPPipeline{SourceURI: sourceURI, SourceSize: uint64(size)}
+	return HTTPPipeline{SourceURI: sourceURI, SourceSize: uint64(size), SourceName: sourceName}
+}
+
+//GetSourcesInfo TODO
+func (f HTTPPipeline) GetSourcesInfo() []string {
+	// Single file support
+	sources := make([]string, 1)
+	sources[0] = fmt.Sprintf("URL:%v, Size:%v", f.SourceURI, f.SourceSize)
+
+	return sources
 }
 
 //ExecuteReader TODO
-func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
+func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	var blocksHandled = 0
 	var err error
 	var req *http.Request
@@ -98,21 +108,32 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 		req.Header.Set("Range", header)
 
 		util.RetriableOperation(func(r int) error {
-			if res, err = client.Do(req); err != nil {
+			if res, err = client.Do(req); err != nil || res.StatusCode != 206 {
+				var status int
+
+				if res != nil {
+					status = res.StatusCode
+					err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
+				}
+
+				if util.Verbose {
+					fmt.Printf("EH|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, status, err, header)
+				}
 				return err
+			}
+			if util.Verbose {
+				fmt.Printf("OK|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 			}
 			return nil
 		})
 
-		b := make([]byte, p.BytesToRead)
-
-		if b, err = ioutil.ReadAll(res.Body); err != nil {
+		p.GetBuffer()
+		if p.Data, err = ioutil.ReadAll(res.Body); err != nil {
 			log.Fatal(err)
 		}
 		res.Body.Close()
-		p.Data = b
 
-		*workerQ <- p
+		*readPartsQ <- p
 		blocksHandled++
 	}
 
@@ -122,7 +143,7 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 func (f HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan pipeline.Part, numOfBlocks int, size uint64) {
 	size = f.SourceSize
 
-	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize)
+	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize, f.SourceURI, f.SourceName)
 
 	return
 }

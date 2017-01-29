@@ -30,6 +30,7 @@ package util
 import (
 	"flag"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,14 @@ import (
 
 // Verbose mode active?
 var Verbose = false
+
+var BufferQCapacity = 50
+
+//LargeBlockSizeMax maximum block size
+const LargeBlockSizeMax = 100 * MB
+
+//LargeBlockAPIVersion API version that supports large block blobs
+const LargeBlockAPIVersion = "2016-05-31"
 
 //MiByte bytes in one MiB
 const MiByte = 1048576
@@ -151,21 +160,25 @@ func BoolVarAlias(varPtr *bool, shortflag string, longflag string, defaultVal bo
 // Retriable execution of a function -- used for Azure Storage requests
 ///////////////////////////////////////////////////////////////////
 
-const retryLimit = 10                             // max retries for an operation in retriableOperation
+const retryLimit = 30                             // max retries for an operation in retriableOperation
 const retrySleepDuration = time.Millisecond * 200 // Retry wait interval in retriableOperation
 
 // RetriableOperation - execute the function, retrying up to "retryLimit" times
-func RetriableOperation(operation func(r int) error) {
+func RetriableOperation(operation func(r int) error) (duration time.Duration, startTime time.Time, numOfRetries int) {
 	var err error
 	var retries int
+	t0 := time.Now()
 
 	for {
 		if retries >= retryLimit {
 			fmt.Print("Max number of retries exceeded.")
 			panic(err)
 		}
-
 		if err = operation(retries); err == nil {
+			t1 := time.Now()
+			duration = t1.Sub(t0)
+			startTime = t1
+			numOfRetries = retries
 			return
 		}
 		retries++
@@ -179,3 +192,15 @@ func RetriableOperation(operation func(r int) error) {
 }
 
 ///////////////////////////////////////////////////////////////////
+
+//GetNumberOfBlocks TODO
+func GetNumberOfBlocks(size uint64, blockSize uint64) int {
+	numOfBlocks := int(size+(blockSize-1)) / int(blockSize)
+
+	if numOfBlocks > MaxBlockCount { // more than 50,000 blocks needed, so can't work
+		var minBlkSize = (size + MaxBlockCount - 1) / MaxBlockCount
+		log.Fatalf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
+	}
+
+	return numOfBlocks
+}
