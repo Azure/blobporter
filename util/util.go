@@ -34,6 +34,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/storage"
 )
 
 // Verbose mode active?
@@ -203,4 +205,25 @@ func GetNumberOfBlocks(size uint64, blockSize uint64) int {
 	}
 
 	return numOfBlocks
+}
+
+///////////////////////////////////////////////////////////////////
+//Azure Storage SDK Helpers
+//GetBlobStorageClient TODO
+func GetBlobStorageClient(accountName string, accountKey string) storage.BlobStorageClient {
+	var bc storage.BlobStorageClient
+	var client storage.Client
+	var err error
+
+	if accountName == "" || accountKey == "" {
+		log.Fatal("Storage account and/or key not specified via options or in environment variables ACCOUNT_NAME and ACCOUNT_KEY")
+	}
+
+	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
+		log.Fatal(err)
+	}
+
+	bc = client.GetBlobService()
+
+	return bc
 }

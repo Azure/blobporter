@@ -30,8 +30,7 @@ func TestFileLegacyToBlob(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
 
 	fp := sources.NewFilePipeline(sourceFile, sourceFile)
-	creds := getStorageAccountCreds()
-	ap := targets.NewAzureBlock(creds, container)
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -42,8 +41,7 @@ func TestFileToBlob(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
 
 	fp := sources.NewMultiFilePipeline(sourceFile, blockSize)
-	creds := getStorageAccountCreds()
-	ap := targets.NewAzureBlock(creds, container)
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -54,8 +52,7 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 	bsize := uint64(16 * util.MiByte)
 
 	fp := sources.NewMultiFilePipeline(sourceFile, bsize)
-	creds := getStorageAccountCreds()
-	ap := targets.NewAzureBlock(creds, container)
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, bsize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -68,8 +65,7 @@ func TestFilesToBlob(t *testing.T) {
 	createFile("tbm", 1)
 
 	fp := sources.NewMultiFilePipeline("tbm*", blockSize)
-	creds := getStorageAccountCreds()
-	ap := targets.NewAzureBlock(creds, container)
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -80,8 +76,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
 
 	fp := sources.NewMultiFilePipeline(sourceFile, blockSize)
-	creds := getStorageAccountCreds()
-	ap := targets.NewAzureBlock(creds, container)
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -90,8 +85,46 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 	assert.NoError(t, err)
 
 	container = createContainer("bphttptest")
-	ap = targets.NewAzureBlock(creds, container)
+	ap = targets.NewAzureBlock(accountName, accountKey, container)
 	fp = sources.NewHTTPPipeline(sourceURI, sourceFile)
+	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+
+}
+func TestFileToBlobHTTPToFile(t *testing.T) {
+	var container = createContainer("bptest")
+	var sourceFile = createFile("tb", 1)
+
+	fp := sources.NewMultiFilePipeline(sourceFile, blockSize)
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+	sourceURI, err := createSasTokenURL(sourceFile, container)
+
+	assert.NoError(t, err)
+
+	container = createContainer("bphttptest")
+	ap = targets.NewFile("d"+sourceFile, true, numOfWorkers)
+	fp = sources.NewHTTPPipeline(sourceURI, sourceFile)
+	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+
+}
+func TestFileToBlobToFile(t *testing.T) {
+	var container = createContainer("bptest")
+	var sourceFile = createFile("tb", 1)
+
+	fp := sources.NewMultiFilePipeline(sourceFile, blockSize)
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+
+	ap = targets.NewFile("d"+sourceFile, true, numOfWorkers)
+	fp = sources.NewHTTPAzureBlockPipeline(container, sourceFile, accountName, accountKey)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()

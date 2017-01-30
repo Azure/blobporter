@@ -2,8 +2,6 @@ package targets
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/storage"
@@ -49,8 +47,9 @@ type AzureBlock struct {
 }
 
 //NewAzureBlock TODO
-func NewAzureBlock(creds *pipeline.StorageAccountCredentials, container string) pipeline.TargetPipeline {
-	return AzureBlock{Creds: creds, Container: container}
+func NewAzureBlock(accountName string, accountKey string, container string) pipeline.TargetPipeline {
+	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
+	return AzureBlock{Creds: &creds, Container: container}
 }
 
 //CommitList TODO
@@ -70,7 +69,7 @@ func (t AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numbe
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, _, _ := util.RetriableOperation(func(r int) error {
-		var bc = getBlobStorageClient(t.Creds)
+		var bc = util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey)
 		if err := bc.PutBlockList(t.Container, targetName, blockList); err != nil {
 			return err
 		}
@@ -121,14 +120,14 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
-		bc := getBlobStorageClient(t.Creds)
+		bc := util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey)
 		if err := bc.PutBlock(t.Container, (*part).SourceName, (*part).BlockID, (*part).Data); err != nil {
 			if util.Verbose {
 				//data, _ := base64.StdEncoding.DecodeString((*part).BlockID)
 				fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).SourceName, err)
 
 			}
-			bc = getBlobStorageClient(t.Creds) // reset to a fresh client for the retry
+			bc = util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey) // reset to a fresh client for the retry
 			return err
 		}
 
@@ -140,32 +139,4 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 	})
 	(*part).ReturnBuffer()
 	return
-}
-
-func getBlobStorageClient(creds *pipeline.StorageAccountCredentials) storage.BlobStorageClient {
-	var bc storage.BlobStorageClient
-	var client storage.Client
-	var err error
-	var accountName string
-	var accountKey string
-
-	if creds != nil {
-		accountName = creds.AccountName
-		accountKey = creds.AccountKey
-	} else {
-		accountName = os.Getenv("ACCOUNT_NAME") //TODO: clean up.. should always be in creds at this point
-		accountKey = os.Getenv("ACCOUNT_KEY")
-	}
-
-	if accountName == "" || accountKey == "" {
-		log.Fatal("Storage account and/or key not specified via options or in environment variables ACCOUNT_NAME and ACCOUNT_KEY")
-	}
-
-	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, util.LargeBlockAPIVersion, true); err != nil {
-		log.Fatal(err)
-	}
-
-	bc = client.GetBlobService()
-
-	return bc
 }

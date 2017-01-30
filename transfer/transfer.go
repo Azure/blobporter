@@ -36,6 +36,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"fmt"
+
 	"github.com/Azure/blobporter/pipeline"
 )
 
@@ -65,9 +67,6 @@ const (
 
 //DupeCheckLevelStr list of duplicate blob check strategies
 const DupeCheckLevelStr = "None, ZeroOnly, Full" //TODO: package this better so it can stay in sync w/declaration
-
-//SourceTypeStr list of source types
-//const SourceTypeStr = "File, HTTP, MFILE (Multifile, input could be a pattern e.g. /data/*.fastq)" //TODO: enum??
 
 // ToString - printable representation of duplicate level values
 // ... For now, handle error as fatal, shouldn't be possible
@@ -99,6 +98,51 @@ func ParseDupeCheckLevel(str string) (res DupeCheckLevel, err error) {
 		err = errors.New("Error: DupeCheckLevel must be one of: " + DupeCheckLevelStr)
 	}
 	return res, err
+}
+
+//Definition TODO
+type Definition string
+
+// The different transfers types
+const (
+	FileToBlob Definition = "file-blob"
+	HTTPToBlob            = "http-blob"
+	BlobToFile            = "blob-file"
+	HTTPToFile            = "http-file"
+	none                  = "none"
+)
+
+//ToString TODO
+func (d *Definition) ToString() string {
+	switch *d {
+	case FileToBlob:
+		return "file-blob"
+	case HTTPToBlob:
+		return "http-blob"
+	case BlobToFile:
+		return "blob-file"
+	case HTTPToFile:
+		return "http-file"
+	default:
+		return "none"
+	}
+}
+
+//ParseTransferDefinition TODO
+func ParseTransferDefinition(str string) (Definition, error) {
+	val := strings.ToLower(str)
+	switch val {
+	case "file-blob":
+		return FileToBlob, nil
+	case "http-blob":
+		return HTTPToBlob, nil
+	case "blob-file":
+		return BlobToFile, nil
+	case "http-file":
+		return HTTPToFile, nil
+	default:
+		return none, fmt.Errorf("%v is not a valid transfer definition value.\n Valid values: file-blob, http-blob, blob-file, http-file", str)
+	}
 }
 
 ///////////////////////////////////////////////////////////////////

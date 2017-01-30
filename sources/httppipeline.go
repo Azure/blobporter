@@ -32,11 +32,13 @@ import (
 	"log"
 	"strconv"
 	"sync"
+	"time"
 
 	"net/http"
 
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -45,11 +47,37 @@ import (
 ///// HttpPipeline
 ////////////////////////////////////////////////////////////
 
+const sasTokenNumberOfHours = 4
+
 // HTTPPipeline - Contructs blocks queue and implements data readers for file exposed via HTTP
 type HTTPPipeline struct {
 	SourceURI  string
 	SourceSize uint64
 	SourceName string
+}
+
+//NewHTTPAzureBlockPipeline TODO
+func NewHTTPAzureBlockPipeline(container string, blobName string, accountName string, accountKey string) pipeline.SourcePipeline {
+	var err error
+	var sc storage.Client
+	var bc storage.BlobStorageClient
+	sc, err = storage.NewBasicClient(accountName, accountKey)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bc = sc.GetBlobService()
+
+	//Expiration in 4 hours
+	date := time.Now().UTC().Add(time.Duration(sasTokenNumberOfHours) * time.Hour)
+
+	var sasURL string
+	if sasURL, err = bc.GetBlobSASURI(container, blobName, date, "r"); err != nil {
+		log.Fatal(err)
+	}
+
+	return NewHTTPPipeline(sasURL, blobName)
 }
 
 // NewHTTPPipeline TODO

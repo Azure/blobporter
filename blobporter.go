@@ -63,8 +63,10 @@ var blockSizeStr string
 var numberOfReaders int
 var extraWorkerBufferSlots int // allocate this many extra slots above the # of workers to allow I/O to work ahead
 var dedupeLevel transfer.DupeCheckLevel = transfer.None
-var sourceType string
 var dedupeLevelOptStr = dedupeLevel.ToString()
+var transferDef transfer.Definition
+var transferDefStr string
+var defaultTransferDef = transfer.FileToBlob
 var storageAccountName string
 var storageAccountKey string
 var profile bool
@@ -75,7 +77,7 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "0.2.00" // version number to show in help
+	programVersion           = "0.2.01" // version number to show in help
 )
 
 func init() {
@@ -84,17 +86,16 @@ func init() {
 	fmt.Printf("BlobPorter \nCopyright (c) Microsoft Corporation. \nVersion: %v\n---------------\n", programVersion)
 
 	// shape the default parallelism based on number of CPUs
-	var defaultNumberOfWorkers = int(float32(runtime.NumCPU()) * 12.5)
-	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 1.5)
+	var defaultNumberOfWorkers = int(float32(runtime.NumCPU()) * 2)
+	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 10)
 	blockSizeStr = "4MB" // default size for blob blocks
-	var defaultSourceType = "file"
 	const (
 		dblockSize             = 4 * MiByte
 		extraWorkerBufferSlots = 5
 	)
 
-	util.StringVarAlias(&sourceURI, "f", "source_file", "", "source file to upload")
-	util.StringVarAlias(&blobName, "n", "blob_name", "", "blob name (e.g. myblob.txt)")
+	util.StringVarAlias(&sourceURI, "f", "file", "", "URL, file or files (e.g. /data/*.gz) to upload. \nDestination file for download.")
+	util.StringVarAlias(&blobName, "n", "name", "", "Blob name to upload or download from Azure Blob Storage. \nDestination file for download from URL")
 	util.StringVarAlias(&containerName, "c", "container_name", "", "container name (e.g. mycontainer)")
 	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, ""+
 		"number of threads for parallel upload")
@@ -114,9 +115,8 @@ func init() {
 	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, ""+
 		"Desired level of effort to detect duplicate data blocks to minimize upload size. "+
 		"Must be one of "+transfer.DupeCheckLevelStr)
-	//Deprecated.
-	util.StringVarAlias(&sourceType, "s", "source_type", defaultSourceType, ""+
-		"Transport protocol to access the source data. (deprecated)")
+	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", defaultTransferDef.ToString(),
+		"Defines the source and target of the transfer. Must be one of file-blob, http-blob, blob-file or http-file")
 
 	//Profiling...
 	if profile {
@@ -141,6 +141,7 @@ var dataTransfered int64
 var targetRetries int32
 
 func displayFilesToTransfer(sourcesInfo []string) {
+	fmt.Printf("Transfer Task: %v\n", transferDefStr)
 	fmt.Printf("Files to Transfer:\n")
 	for _, source := range sourcesInfo {
 		fmt.Printf("%v\n", source)
@@ -161,9 +162,7 @@ func main() {
 	parseAndValidate()
 
 	// Create pipelines
-	sourcePipeline := getSourcePipeline()
-	targetPipeline := getTargetPipeline()
-
+	sourcePipeline, targetPipeline := getPipelines()
 	sourcesInfo := sourcePipeline.GetSourcesInfo()
 
 	tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, numberOfReaders, numberOfWorkers, blockSize)
@@ -178,13 +177,6 @@ func main() {
 	displayFinalWrapUpSummary(tfer.Duration, targetRetries, tfer.ThreadTarget, tfer.TotalNumOfBlocks, tfer.TotalSize)
 }
 
-func getTargetPipeline() pipeline.TargetPipeline {
-	cred := pipeline.StorageAccountCredentials{
-		AccountName: storageAccountName,
-		AccountKey:  storageAccountKey}
-	return targets.NewAzureBlock(&cred, containerName)
-}
-
 func isSourceHTTP() bool {
 
 	url, err := url.Parse(sourceURI)
@@ -192,25 +184,58 @@ func isSourceHTTP() bool {
 	return err != nil || strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https"
 }
 
-func getSourcePipeline() pipeline.SourcePipeline {
+func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 
-	//try to derive source from the source
-	if isSourceHTTP() {
+	var source pipeline.SourcePipeline
+	var target pipeline.TargetPipeline
+	var defValue transfer.Definition
+	var err error
+	if defValue, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
+		log.Fatal(err)
+	}
 
+	//container is required but when is a http to file transfer.
+	if defValue != transfer.HTTPToFile {
+		if containerName == "" {
+			log.Fatal("container name not specified ")
+		}
+	}
+
+	switch defValue {
+	case transfer.FileToBlob:
+		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
+		//Since this is default value detect if the source is http
+		if isSourceHTTP() {
+			var name = sourceURI
+			if blobName != "" {
+				name = blobName
+			}
+			source = sources.NewHTTPPipeline(sourceURI, name)
+		} else {
+			source = sources.NewMultiFilePipeline(sourceURI, blockSize)
+		}
+	case transfer.HTTPToBlob:
+		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 		var name = sourceURI
 		if blobName != "" {
 			name = blobName
 		}
-
-		return sources.NewHTTPPipeline(sourceURI, name)
+		source = sources.NewHTTPPipeline(sourceURI, name)
+	case transfer.BlobToFile:
+		if blobName == "" {
+			log.Fatal("Blob name (-n) is required when downloading data from blob")
+		}
+		target = targets.NewFile(sourceURI, true, numberOfWorkers)
+		source = sources.NewHTTPAzureBlockPipeline(containerName, blobName, storageAccountName, storageAccountKey)
+	case transfer.HTTPToFile:
+		if blobName == "" {
+			log.Fatal("File name (-n) is required when downloading data from a URL")
+		}
+		target = targets.NewFile(blobName, true, numberOfWorkers)
+		source = sources.NewHTTPPipeline(sourceURI, blobName)
 	}
 
-	if strings.ToLower(sourceType) == "file_legacy" {
-		return sources.NewFilePipeline(sourceURI, blobName)
-	}
-
-	return sources.NewMultiFilePipeline(sourceURI, blockSize)
-
+	return source, target
 }
 
 // parseAndValidate - extra checks on command line arguments
@@ -219,11 +244,7 @@ func parseAndValidate() {
 	flag.Parse()
 
 	if sourceURI == "" {
-		log.Fatal("The source is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
-	}
-
-	if containerName == "" {
-		log.Fatal("container name not specified ")
+		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
 	}
 
 	// wasn't specified, try the environment variable
@@ -260,8 +281,6 @@ func parseAndValidate() {
 	if errx != nil {
 		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, transfer.DupeCheckLevelStr)
 	}
-
-	//TODO validate source type as well... relying on getSourcePipeline to check if the input is valid
 }
 
 func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, committedCount int) {
