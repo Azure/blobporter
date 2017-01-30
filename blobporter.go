@@ -28,25 +28,27 @@ package main
 //
 
 import (
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
 	"math"
+	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"path/filepath"
 	"runtime"
-	"runtime/pprof"
 	"strings"
-	"sync"
 	"time"
 
 	"sync/atomic"
 
-	"github.com/Azure/blobporter/blocktransfer"
+	"runtime/debug"
+
+	"net/url"
+
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/sources"
+	"github.com/Azure/blobporter/targets"
+	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
 )
 
@@ -60,9 +62,11 @@ var blockSizeStr string
 
 var numberOfReaders int
 var extraWorkerBufferSlots int // allocate this many extra slots above the # of workers to allow I/O to work ahead
-var dedupeLevel blocktransfer.DupeCheckLevel = blocktransfer.None
-var sourceType string
+var dedupeLevel transfer.DupeCheckLevel = transfer.None
 var dedupeLevelOptStr = dedupeLevel.ToString()
+var transferDef transfer.Definition
+var transferDefStr string
+var defaultTransferDef = transfer.FileToBlob
 var storageAccountName string
 var storageAccountKey string
 var profile bool
@@ -73,23 +77,25 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "0.1.04" // version number to show in help
+	programVersion           = "0.2.01" // version number to show in help
 )
 
 func init() {
 
+	//Show blobporter banner
+	fmt.Printf("BlobPorter \nCopyright (c) Microsoft Corporation. \nVersion: %v\n---------------\n", programVersion)
+
 	// shape the default parallelism based on number of CPUs
-	var defaultNumberOfWorkers = int(float32(runtime.NumCPU()) * 12.5)
-	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 1.5)
+	var defaultNumberOfWorkers = int(float32(runtime.NumCPU()) * 2)
+	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 10)
 	blockSizeStr = "4MB" // default size for blob blocks
-	var defaultSourceType = "File"
 	const (
 		dblockSize             = 4 * MiByte
 		extraWorkerBufferSlots = 5
 	)
 
-	util.StringVarAlias(&sourceURI, "f", "source_file", "", "source file to upload")
-	util.StringVarAlias(&blobName, "n", "blob_name", "", "blob name (e.g. myblob.txt)")
+	util.StringVarAlias(&sourceURI, "f", "file", "", "URL, file or files (e.g. /data/*.gz) to upload. \nDestination file for download.")
+	util.StringVarAlias(&blobName, "n", "name", "", "Blob name to upload or download from Azure Blob Storage. \nDestination file for download from URL")
 	util.StringVarAlias(&containerName, "c", "container_name", "", "container name (e.g. mycontainer)")
 	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, ""+
 		"number of threads for parallel upload")
@@ -98,7 +104,7 @@ func init() {
 	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, "desired size of each blob block. "+
 		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
 	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, "display verbose output (Version="+programVersion+")")
-	util.BoolVarAlias(&profile, "p", "profile", false, "enables CPU profiling.")
+	util.BoolVarAlias(&profile, "p", "profile", false, "enables profiling.")
 	util.StringVarAlias(&storageAccountName, "a", "account_name", "", ""+
 		"storage account name (e.g. mystorage). "+
 		"Can also be specified via the "+storageAccountNameEnvVar+" environment variable.")
@@ -108,148 +114,137 @@ func init() {
 		"Can also be specified via the "+storageAccountKeyEnvVar+" environment variable.")
 	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, ""+
 		"Desired level of effort to detect duplicate data blocks to minimize upload size. "+
-		"Must be one of "+blocktransfer.DupeCheckLevelStr)
-	util.StringVarAlias(&sourceType, "s", "source_type", defaultSourceType, ""+
-		"Transport protocol to access the source data. "+
-		"Must be one of "+blocktransfer.SourceTypeStr)
+		"Must be one of "+transfer.DupeCheckLevelStr)
+	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", defaultTransferDef.ToString(),
+		"Defines the source and target of the transfer. Must be one of file-blob, http-blob, blob-file or http-file")
+
+	//Profiling...
+	if profile {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
+
+	}
+
+	if runtime.GOOS == "windows" {
+		go func() {
+			for {
+				time.Sleep(time.Minute * 5)
+				debug.FreeOSMemory()
+			}
+		}()
+	}
+
 }
 
 var dataTransfered int64
 var targetRetries int32
 
+func displayFilesToTransfer(sourcesInfo []string) {
+	fmt.Printf("Transfer Task: %v\n", transferDefStr)
+	fmt.Printf("Files to Transfer:\n")
+	for _, source := range sourcesInfo {
+		fmt.Printf("%v\n", source)
+	}
+}
+
+func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, threadTarget int, totalNumberOfBlocks int, totalSize uint64) {
+	fmt.Printf("\nThe process took %v to run.\n", duration)
+	fmt.Printf("Retry avg: %v Retries %d\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
+	MBs := float64(totalSize) / MiByte / duration.Seconds()
+	fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
+	fmt.Printf("Configuration: R=%d, W=%d, MP=%d DataSize=%s, Blocks=%d\n",
+		numberOfReaders, numberOfWorkers, threadTarget, util.PrintSize(totalSize), totalNumberOfBlocks)
+
+}
 func main() {
 
 	parseAndValidate()
 
-	//TODO: add flag to enable profiling...
-	if profile {
-		f, err := os.Create("profiledata")
-		if err != nil {
-			log.Fatal(err)
+	// Create pipelines
+	sourcePipeline, targetPipeline := getPipelines()
+	sourcesInfo := sourcePipeline.GetSourcesInfo()
+
+	tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, numberOfReaders, numberOfWorkers, blockSize)
+
+	displayFilesToTransfer(sourcesInfo)
+	pb := getProgressBarDelegate(tfer.TotalSize)
+
+	tfer.StartTransfer(dedupeLevel, pb)
+
+	tfer.WaitForCompletion()
+
+	displayFinalWrapUpSummary(tfer.Duration, targetRetries, tfer.ThreadTarget, tfer.TotalNumOfBlocks, tfer.TotalSize)
+}
+
+func isSourceHTTP() bool {
+
+	url, err := url.Parse(sourceURI)
+
+	return err != nil || strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https"
+}
+
+func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
+
+	var source pipeline.SourcePipeline
+	var target pipeline.TargetPipeline
+	var defValue transfer.Definition
+	var err error
+	if defValue, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
+		log.Fatal(err)
+	}
+
+	//container is required but when is a http to file transfer.
+	if defValue != transfer.HTTPToFile {
+		if containerName == "" {
+			log.Fatal("container name not specified ")
 		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
 	}
 
-	t0 := time.Now()
-	var t1 time.Time
-	var fileSize uint64
-	var threadTarget int
-
-	sti := newSourceAndTargetInfo()
-
-	// creates a source pipeline
-	pipelineImpl := getSourcePipeline()
-	blockQ, numOfBlocks, fileSize := pipelineImpl.ConstructBlockInfoQueue(blockSize)
-
-	// tone down expected input concurrency if there are fewer blocks than expected readers
-	if numberOfReaders > numOfBlocks {
-		numberOfReaders = numOfBlocks
+	switch defValue {
+	case transfer.FileToBlob:
+		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
+		//Since this is default value detect if the source is http
+		if isSourceHTTP() {
+			var name = sourceURI
+			if blobName != "" {
+				name = blobName
+			}
+			source = sources.NewHTTPPipeline(sourceURI, name)
+		} else {
+			source = sources.NewMultiFilePipeline(sourceURI, blockSize)
+		}
+	case transfer.HTTPToBlob:
+		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
+		var name = sourceURI
+		if blobName != "" {
+			name = blobName
+		}
+		source = sources.NewHTTPPipeline(sourceURI, name)
+	case transfer.BlobToFile:
+		if blobName == "" {
+			log.Fatal("Blob name (-n) is required when downloading data from blob")
+		}
+		target = targets.NewFile(sourceURI, true, numberOfWorkers)
+		source = sources.NewHTTPAzureBlockPipeline(containerName, blobName, storageAccountName, storageAccountKey)
+	case transfer.HTTPToFile:
+		if blobName == "" {
+			log.Fatal("File name (-n) is required when downloading data from a URL")
+		}
+		target = targets.NewFile(blobName, true, numberOfWorkers)
+		source = sources.NewHTTPPipeline(sourceURI, blobName)
 	}
 
-	fmt.Printf("Task: source %s to blob: %s/%s/%s, Size=%s, Blocks=%d\n",
-		sti.SourceURI, storageAccountName, sti.TargetContainerName, sti.TargetBlobName, util.PrintSize(fileSize), numOfBlocks)
-	fmt.Printf("Configuration: R=%d, W=%d, MP=%d, MaxBlockSize=%d bytes, DuplicateDetection=%s, Version=%s\n",
-		numberOfReaders, numberOfWorkers, threadTarget, sti.IdealBlockSize, dedupeLevel.ToString(), programVersion)
-
-	defer func() { // final wrap-up summary
-		fmt.Printf("\nThe process took %v to run.\n", t1.Sub(t0))
-		fmt.Printf("Retry avg: %v Retries %d\n", float32(targetRetries)/float32(numOfBlocks), targetRetries)
-		MBs := float64(fileSize) / MiByte / t1.Sub(t0).Seconds()
-		fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
-		fmt.Printf("Configuration: R=%d, W=%d, MP=%d DataSize=%s, Blocks=%d\n",
-			numberOfReaders, numberOfWorkers, threadTarget, util.PrintSize(fileSize), numOfBlocks)
-
-	}()
-
-	// Boost thread count up from GO default of one thread per core
-	threadTarget = numberOfReaders + numberOfWorkers + 4
-	runtime.GOMAXPROCS(threadTarget)
-
-	// Create the queue to connect the file readers to the upload workers.
-	// Note that both the input and output from the readers uses FileChunks.  The difference
-	// is that output file chunks have the data block populated.  Input chunks have nil for
-	// this field.
-	workerQ := make(chan pipeline.Part, numberOfWorkers+extraWorkerBufferSlots)
-
-	var wgReaders sync.WaitGroup
-	wgReaders.Add(numberOfReaders)
-	go blocktransfer.StartReaders(blockQ, &workerQ, numberOfReaders, &wgReaders, &pipelineImpl)
-
-	// Start up upload workers to send file data to Azure Storage as blocks.  These take input
-	// from the output of the file Readers (the workerQ channel) and produce another channel of
-	// individual upload results (resultsQ).
-
-	var wgWorkers sync.WaitGroup
-	wgWorkers.Add(numberOfWorkers) // completion control for upload workers
-
-	// Channel for summmary info about upload of each block.  Buffered since we're
-	// explicitly waiting on upload workers to finish anyway.
-	resultsQ := make(chan blocktransfer.WorkerResult, numOfBlocks)
-
-	go blocktransfer.StartWorkers(&workerQ, &resultsQ, numberOfWorkers, &wgWorkers, dedupeLevel, sti)
-
-	var commitChannel = make(chan blocktransfer.WorkerResult, numOfBlocks)
-
-	createProgressDelegation(&resultsQ, &commitChannel, fileSize)
-
-	wgReaders.Wait()
-	close(workerQ)
-
-	wgWorkers.Wait() // Ensure all upload workers complete
-
-	// Commit the block list on the blob
-	blocktransfer.PutBlobBlockList(sti, &commitChannel, numOfBlocks, fileSize)
-	t1 = time.Now()
-}
-
-func newSourceAndTargetInfo() *blocktransfer.SourceAndTargetInfo {
-	cred := blocktransfer.StorageAccountCredentials{
-		AccountName: storageAccountName,
-		AccountKey:  storageAccountKey}
-
-	sti := blocktransfer.SourceAndTargetInfo{
-		TargetCredentials:   &cred,
-		SourceURI:           sourceURI,
-		TargetContainerName: containerName,
-		TargetBlobName:      blobName,
-		IdealBlockSize:      uint32(blockSize)}
-
-	return &sti
-}
-
-func getSourcePipeline() pipeline.SourcePipeline {
-
-	if strings.ToLower(sourceType) == "file" {
-		return sources.NewFilePipeline(sourceURI)
-	}
-
-	if strings.ToLower(sourceType) == "http" {
-		return sources.NewHTTPPipeline(sourceURI)
-	}
-
-	log.Fatal("Invalid source type.")
-
-	//compiler requieres a return, although not reachable
-	return nil
-
+	return source, target
 }
 
 // parseAndValidate - extra checks on command line arguments
 func parseAndValidate() {
+
 	flag.Parse()
 
 	if sourceURI == "" {
-		log.Fatal("source filename not specified")
-	}
-
-	if containerName == "" {
-		log.Fatal("container name not specified ")
-	}
-
-	if blobName == "" {
-		//TODO: should do more vetting of the blob name
-		blobName = filepath.Base(sourceURI)
+		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
 	}
 
 	// wasn't specified, try the environment variable
@@ -276,51 +271,40 @@ func parseAndValidate() {
 		log.Fatal("Invalid block size specified: " + blockSizeStr)
 	}
 
-	blockSizeMax := blocktransfer.LargeBlockSizeMax
+	blockSizeMax := util.LargeBlockSizeMax
 
 	if blockSize > blockSizeMax {
 		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blockSizeMax))
 	}
 
-	dedupeLevel, errx = blocktransfer.ParseDupeCheckLevel(dedupeLevelOptStr)
+	dedupeLevel, errx = transfer.ParseDupeCheckLevel(dedupeLevelOptStr)
 	if errx != nil {
-		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, blocktransfer.DupeCheckLevelStr)
+		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, transfer.DupeCheckLevelStr)
 	}
-
-	//TODO validate source type as well... relying on getSourcePipeline to check if the input is valid
 }
 
-// createProgressDelegation - create rolling status text for the console.
-// ... Note: this function must be used as it is also responsible for moving result objects from the resultQ
-// ... to the finalCommitQueue, which is the channel read by code to commit the final blockList.
-func createProgressDelegation(resultQ *chan blocktransfer.WorkerResult,
-	// callback for each block uploaded
-	finalCommitQueue *chan blocktransfer.WorkerResult, fileSize uint64) {
-	blocktransfer.ProcessProgress(resultQ, func(r blocktransfer.WorkerResult) {
+func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, committedCount int) {
+	delegate := func(r pipeline.WorkerResult, committedCount int) {
 
 		atomic.AddInt32(&targetRetries, int32(r.Retries))
-		if false && util.Verbose {
-			blockID, _ := base64.StdEncoding.DecodeString(r.ItemID)
-			fmt.Fprintf(os.Stdout, "|%v|%v duration: %v \n", r.WorkerID, string(blockID), r.Duration)
-		} else {
-			dataTransfered = dataTransfered + int64(r.BlockSize)
-			p := int(math.Ceil((float64(dataTransfered) / float64(fileSize)) * 100))
-			var ind string
-			var pchar string
-			for i := 0; i < 25; i++ {
-				if i+1 > p/4 {
-					pchar = "."
-				} else {
-					pchar = "|"
-				}
 
-				ind = ind + pchar
+		dataTransfered = dataTransfered + int64(r.BlockSize)
+		p := int(math.Ceil((float64(dataTransfered) / float64(totalSize)) * 100))
+		var ind string
+		var pchar string
+		for i := 0; i < 25; i++ {
+			if i+1 > p/4 {
+				pchar = "."
+			} else {
+				pchar = "|"
 			}
-			if !util.Verbose {
-				fmt.Fprintf(os.Stdout, "\r --> %3d %% [%v]", p, ind)
-			}
+
+			ind = ind + pchar
 		}
-		// add result to final result queue for use by blob block commit
-		//*finalCommitQueue <- r
-	}, finalCommitQueue)
+		if !util.Verbose {
+			fmt.Fprintf(os.Stdout, "\r --> %3d %% [%v] Committed Count: %v", p, ind, committedCount)
+		}
+	}
+
+	return delegate
 }
