@@ -1,13 +1,38 @@
 # Introduction 
-TODO: ... a parallel blob copier. 
+BlobPorter parallel blob copier.  
 
 # Getting Started
-TODO: Guide users through getting your code up and running on their own system. 
-In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+
+Installation:
+
+#Linux
+
+#Windows
+
+
+
+# Examples:
+Single file upload to block blob storage.
+
+`./blobporter -f /datadrive/myfile.tar -c mycontainer`
+
+Download from blob storage.
+
+`./blobporter -f mydownloadedfile.tar -c mycontainer -n /datadrive/myfile.tar -t blob-file`
+
+Multi file upload – upload all files that match the pattern.
+
+`./blobporter -f "/datadrive/*.tar" -c mycontainer`
+
+Transfer from a HTTP source to block blob storage.
+
+`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-block`
+
+
+Download a HTTP source, container is not required.
+
+`./blobporter -f "http://mysource/file.bam"  -n /datadrive/file.bam -t http-file`
+
 
 # Command Options
 
@@ -33,10 +58,6 @@ Must be one of None, ZeroOnly, Full (default "None")
 `--source_file` string
 Source file to upload
 
-- `-s` *string*  
-`--source_type` string
-Transport associated with the source. 
-Must be one of HTTP, File (default File)
 
 - `-g` int  
 `--concurrent_workers` int  
