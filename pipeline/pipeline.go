@@ -51,7 +51,7 @@ func NewBytesBufferChan(bufferSize uint64) *chan []byte {
 
 //SourcePipeline  Operations to create the channel of parts and the reader execution
 type SourcePipeline interface {
-	ConstructBlockInfoQueue(blockSize uint64) (blockQ *chan Part, numOfBlocks int, Size uint64)
+	ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan Part, numOfBlocks int, Size uint64)
 	ExecuteReader(partsQ *chan Part, readPartsQ *chan Part, id int, wg *sync.WaitGroup)
 	GetSourcesInfo() []string
 }
@@ -61,24 +61,30 @@ type TargetPipeline interface {
 	CommitList(listInfo *TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error)
 	WritePart(part *Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error)
 	ProcessWrittenPart(result *WorkerResult, listInfo *TargetCommittedListInfo) (requeue bool, err error)
-	//ExecuteWriter(partsQ *chan Part, workerQ *chan Part, id int, wg *sync.WaitGroup)
 }
 
 // WorkerResult represents the result of a single block upload
 type WorkerResult struct {
 	BlockSize               int
-	Result                  string //TODO: could cut down on the number of members
+	Result                  string
 	WorkerID                int
-	Duration                time.Duration
-	StartTime               time.Time
 	ItemID                  string
 	DuplicateOfBlockOrdinal int
 	Ordinal                 int
 	Offset                  uint64
-	Retries                 int
 	SourceURI               string
 	NumberOfBlocks          int
 	TargetName              string
+	Stats                   *WorkerResultStats
+}
+
+//WorkerResultStats
+type WorkerResultStats struct {
+	Duration         time.Duration
+	StartTime        time.Time
+	Retries          int
+	CumWriteDuration time.Duration
+	NumOfWrites      int64
 }
 
 //TargetCommittedListInfo TODO
@@ -106,7 +112,6 @@ type Part struct {
 	SourceName              string
 	NumberOfBlocks          int
 	BufferQ                 *chan []byte
-	//Info                    *SourceAndTargetInfo
 }
 
 //SourceAndTargetInfo -
@@ -166,12 +171,8 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, source
 			curCommitList[i] = string(i)
 		}
 
-		//commmitList = curCommitList
-
 		//instead of closing, use Zero length part as the signal that the queue is closed.
 		close(Qcopy) // indicate end of the block list
-		//fp := NewPart(0, 0, -1, sourceURI, sourceName)
-		//Qcopy <- fp
 	}()
 	partsQ = &Qcopy
 
@@ -179,11 +180,9 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, source
 }
 
 //NewPart TODO
-//func NewPart(srcDesc *SourceAndTargetInfo, offset uint64, bytesCount uint32, ordinal int) Part {
 func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, sourceName string) Part {
 
 	var idStr = fmt.Sprintf("%016x", offset)
-	//res.BlockID = base64.StdEncoding.EncodeToString([]byte(idStr))
 
 	return Part{
 		Offset:                  offset,
