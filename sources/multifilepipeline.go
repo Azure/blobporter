@@ -165,7 +165,6 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 
 		fp := pipeline.NewPart(curFileOffset, uint32(partSize), i, sourceURI, sourceName)
 
-		//fmt.Printf("PC|%v|%v|%v|%v|%v|%v \n", curFileOffset, partSize, bytesLeft, i, sourceURI, sourceName)
 		fp.NumberOfBlocks = sourceNumOfBlocks
 		fp.BufferQ = bufferQ
 

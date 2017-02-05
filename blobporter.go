@@ -41,8 +41,6 @@ import (
 
 	"sync/atomic"
 
-	"runtime/debug"
-
 	"net/url"
 
 	"github.com/Azure/blobporter/pipeline"
@@ -121,20 +119,11 @@ func init() {
 	//Profiling...
 	if profile {
 		go func() {
+			fmt.Println("Profile is active...")
 			log.Println(http.ListenAndServe("localhost:6060", nil))
 		}()
 
 	}
-
-	if runtime.GOOS == "windows" {
-		go func() {
-			for {
-				time.Sleep(time.Minute * 5)
-				debug.FreeOSMemory()
-			}
-		}()
-	}
-
 }
 
 var dataTransfered int64
@@ -148,13 +137,16 @@ func displayFilesToTransfer(sourcesInfo []string) {
 	}
 }
 
-func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, threadTarget int, totalNumberOfBlocks int, totalSize uint64) {
+func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, threadTarget int, totalNumberOfBlocks int, totalSize uint64, cumWriteDuration time.Duration) {
+
 	fmt.Printf("\nThe process took %v to run.\n", duration)
-	fmt.Printf("Retry avg: %v Retries %d\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
 	MBs := float64(totalSize) / MiByte / duration.Seconds()
 	fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
 	fmt.Printf("Configuration: R=%d, W=%d, MP=%d DataSize=%s, Blocks=%d\n",
 		numberOfReaders, numberOfWorkers, threadTarget, util.PrintSize(totalSize), totalNumberOfBlocks)
+	fmt.Printf("Cumulative Writes Duration: Total=%v, Avg Per Worker=%v\n",
+		cumWriteDuration, time.Duration(cumWriteDuration.Nanoseconds()/int64(numberOfWorkers)))
+	fmt.Printf("Retries: Avg=%v Total=%v\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
 
 }
 func main() {
@@ -165,6 +157,8 @@ func main() {
 	sourcePipeline, targetPipeline := getPipelines()
 	sourcesInfo := sourcePipeline.GetSourcesInfo()
 
+	validateReaders(len(sourcesInfo))
+
 	tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, numberOfReaders, numberOfWorkers, blockSize)
 
 	displayFilesToTransfer(sourcesInfo)
@@ -174,7 +168,27 @@ func main() {
 
 	tfer.WaitForCompletion()
 
-	displayFinalWrapUpSummary(tfer.Duration, targetRetries, tfer.ThreadTarget, tfer.TotalNumOfBlocks, tfer.TotalSize)
+	displayFinalWrapUpSummary(tfer.Stats.Duration, targetRetries, tfer.ThreadTarget, tfer.TotalNumOfBlocks, tfer.TotalSize, tfer.Stats.CumWriteDuration)
+}
+
+const openFileLimitForLinux = 1024
+
+//validates if the number of readers needs to be adjusted to accomodate max filehandle limits in Debian systems
+func validateReaders(numOfSources int) {
+
+	if runtime.GOOS == "linux" {
+		if (numOfSources * numberOfReaders) > openFileLimitForLinux {
+			numberOfReaders = openFileLimitForLinux / numOfSources
+
+			if numberOfReaders == 0 {
+				log.Fatal("Too many files in the transfer. Reduce the number of files to be transfered")
+			}
+
+			fmt.Printf("Warning! The requested number of readers will exceed the allowed limit of files open by the OS.\nThe number will be adjusted to: %v\n", numberOfReaders)
+
+		}
+	}
+
 }
 
 func isSourceHTTP() bool {
@@ -286,7 +300,7 @@ func parseAndValidate() {
 func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, committedCount int) {
 	delegate := func(r pipeline.WorkerResult, committedCount int) {
 
-		atomic.AddInt32(&targetRetries, int32(r.Retries))
+		atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
 
 		dataTransfered = dataTransfered + int64(r.BlockSize)
 		p := int(math.Ceil((float64(dataTransfered) / float64(totalSize)) * 100))

@@ -41,7 +41,8 @@ import (
 // Verbose mode active?
 var Verbose = false
 
-var BufferQCapacity = 50
+//BufferQCapacity number of pre-allocated buffers
+const BufferQCapacity = 50
 
 //LargeBlockSizeMax maximum block size
 const LargeBlockSizeMax = 100 * MB

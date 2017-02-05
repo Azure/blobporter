@@ -34,6 +34,8 @@ func TestFileLegacyToBlob(t *testing.T) {
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
+
+	os.Remove(sourceFile)
 }
 
 func TestFileToBlob(t *testing.T) {
@@ -45,6 +47,9 @@ func TestFileToBlob(t *testing.T) {
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
+
+	os.Remove(sourceFile)
+
 }
 func TestFileToBlobWithLargeBlocks(t *testing.T) {
 	var container = createContainer("bptest")
@@ -56,19 +61,26 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, bsize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
+
+	os.Remove(sourceFile)
 }
 func TestFilesToBlob(t *testing.T) {
 	var container = createContainer("bptest")
-	createFile("tbm", 1)
-	createFile("tbm", 1)
-	createFile("tbm", 1)
-	createFile("tbm", 1)
+	var sf1 = createFile("tbm", 1)
+	var sf2 = createFile("tbm", 1)
+	var sf3 = createFile("tbm", 1)
+	var sf4 = createFile("tbm", 1)
 
 	fp := sources.NewMultiFilePipeline("tbm*", blockSize)
 	ap := targets.NewAzureBlock(accountName, accountKey, container)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
+
+	os.Remove(sf1)
+	os.Remove(sf2)
+	os.Remove(sf3)
+	os.Remove(sf4)
 }
 
 func TestFileToBlobHTTPToBlob(t *testing.T) {
@@ -91,6 +103,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
+	os.Remove(sourceFile)
 }
 func TestFileToBlobHTTPToFile(t *testing.T) {
 	var container = createContainer("bptest")
@@ -112,6 +125,9 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
+	os.Remove("d" + sourceFile)
+	os.Remove(sourceFile)
+
 }
 func TestFileToBlobToFile(t *testing.T) {
 	var container = createContainer("bptest")
@@ -128,6 +144,9 @@ func TestFileToBlobToFile(t *testing.T) {
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
+
+	os.Remove("d" + sourceFile)
+	os.Remove(sourceFile)
 
 }
 
