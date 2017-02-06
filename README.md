@@ -1,7 +1,7 @@
 # BlobPorter
 Parallel blob copier.
 
-[![Build Status](https://travis-ci.com/Azure/blobporter?branch=master)](https://travis-ci.com/Azure/blobporter)
+[![Build Status](https://travis-ci.com/Azure/blobporter.svg?token=Z5GQEwTGA6wT7qdrzXsm&branch=travis-integration)](https://travis-ci.com/Azure/blobporter)
 
 ## Introduction
 
