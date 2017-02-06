@@ -20,4 +20,4 @@ deploy:
     - \windows_amd64\BlobPorter.exe
   on:
     repo: Azure/blobporter
-    tags: true 
+    tags: false 

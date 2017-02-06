@@ -1,20 +1,20 @@
+# BlobPorter
+Parallel blob copier.
 
- [![Build Status](https://travis-ci.com/Azure/blobporter?branch=master)](https://travis-ci.com/Azure/blobporter)
+[![Build Status](https://travis-ci.com/Azure/blobporter?branch=master)](https://travis-ci.com/Azure/blobporter)
 
-# Introduction 
-BlobPorter parallel blob copier.
+## Introduction
 
-# Getting Started
+Getting Started
 
 Installation:
 
-#Linux
+Linux
 
-#Windows
+Windows
 
 
-
-# Examples:
+## Examples:
 Single file upload to block blob storage.
 
 `./blobporter -f /datadrive/myfile.tar -c mycontainer`
