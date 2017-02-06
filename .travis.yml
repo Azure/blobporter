@@ -1,3 +1,4 @@
+sudo: required
 language: go
 go:
 - 1.7
@@ -8,9 +9,9 @@ before_install:
 - go get -d github.com/Azure/go-autorest/autorest
 script:
 - go test ./...
-- go build  -o /linux_amd64/blobporter github.com/Azure/blobporter
+- sudo go build  -o /linux_amd64/blobporter github.com/Azure/blobporter
 - export GOOS=windows
-- go build  -o /windows_amd64/BlobPorter.exe github.com/Azure/blobporter
+- sudo go build  -o /windows_amd64/BlobPorter.exe github.com/Azure/blobporter
 deploy:
   provider: releases
   api_key:
