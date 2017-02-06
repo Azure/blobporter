@@ -1,0 +1,14 @@
+language: go
+
+go:
+  - 1.7.3
+before_install:
+
+ - go get -v github.com/golang/lint/golint
+ - go get -d github.com/Azure/azure-sdk-for-go/storage
+ - go get -d github.com/stretchr/testify/assert
+ - go get -d github.com/Azure/go-autorest/autorest
+
+script:
+
+  - go test ./...
