@@ -1,18 +1,24 @@
 # BlobPorter
 Parallel blob copier.
 
-[![Build Status](https://travis-ci.com/Azure/blobporter.svg?token=Z5GQEwTGA6wT7qdrzXsm&branch=travis-integration)](https://travis-ci.com/Azure/blobporter)
+[![Build Status](https://travis-ci.com/Azure/blobporter.svg?token=Z5GQEwTGA6wT7qdrzXsm&branch=dev)](https://travis-ci.com/Azure/blobporter)
 
 ## Introduction
 
 Getting Started
 
-Installation:
+Linux:
 
-Linux
+Download, extract and set permissions.
 
-Windows
+`$ wget https://github.com/Azure/blobporter/releases/download/v0.2.01/bp_linux.tar.gz | tar xz | chmod +x /linux_amd64/blobporter | cd linux_amd64`
 
+Set environment variables.
+  
+`$ export ACCOUNT_NAME=<STORAGE_ACCOUNT_NAME>`
+`$ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>`
+
+_Note: You can also set these values via options_
 
 ## Examples:
 Single file upload to block blob storage.

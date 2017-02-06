@@ -9,17 +9,23 @@ before_install:
 - go get -d github.com/Azure/go-autorest/autorest
 script:
 - go test ./...
-- go build  -o blobporter github.com/Azure/blobporter
+- mkdir linux_amd64
+- mkdir windows_amd64
+- go build  -o /linux_amd64/blobporter github.com/Azure/blobporter
 - export GOOS=windows
-- go build  -o BlobPorter.exe github.com/Azure/blobporter
+- go build  -o /windows_amd64/BlobPorter.exe github.com/Azure/blobporter
+- md5sum /linux_amd64/blobporter > /linux_amd64/blobporter.md5
+- md5sum /windows_amd64/BlobPorter.exe > /windows_amd64/BlobPorter.exe.md5
+- tar -zcvf bp_linux.tar.gz linux_amd64 
+- tar -zcvf bp_windows.tar.gz windows_amd64 
 deploy:
   provider: releases
   api_key:
     secure: h81WRMxDgNoQ81VIEEXypp1lHXwxHGPjoLIFNG7aSxKqfRbWT+xGyGNFCU59FY0ge2TLsZp+ohDSPPhDbQ5kFb5xBIhODNbUuFw2SSsTa57AtmPrvzJ6kJ8/1l7D8xMn1OCiIUWw6YNLCtkMCPvJfowJEBo+dTuU7xW/Sr5Y3CDaDOoJQCEHQ5bj3ZKpwAlHdwTHtdE3UOamGTgoB7HkO/sLhlaNSxFf4q/3w2J4kbsTuC/eb5vc61VXXWketzXCKuZ0wEPKrFD1tDrH6M6eHRGNzkPOtIVoHffCeVsfvoGyMsIkKBjpPduJF9ZPB1JfElZAvhaTEsI6dVHus8Exugyzib4phUd/wNJ5mbS7FptVrQswUZ7h+of+c1/P9LhOEIFWLJZa5ey58RWL7dGDxF0dCTGkciiXL35bbztD6J+U+qttPHCM2gXSKhTvwz0qZYzYG+RiVG+1SeVibUgBNOY1Td5+cIL9OQ4fMWNjd0rdPEB0Teuq1gIRY8/qQipCxNlVdOJk7YIoI2Zjoo/Yuq4wVXdusCG6/5tCxEtLOf6LedZEPBm3ya/9kyjYc+qtFnSGu9SLw068zCOMTQZboSLyih7wgWR9IERUNwsNzHLYNOWTwZb70JIZmmsHZFqj51tMw44Uz8Yx/yMhmmwbiChR1+3gpMNVUBuNGOD1v3c=
   
   file: 
-    - blobporter
-    - BlobPorter.exe
+    - bp_linux.tar.gz
+    - bp_windows.tar.gz
   on:
     repo: Azure/blobporter
     tags: true 
