@@ -1,17 +1,20 @@
-# Introduction 
-BlobPorter parallel blob copier.  
+# BlobPorter
+Parallel blob copier.
 
-# Getting Started
+[![Build Status](https://travis-ci.com/Azure/blobporter.svg?token=Z5GQEwTGA6wT7qdrzXsm&branch=travis-integration)](https://travis-ci.com/Azure/blobporter)
+
+## Introduction
+
+Getting Started
 
 Installation:
 
-#Linux
+Linux
 
-#Windows
+Windows
 
 
-
-# Examples:
+## Examples:
 Single file upload to block blob storage.
 
 `./blobporter -f /datadrive/myfile.tar -c mycontainer`
@@ -29,7 +32,7 @@ Transfer from a HTTP source to block blob storage.
 `./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-block`
 
 
-Download a HTTP source, container is not required.
+Download a HTTP source, the container option is not required.
 
 `./blobporter -f "http://mysource/file.bam"  -n /datadrive/file.bam -t http-file`
 
@@ -51,30 +54,30 @@ Container name (e.g. `mycontainer`)
 
 - `-d` string  
 `--dup_check_level` string    
-Desired level of effort to detect duplicate data blocks to minimize upload size. 
+Desired level of effort to detect duplicate data blocks to minimize upload size.
 Must be one of None, ZeroOnly, Full (default "None")
 
 - `-f` *string*  
-`--source_file` string
-Source file to upload
+`--file` string
+URL, file or files (e.g. /data/*.gz) to upload. \nDestination file for download.
 
 
 - `-g` int  
-`--concurrent_workers` int  
+`--concurrent_workers` int
 Number of threads for parallel upload
 
 - `-k` string  
-`--account_key` string  
-Storage account key string 
+`--account_key` string
+Storage account key string
 (e.g. `4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==`).
 Can also be specified via the ACCOUNT_KEY environment variable.
 
-- `-n` string   
-`--blob_name` string  
+- `-n` string
+`--blob_name` string
 Blob name (e.g. myblob.txt)
 
-- `-r` int  
-`--concurrent_readers` int  
+- `-r` int
+`--concurrent_readers` int
 Number of threads for parallel reading of the input file
 
 - `-v`  
