@@ -11,11 +11,11 @@ script:
 - go test ./...
 - mkdir linux_amd64
 - mkdir windows_amd64
-- go build  -o /linux_amd64/blobporter github.com/Azure/blobporter
+- go build  -o ./linux_amd64/blobporter github.com/Azure/blobporter
 - export GOOS=windows
-- go build  -o /windows_amd64/BlobPorter.exe github.com/Azure/blobporter
-- md5sum /linux_amd64/blobporter > /linux_amd64/blobporter.md5
-- md5sum /windows_amd64/BlobPorter.exe > /windows_amd64/BlobPorter.exe.md5
+- go build  -o ./windows_amd64/BlobPorter.exe github.com/Azure/blobporter
+- md5sum ./linux_amd64/blobporter > ./linux_amd64/blobporter.md5
+- md5sum ./windows_amd64/BlobPorter.exe > ./windows_amd64/BlobPorter.exe.md5
 - tar -zcvf bp_linux.tar.gz linux_amd64 
 - tar -zcvf bp_windows.tar.gz windows_amd64 
 deploy:
