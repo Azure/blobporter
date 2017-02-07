@@ -32,13 +32,13 @@ import (
 	"log"
 	"strconv"
 	"sync"
+	"time"
 
 	"net/http"
 
 	"fmt"
 
-	"io"
-
+	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -47,24 +47,48 @@ import (
 ///// HttpPipeline
 ////////////////////////////////////////////////////////////
 
+const sasTokenNumberOfHours = 4
+
 // HTTPPipeline - Contructs blocks queue and implements data readers for file exposed via HTTP
 type HTTPPipeline struct {
 	SourceURI  string
 	SourceSize uint64
+	SourceName string
+}
+
+//NewHTTPAzureBlockPipeline TODO
+func NewHTTPAzureBlockPipeline(container string, blobName string, accountName string, accountKey string) pipeline.SourcePipeline {
+	var err error
+	var sc storage.Client
+	var bc storage.BlobStorageClient
+	sc, err = storage.NewBasicClient(accountName, accountKey)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bc = sc.GetBlobService()
+
+	//Expiration in 4 hours
+	date := time.Now().UTC().Add(time.Duration(sasTokenNumberOfHours) * time.Hour)
+
+	var sasURL string
+	if sasURL, err = bc.GetBlobSASURI(container, blobName, date, "r"); err != nil {
+		log.Fatal(err)
+	}
+
+	return NewHTTPPipeline(sasURL, blobName)
 }
 
 // NewHTTPPipeline TODO
-func NewHTTPPipeline(sourceURI string) pipeline.SourcePipeline {
+func NewHTTPPipeline(sourceURI string, sourceName string) pipeline.SourcePipeline {
 
 	client := &http.Client{}
 
 	resp, err := client.Head(sourceURI)
 
 	if err != nil || resp.StatusCode != 200 {
-		if resp != nil {
-			log.Fatalf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
-		}
-		log.Fatalf("HEAD request failed. Please check the URL. Error: %v", err)
+		log.Fatalf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
 	}
 
 	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
@@ -73,11 +97,20 @@ func NewHTTPPipeline(sourceURI string) pipeline.SourcePipeline {
 		log.Fatalf("Content-Length is invalid. Expected a numeric value greater than zero. Error: %v", err)
 	}
 
-	return HTTPPipeline{SourceURI: sourceURI, SourceSize: uint64(size)}
+	return HTTPPipeline{SourceURI: sourceURI, SourceSize: uint64(size), SourceName: sourceName}
+}
+
+//GetSourcesInfo TODO
+func (f HTTPPipeline) GetSourcesInfo() []string {
+	// Single file support
+	sources := make([]string, 1)
+	sources[0] = fmt.Sprintf("URL:%v, Size:%v", f.SourceURI, f.SourceSize)
+
+	return sources
 }
 
 //ExecuteReader TODO
-func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
+func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	var blocksHandled = 0
 	var err error
 	var req *http.Request
@@ -122,22 +155,13 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 			return nil
 		})
 
-		b := make([]byte, p.BytesToRead)
-
-		if b, err = ioutil.ReadAll(res.Body); err != nil && err != io.EOF {
+		p.GetBuffer()
+		if p.Data, err = ioutil.ReadAll(res.Body); err != nil {
 			log.Fatal(err)
 		}
-		if err = res.Body.Close(); err != nil {
-			log.Fatal(err)
-		}
+		res.Body.Close()
 
-		p.Data = b
-
-		//h := md5.New()
-		//h.Write(p.Data)
-		//md5Value := hex.EncodeToString(h.Sum(nil))
-
-		*workerQ <- p
+		*readPartsQ <- p
 		blocksHandled++
 	}
 
@@ -147,7 +171,7 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 func (f HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan pipeline.Part, numOfBlocks int, size uint64) {
 	size = f.SourceSize
 
-	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize)
+	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize, f.SourceURI, f.SourceName)
 
 	return
 }

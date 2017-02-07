@@ -28,6 +28,7 @@ package sources
 //
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -43,11 +44,11 @@ import (
 type FilePipeline struct {
 	FileStats  *os.FileInfo
 	SourceName string
-	//Info      *pipeline.SourceAndTargetInfo
+	TargetName string
 }
 
 // NewFilePipeline TODO
-func NewFilePipeline(sourceFileName string) pipeline.SourcePipeline {
+func NewFilePipeline(sourceFileName string, targetName string) pipeline.SourcePipeline {
 
 	var fileInfo os.FileInfo
 	var err error
@@ -56,12 +57,17 @@ func NewFilePipeline(sourceFileName string) pipeline.SourcePipeline {
 		log.Fatal(err)
 	}
 
+	if targetName == "" {
+		targetName = sourceFileName
+	}
+
 	return FilePipeline{FileStats: &fileInfo,
-		SourceName: sourceFileName}
+		SourceName: sourceFileName,
+		TargetName: targetName}
 }
 
 //ExecuteReader TODO
-func (f FilePipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
+func (f FilePipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	var blocksHandled = 0
 	//var fileInfo os.FileInfo
 	var fileHandle *os.File
@@ -76,23 +82,31 @@ func (f FilePipeline) ExecuteReader(partsQ *chan pipeline.Part, workerQ *chan pi
 			}
 		}
 
-		if !ok {
+		if !ok || p.BytesToRead == 0 {
 			wg.Done()
 			fileHandle.Close()
 			return // no more blocks of file data to be read
 		}
 
-		b := make([]byte, p.BytesToRead)
-		if _, err = fileHandle.ReadAt(b, int64(p.Offset)); err != nil {
+		//b := make([]byte, p.BytesToRead)
+		p.GetBuffer()
+		if _, err = fileHandle.ReadAt(p.Data, int64(p.Offset)); err != nil {
 			log.Fatal(err)
 		}
 
-		p.Data = b
-
-		*workerQ <- p
+		*readPartsQ <- p
 		blocksHandled++
 	}
 
+}
+
+//GetSourcesInfo TODO
+func (f FilePipeline) GetSourcesInfo() []string {
+	// Single file support
+	sources := make([]string, 1)
+	sources[0] = fmt.Sprintf("File:%v, Size:%v", f.SourceName, (*f.FileStats).Size())
+
+	return sources
 }
 
 //ConstructBlockInfoQueue creates
@@ -100,7 +114,7 @@ func (f FilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan pi
 
 	size = uint64((*f.FileStats).Size())
 
-	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize)
+	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize, f.SourceName, f.TargetName)
 
 	return
 }
