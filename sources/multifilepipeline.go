@@ -58,12 +58,12 @@ type MultiFilePipeline struct {
 type FileInfo struct {
 	FileStats   *os.FileInfo
 	SourceURI   string
-	SourceName  string
+	TargetAlias string
 	NumOfBlocks int
 }
 
 // NewMultiFilePipeline TODO
-func NewMultiFilePipeline(sourcePattern string, blockSize uint64) pipeline.SourcePipeline {
+func NewMultiFilePipeline(sourcePattern string, blockSize uint64, targetAlias string) pipeline.SourcePipeline {
 	var files []string
 	var err error
 	//get files from pattern
@@ -76,8 +76,11 @@ func NewMultiFilePipeline(sourcePattern string, blockSize uint64) pipeline.Sourc
 	totalNumberOfBlocks := 0
 	var totalSize uint64
 	fileInfos := make(map[string]FileInfo, len(files))
+
 	for _, file := range files {
 		var fileStat os.FileInfo
+		var sName string
+
 		if fileStat, err = os.Stat(file); err != nil {
 			log.Fatalf("Error: %v", err)
 		}
@@ -85,8 +88,16 @@ func NewMultiFilePipeline(sourcePattern string, blockSize uint64) pipeline.Sourc
 		numOfBlocks := util.GetNumberOfBlocks(uint64(fileStat.Size()), blockSize)
 		totalSize = totalSize + uint64(fileStat.Size())
 		totalNumberOfBlocks = totalNumberOfBlocks + numOfBlocks
-		fileInfo := FileInfo{FileStats: &fileStat, SourceURI: file, SourceName: fileStat.Name(), NumOfBlocks: numOfBlocks}
-		//fmt.Printf("Source:%v FileName:%v Size:%v NumOfBlocks:%v BlockSize:%v\n", file, fileStat.Name(), uint64(fileStat.Size()), numOfBlocks, blockSize)
+
+		//use the param instead of the original filename only when  single file
+		//transfer occurs.
+		if targetAlias != "" && len(files) == 1 {
+			sName = targetAlias
+		} else {
+			sName = fileStat.Name()
+		}
+
+		fileInfo := FileInfo{FileStats: &fileStat, SourceURI: file, TargetAlias: sName, NumOfBlocks: numOfBlocks}
 		fileInfos[file] = fileInfo
 	}
 
@@ -128,8 +139,9 @@ func (f MultiFilePipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ 
 			fmt.Printf("Error while reading the file %v /n", err)
 			log.Fatal(err)
 		}
+
 		if util.Verbose {
-			fmt.Printf("OKR|R|%v|%v|%v|%v\n", p.BlockID, len(p.Data), p.SourceName, p.BytesToRead)
+			fmt.Printf("OKR|R|%v|%v|%v|%v\n", p.BlockID, len(p.Data), p.TargetAlias, p.BytesToRead)
 		}
 
 		*readPartsQ <- p
@@ -145,14 +157,14 @@ func (f MultiFilePipeline) GetSourcesInfo() []string {
 
 	var i = 0
 	for _, file := range f.FilesInfo {
-		sources[i] = fmt.Sprintf("File:%v, Size:%v", file.SourceName, (*file.FileStats).Size())
+		sources[i] = fmt.Sprintf("File:%v, Size:%v", file.SourceURI, (*file.FileStats).Size())
 		i++
 	}
 
 	return sources
 }
 
-func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64, sourceURI string, sourceName string, bufferQ *chan []byte) []pipeline.Part {
+func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64, sourceURI string, targetAlias string, bufferQ *chan []byte) []pipeline.Part {
 	var bytesLeft = size
 	var curFileOffset uint64
 	parts := make([]pipeline.Part, sourceNumOfBlocks)
@@ -163,7 +175,7 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 			partSize = bytesLeft
 		}
 
-		fp := pipeline.NewPart(curFileOffset, uint32(partSize), i, sourceURI, sourceName)
+		fp := pipeline.NewPart(curFileOffset, uint32(partSize), i, sourceURI, targetAlias)
 
 		fp.NumberOfBlocks = sourceNumOfBlocks
 		fp.BufferQ = bufferQ
@@ -187,7 +199,7 @@ func (f MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partsQ *ch
 
 	parts := make(map[string][]pipeline.Part, numOfFiles)
 	for sourceName, source := range f.FilesInfo {
-		parts[sourceName] = createPartsFromSource(uint64((*source.FileStats).Size()), source.NumOfBlocks, f.BlockSize, source.SourceURI, sourceName, bufferQ)
+		parts[sourceName] = createPartsFromSource(uint64((*source.FileStats).Size()), source.NumOfBlocks, f.BlockSize, source.SourceURI, source.TargetAlias, bufferQ)
 	}
 
 	//Fill the Q with evenly ordered parts from the sources...

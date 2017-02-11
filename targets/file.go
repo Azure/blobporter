@@ -115,11 +115,12 @@ func (t File) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeli
 
 //WritePart TODO
 func (t File) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
-
+	startTime = time.Now()
 	fh := <-(*t.FileHandles)
 	if _, err := fh.WriteAt((*part).Data, int64((*part).Offset)); err != nil {
 		log.Fatal(err)
 	}
+	duration = time.Now().Sub(startTime)
 
 	(*part).ReturnBuffer()
 

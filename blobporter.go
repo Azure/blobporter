@@ -75,7 +75,7 @@ const (
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
 	MiByte                   = 1048576
-	programVersion           = "0.2.01" // version number to show in help
+	programVersion           = "0.2.03" // version number to show in help
 )
 
 func init() {
@@ -84,8 +84,8 @@ func init() {
 	fmt.Printf("BlobPorter \nCopyright (c) Microsoft Corporation. \nVersion: %v\n---------------\n", programVersion)
 
 	// shape the default parallelism based on number of CPUs
-	var defaultNumberOfWorkers = int(float32(runtime.NumCPU()) * 2)
-	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 10)
+	var defaultNumberOfWorkers = int(float32(runtime.NumCPU()) * 10)
+	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 5)
 	blockSizeStr = "4MB" // default size for blob blocks
 	const (
 		dblockSize             = 4 * MiByte
@@ -115,15 +115,6 @@ func init() {
 		"Must be one of "+transfer.DupeCheckLevelStr)
 	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", defaultTransferDef.ToString(),
 		"Defines the source and target of the transfer. Must be one of file-blob, http-blob, blob-file or http-file")
-
-	//Profiling...
-	if profile {
-		go func() {
-			fmt.Println("Profile is active...")
-			log.Println(http.ListenAndServe("localhost:6060", nil))
-		}()
-
-	}
 }
 
 var dataTransfered int64
@@ -149,9 +140,25 @@ func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, thre
 	fmt.Printf("Retries: Avg=%v Total=%v\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
 
 }
+func enableDisableProfiling() {
+
+	//Profiling...
+	if profile {
+		go func() {
+			runtime.SetBlockProfileRate(10)
+			fmt.Println("Profile is active...")
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
+
+	}
+
+}
+
 func main() {
 
 	parseAndValidate()
+
+	enableDisableProfiling()
 
 	// Create pipelines
 	sourcePipeline, targetPipeline := getPipelines()
@@ -226,7 +233,7 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 			}
 			source = sources.NewHTTPPipeline(sourceURI, name)
 		} else {
-			source = sources.NewMultiFilePipeline(sourceURI, blockSize)
+			source = sources.NewMultiFilePipeline(sourceURI, blockSize, blobName)
 		}
 	case transfer.HTTPToBlob:
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
@@ -297,8 +304,8 @@ func parseAndValidate() {
 	}
 }
 
-func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, committedCount int) {
-	delegate := func(r pipeline.WorkerResult, committedCount int) {
+func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
+	delegate := func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
 
 		atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
 
@@ -316,7 +323,7 @@ func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, comm
 			ind = ind + pchar
 		}
 		if !util.Verbose {
-			fmt.Fprintf(os.Stdout, "\r --> %3d %% [%v] Committed Count: %v", p, ind, committedCount)
+			fmt.Fprintf(os.Stdout, "\r --> %3d %% [%v] Committed Count: %v Buffer Level: %03d%%", p, ind, committedCount, bufferLevel)
 		}
 	}
 

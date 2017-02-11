@@ -93,12 +93,9 @@ func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Bloc
 
 //ProcessWrittenPart TODO
 func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
-	//stInfo := (*result.Info)
-	//lInfo := (*listInfo)
 	requeue = false
 	blockList := convertToStorageBlockList((*listInfo).List, result.NumberOfBlocks)
 
-	// fmt.Printf("List ordinal %d being processed, dup of %d, offset=%d\n", wr.Ordinal, wr.DuplicateOfBlockOrdinal, wr.Offset)
 	if result.DuplicateOfBlockOrdinal >= 0 { // this block is a duplicate of another.
 		if blockList[result.DuplicateOfBlockOrdinal].ID != "" {
 			blockList[result.Ordinal] = blockList[result.DuplicateOfBlockOrdinal]
@@ -121,18 +118,16 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
 		bc := util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey)
-		if err := bc.PutBlock(t.Container, (*part).SourceName, (*part).BlockID, (*part).Data); err != nil {
+		if err := bc.PutBlock(t.Container, (*part).TargetAlias, (*part).BlockID, (*part).Data); err != nil {
 			if util.Verbose {
-				//data, _ := base64.StdEncoding.DecodeString((*part).BlockID)
-				fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).SourceName, err)
-
+				fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
 			}
 			bc = util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey) // reset to a fresh client for the retry
 			return err
 		}
 
 		if util.Verbose {
-			fmt.Printf("OKA|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).SourceName, err)
+			fmt.Printf("OKA|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
 		}
 
 		return nil
