@@ -3,12 +3,13 @@ language: go
 go:
 - 1.7
 before_install:
+- sudo apt-get install zip
 - go get -v github.com/golang/lint/golint
 - go get -d github.com/Azure/azure-sdk-for-go/storage
 - go get -d github.com/stretchr/testify/assert
 - go get -d github.com/Azure/go-autorest/autorest
 script:
-- go test ./...
+- go test -v ./...
 - mkdir linux_amd64
 - mkdir windows_amd64
 - go build  -o ./linux_amd64/blobporter github.com/Azure/blobporter
@@ -16,8 +17,8 @@ script:
 - go build  -o ./windows_amd64/BlobPorter.exe github.com/Azure/blobporter
 - md5sum ./linux_amd64/blobporter > ./linux_amd64/blobporter.md5
 - md5sum ./windows_amd64/BlobPorter.exe > ./windows_amd64/BlobPorter.exe.md5
-- tar -zcvf bp_linux.tar.gz linux_amd64 
-- tar -zcvf bp_windows.tar.gz windows_amd64 
+- tar cvzf bp_linux.tar.gz linux_amd64 
+- zip bp_windows.zip ./windows_amd64/* 
 deploy:
   provider: releases
   api_key:
@@ -25,7 +26,7 @@ deploy:
   
   file: 
     - bp_linux.tar.gz
-    - bp_windows.tar.gz
+    - bp_windows.zip
   on:
     repo: Azure/blobporter
     tags: true 

@@ -230,24 +230,25 @@ func (w *Worker) recordStatus(tb *pipeline.Part, startTime time.Time, d time.Dur
 		Offset:                  (*tb).Offset,
 		SourceURI:               (*tb).SourceURI,
 		NumberOfBlocks:          (*tb).NumberOfBlocks,
-		TargetName:              tb.SourceName}
+		TargetName:              tb.TargetAlias}
 }
 
 //ProgressUpdate called whenever a worker completes successfully
-type ProgressUpdate func(results pipeline.WorkerResult, committedCount int)
+type ProgressUpdate func(results pipeline.WorkerResult, committedCount int, bufferSize int)
 
 //Transfer TODO
 type Transfer struct {
-	SourcePipeline   *pipeline.SourcePipeline
-	TargetPipeline   *pipeline.TargetPipeline
-	NumOfReaders     int
-	NumOfWorkers     int
-	TotalNumOfBlocks int
-	TotalSize        uint64
-	ThreadTarget     int
-	SyncWaitGroups   *WaitGroups
-	ControlChannels  *Channels
-	Stats            *StatsInfo
+	SourcePipeline      *pipeline.SourcePipeline
+	TargetPipeline      *pipeline.TargetPipeline
+	NumOfReaders        int
+	NumOfWorkers        int
+	TotalNumOfBlocks    int
+	TotalSize           uint64
+	ThreadTarget        int
+	SyncWaitGroups      *WaitGroups
+	ControlChannels     *Channels
+	Stats               *StatsInfo
+	readPartsBufferSize int
 }
 
 //StatsInfo TODO
@@ -273,6 +274,7 @@ type Channels struct {
 
 const (
 	extraWorkerBufferSlots = 5
+	maxReadPartsBufferSize = 30
 )
 
 //NewTransfer Creates a new Transfer, this will adjust the thread target
@@ -293,13 +295,24 @@ func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipelin
 
 	//Create buffered chanels
 	channels.Parts, t.TotalNumOfBlocks, t.TotalSize = (*source).ConstructBlockInfoQueue(blockSize)
-	readParts := make(chan pipeline.Part, workers+extraWorkerBufferSlots)
+	readParts := make(chan pipeline.Part, t.getReadPartsBufferSize())
 	results := make(chan pipeline.WorkerResult, t.TotalNumOfBlocks)
 
 	channels.ReadParts = &readParts
 	channels.Results = &results
 
 	return &t
+}
+
+func (t *Transfer) getReadPartsBufferSize() int {
+	if t.readPartsBufferSize == 0 {
+		t.readPartsBufferSize = t.NumOfReaders
+		if t.readPartsBufferSize > maxReadPartsBufferSize {
+			t.readPartsBufferSize = maxReadPartsBufferSize
+		}
+	}
+
+	return t.readPartsBufferSize
 }
 
 //StartTransfer Starts the readers and readers. Process and commits the results of the write operations.
@@ -334,6 +347,7 @@ func (t *Transfer) startWorkers(workerQ *chan pipeline.Part, resultQ *chan pipel
 	for w := 0; w < numOfWorkers; w++ {
 		worker := newWorker(w, workerQ, resultQ, wg, d)
 		worker.startWorker(target)
+		time.Sleep(300 * time.Millisecond)
 	}
 }
 
@@ -375,8 +389,10 @@ func (t *Transfer) processAndCommitResults(resultQ *chan pipeline.WorkerResult, 
 			commitWg.Done()
 		}
 
+		workerBufferLevel := int(float64(len(*t.ControlChannels.ReadParts)) / float64(t.getReadPartsBufferSize()) * 100)
+
 		// call update delegate
-		update(result, committedCount)
+		update(result, committedCount, workerBufferLevel)
 
 	}
 }
