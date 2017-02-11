@@ -3,7 +3,7 @@ language: go
 go:
 - 1.7
 before_install:
-- apt-get install zip
+- sudo apt-get install zip
 - go get -v github.com/golang/lint/golint
 - go get -d github.com/Azure/azure-sdk-for-go/storage
 - go get -d github.com/stretchr/testify/assert
