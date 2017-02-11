@@ -42,8 +42,15 @@ import (
 //NewBytesBufferChan TODO
 func NewBytesBufferChan(bufferSize uint64) *chan []byte {
 
-	c := make(chan []byte, util.BufferQCapacity)
-	for index := 0; index < util.BufferQCapacity; index++ {
+	bufferQCapacity := uint64(util.BufferQCapacity)
+
+	if bufferQCapacity*bufferSize > util.GB {
+		bufferQCapacity = util.GB / bufferSize
+	}
+
+	c := make(chan []byte, bufferQCapacity)
+	var index uint64
+	for index = 0; index < bufferQCapacity; index++ {
 		c <- make([]byte, bufferSize)
 	}
 	return &c
@@ -89,7 +96,6 @@ type WorkerResultStats struct {
 
 //TargetCommittedListInfo TODO
 type TargetCommittedListInfo struct {
-	Info *SourceAndTargetInfo
 	List interface{}
 }
 
@@ -109,21 +115,10 @@ type Part struct {
 	Ordinal                 int    // sequentially assigned at creation time to enable chunk ordering (0,1,2)
 	md5Value                string // internal copy of computed MD5, initially empty string
 	SourceURI               string
-	SourceName              string
+	TargetAlias             string
 	NumberOfBlocks          int
 	BufferQ                 *chan []byte
-}
-
-//SourceAndTargetInfo -
-type SourceAndTargetInfo struct {
-	SourceURI           string
-	TargetContainerName string
-	TargetBlobName      string
-	TargetCredentials   *StorageAccountCredentials
-	IdealBlockSize      uint32 // Azure storage block norm, usually 4MB in bytes
-	NumberOfBlocks      int
-	SourceType          int
-	TargetType          int
+	returnToBuffer          bool
 }
 
 // StorageAccountCredentials - a central location for account info.
@@ -133,7 +128,7 @@ type StorageAccountCredentials struct {
 }
 
 //ConstructPartsQueue  TODO
-func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, sourceName string) (partsQ *chan Part, numOfBlocks int, commmitList []string) {
+func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, targetAlias string) (partsQ *chan Part, numOfBlocks int, commmitList []string) {
 	var bsib = blockSize
 	numOfBlocks = int((size + (bsib - 1)) / bsib)
 
@@ -161,7 +156,7 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, source
 				chunkSize = bytesLeft
 			}
 
-			fp := NewPart(curFileOffset, uint32(chunkSize), i, sourceURI, sourceName)
+			fp := NewPart(curFileOffset, uint32(chunkSize), i, sourceURI, targetAlias)
 			fp.NumberOfBlocks = numOfBlocks
 			fp.BufferQ = bufferQ
 			Qcopy <- fp // put it on the channel for the Readers
@@ -180,7 +175,7 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, source
 }
 
 //NewPart TODO
-func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, sourceName string) Part {
+func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, targetAlias string) Part {
 
 	var idStr = fmt.Sprintf("%016x", offset)
 
@@ -191,8 +186,9 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, so
 		BlockID:                 base64.StdEncoding.EncodeToString([]byte(idStr)),
 		Ordinal:                 ordinal,
 		SourceURI:               sourceURI,
-		SourceName:              sourceName,
-		DuplicateOfBlockOrdinal: -1}
+		TargetAlias:             targetAlias,
+		DuplicateOfBlockOrdinal: -1,
+		returnToBuffer:          true}
 
 }
 
@@ -204,15 +200,30 @@ func (p *Part) ToString() string {
 
 //GetBuffer TODO
 func (p *Part) GetBuffer() {
-	p.Data = <-(*p.BufferQ)
-	p.Data = p.Data[:p.BytesToRead]
+
+	//if the channel is empty allocate more memory to avoid blocking the reader
+	if len(*p.BufferQ) == 0 {
+		p.Data = make([]byte, p.BytesToRead)
+		p.returnToBuffer = false
+	} else {
+		p.Data = <-(*p.BufferQ)
+		p.Data = p.Data[:p.BytesToRead]
+	}
+
 }
 
 //ReturnBuffer TODO
 func (p *Part) ReturnBuffer() {
-	p.Data = p.Data[0:0]
 
-	(*p.BufferQ) <- p.Data
+	//Return only if the buffer came for the pool.
+	//Returning the extra buffer will block the worker when the pool is full
+	if p.returnToBuffer {
+		(*p.BufferQ) <- p.Data
+		p.Data = nil
+	}
+
+	p.returnToBuffer = true
+
 }
 
 // MD5 - return computed MD5 for this block or empty string if no data yet.
