@@ -52,7 +52,7 @@ Download a file via HTTP to a local file.
 
 ## Command Options
 
-- `-f` *string* or `--file` *string* URL, file or files (e.g. /data/*.gz) to upload. Destination file for download.
+- `-f` *string* or `--file` *string* URL, file or files (e.g. /data/*.gz) to upload. Destination file for download scenarios.
 
 - `-c` *string* or `--container_name` *string* container name (e.g. `mycontainer`).
 
