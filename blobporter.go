@@ -60,7 +60,7 @@ var blockSizeStr string
 
 var numberOfReaders int
 var extraWorkerBufferSlots int // allocate this many extra slots above the # of workers to allow I/O to work ahead
-var dedupeLevel transfer.DupeCheckLevel = transfer.None
+var dedupeLevel = transfer.None
 var dedupeLevelOptStr = dedupeLevel.ToString()
 var transferDef transfer.Definition
 var transferDefStr string
@@ -74,8 +74,7 @@ const (
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
-	MiByte                   = 1048576
-	programVersion           = "0.2.03" // version number to show in help
+	programVersion           = "0.2.04" // version number to show in help
 )
 
 func init() {
@@ -88,7 +87,7 @@ func init() {
 	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 5)
 	blockSizeStr = "4MB" // default size for blob blocks
 	const (
-		dblockSize             = 4 * MiByte
+		dblockSize             = 4 * util.MB
 		extraWorkerBufferSlots = 5
 	)
 
@@ -131,7 +130,7 @@ func displayFilesToTransfer(sourcesInfo []string) {
 func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, threadTarget int, totalNumberOfBlocks int, totalSize uint64, cumWriteDuration time.Duration) {
 
 	fmt.Printf("\nThe process took %v to run.\n", duration)
-	MBs := float64(totalSize) / MiByte / duration.Seconds()
+	MBs := float64(totalSize) / float64(util.MB) / duration.Seconds()
 	fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
 	fmt.Printf("Configuration: R=%d, W=%d, MP=%d DataSize=%s, Blocks=%d\n",
 		numberOfReaders, numberOfWorkers, threadTarget, util.PrintSize(totalSize), totalNumberOfBlocks)

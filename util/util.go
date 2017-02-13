@@ -1,6 +1,6 @@
 package util
 
-// blobporter Tool
+// BlobPorter Tool
 //
 // Copyright (c) Microsoft Corporation
 //
@@ -52,9 +52,10 @@ const LargeBlockAPIVersion = "2016-05-31"
 
 //MiByte bytes in one MiB
 const MiByte = 1048576
+
+//MaxBlockCount the maximum number of blocks in a blob
 const MaxBlockCount = 50000 // no more than this many blob blocks permitted
 
-const scriptVersion = "2016.11.09.A" // version number to show in help
 ///////////////////////////////////////////////////////////////////
 //  Storage sizes -- print and scan bytes, and sizes suffixed with KB,MB,GB,TB
 //////////////////////////////////////////////////////////////////
@@ -70,7 +71,7 @@ const (
 	TBF = float64(TB)
 )
 
-//printSize - format a string with a compact respresentation of a byte count
+//PrintSize formats a string with a compact respresentation of a byte count
 func PrintSize(bytes uint64) string {
 	var str = "0"
 	var zeroTrim = true
@@ -98,12 +99,12 @@ func PrintSize(bytes uint64) string {
 	return str + suffix + fmt.Sprintf(" (%v)", bytes)
 }
 
-// ByteCountFromSizeString - accept byte count, or integer suffixed with B, KB, MB, GB.
+// ByteCountFromSizeString accepts byte count, or integer suffixed with B, KB, MB, GB.
 // ... Return the corresponding count of bytes.
 func ByteCountFromSizeString(sizeStr string) (uint64, error) {
 	sstr := strings.TrimSpace(sizeStr)
 	var scaler uint64 = 1
-	var suffixCount int = 2
+	suffixCount := 2
 
 	if strings.HasSuffix(sstr, "GB") {
 		scaler = 1024 * 1024 * 1024
@@ -135,25 +136,25 @@ func ByteCountFromSizeString(sizeStr string) (uint64, error) {
 // ... Go's flags package lets you define '--xyz' as an option, but fails to parse it correctly.  So current behavior is that -x and
 // ... --x are treated equivalently.  This allows for the case of normal Linux conventions, but doesn't enforce it.
 
-// StringVarAlias - string commandline option
+//StringVarAlias  string commandline option
 func StringVarAlias(varPtr *string, shortflag string, longflag string, defaultVal string, description string) {
 	flag.StringVar(varPtr, shortflag, defaultVal, description)
 	flag.StringVar(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
 }
 
-// IntVarAlias - int commandline option
+//IntVarAlias  int commandline option
 func IntVarAlias(varPtr *int, shortflag string, longflag string, defaultVal int, description string) {
 	flag.IntVar(varPtr, shortflag, defaultVal, description)
 	flag.IntVar(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
 }
 
-// Uint64VarAlias - uint64 commandline option
+//Uint64VarAlias  uint64 commandline option
 func Uint64VarAlias(varPtr *uint64, shortflag string, longflag string, defaultVal uint64, description string) {
 	flag.Uint64Var(varPtr, shortflag, defaultVal, description)
 	flag.Uint64Var(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
 }
 
-// BoolVarAlias - Boolean commandline option
+//BoolVarAlias bool commandline option
 func BoolVarAlias(varPtr *bool, shortflag string, longflag string, defaultVal bool, description string) {
 	flag.BoolVar(varPtr, shortflag, defaultVal, description)
 	flag.BoolVar(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
@@ -166,7 +167,7 @@ func BoolVarAlias(varPtr *bool, shortflag string, longflag string, defaultVal bo
 const retryLimit = 30                             // max retries for an operation in retriableOperation
 const retrySleepDuration = time.Millisecond * 200 // Retry wait interval in retriableOperation
 
-// RetriableOperation - execute the function, retrying up to "retryLimit" times
+//RetriableOperation executes a function, retrying up to "retryLimit" times and waiting "retrySleepDuration" between attempts
 func RetriableOperation(operation func(r int) error) (duration time.Duration, startTime time.Time, numOfRetries int) {
 	var err error
 	var retries int
@@ -196,7 +197,7 @@ func RetriableOperation(operation func(r int) error) (duration time.Duration, st
 
 ///////////////////////////////////////////////////////////////////
 
-//GetNumberOfBlocks TODO
+//GetNumberOfBlocks calculates the number of blocks from filesize and checks if the number is greater than what's allowed (MaxBlockCount).
 func GetNumberOfBlocks(size uint64, blockSize uint64) int {
 	numOfBlocks := int(size+(blockSize-1)) / int(blockSize)
 
@@ -208,9 +209,7 @@ func GetNumberOfBlocks(size uint64, blockSize uint64) int {
 	return numOfBlocks
 }
 
-///////////////////////////////////////////////////////////////////
-//Azure Storage SDK Helpers
-//GetBlobStorageClient TODO
+//GetBlobStorageClient gets a storage client with support for larg block blobs
 func GetBlobStorageClient(accountName string, accountKey string) storage.BlobStorageClient {
 	var bc storage.BlobStorageClient
 	var client storage.Client

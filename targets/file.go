@@ -1,15 +1,6 @@
 package targets
 
-import (
-	"fmt"
-	"log"
-	"os"
-	"time"
-
-	"github.com/Azure/blobporter/pipeline"
-)
-
-// blobporter Tool
+// BlobPorter Tool
 //
 // Copyright (c) Microsoft Corporation
 //
@@ -36,11 +27,20 @@ import (
 // DEALINGS IN THE SOFTWARE.
 //
 
+import (
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/Azure/blobporter/pipeline"
+)
+
 ////////////////////////////////////////////////////////////
 ///// File Target
 ////////////////////////////////////////////////////////////
 
-//File TODO
+//File represents a file target
 type File struct {
 	Creds          *pipeline.StorageAccountCredentials
 	Container      string
@@ -49,7 +49,7 @@ type File struct {
 	FileStat       *os.FileInfo
 }
 
-//NewFile TODO
+//NewFile creates a new file target and 'n' number of handles for concurrent writes to a file.
 func NewFile(targetFileName string, overwrite bool, numberOfHandles int) pipeline.TargetPipeline {
 	var fh *os.File
 	var err error
@@ -85,10 +85,10 @@ func NewFile(targetFileName string, overwrite bool, numberOfHandles int) pipelin
 	return File{FileHandles: &fhQ, FileStat: &fileStat, TargetFileName: targetFileName}
 }
 
-//CommitList TODO
+//CommitList implements CommitList from the pipeline.TargetPipeline interface.
+//For a file download a final commit is not required and this implementation closes all the filehandles.
 func (t File) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
 
-	//Close all file handles..
 	close((*t.FileHandles))
 
 	for {
@@ -108,12 +108,14 @@ func (t File) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlo
 	return
 }
 
-//ProcessWrittenPart TODO
+//ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
+//Passthrough implementation as no post-written-processing is required (e.g. maintain a list) when files are downloaded.
 func (t File) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	return false, nil
 }
 
-//WritePart TODO
+//WritePart implements WritePart from the pipeline.TargetPipeline interface.
+//Writes to a local file using a filehandle received from a channel.
 func (t File) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	startTime = time.Now()
 	fh := <-(*t.FileHandles)
@@ -121,8 +123,6 @@ func (t File) WritePart(part *pipeline.Part) (duration time.Duration, startTime 
 		log.Fatal(err)
 	}
 	duration = time.Now().Sub(startTime)
-
-	(*part).ReturnBuffer()
 
 	(*t.FileHandles) <- fh
 

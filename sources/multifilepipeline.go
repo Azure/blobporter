@@ -1,6 +1,6 @@
 package sources
 
-// blobporter Tool
+// BlobPorter Tool
 //
 // Copyright (c) Microsoft Corporation
 //
@@ -46,7 +46,7 @@ import (
 ///// MultiFilePipeline
 ////////////////////////////////////////////////////////////
 
-// MultiFilePipeline - Contructs blocks queue and implements data readers
+// MultiFilePipeline  Contructs blocks queue and implements data readers
 type MultiFilePipeline struct {
 	FilesInfo           map[string]FileInfo
 	TotalNumberOfBlocks int
@@ -54,7 +54,7 @@ type MultiFilePipeline struct {
 	BlockSize           uint64
 }
 
-//FileInfo TODO
+//FileInfo Contains the metadata associated with a file to be transfered
 type FileInfo struct {
 	FileStats   *os.FileInfo
 	SourceURI   string
@@ -62,7 +62,9 @@ type FileInfo struct {
 	NumOfBlocks int
 }
 
-// NewMultiFilePipeline TODO
+// NewMultiFilePipeline creates a new MultiFilePipeline.
+// If the sourcePattern results in a single file, the targetAlias, if set, will be used as the target name.
+// Otherwise the full original file name will be used instead.
 func NewMultiFilePipeline(sourcePattern string, blockSize uint64, targetAlias string) pipeline.SourcePipeline {
 	var files []string
 	var err error
@@ -104,9 +106,9 @@ func NewMultiFilePipeline(sourcePattern string, blockSize uint64, targetAlias st
 	return MultiFilePipeline{FilesInfo: fileInfos, TotalNumberOfBlocks: totalNumberOfBlocks, BlockSize: blockSize, TotalSize: totalSize}
 }
 
-//ExecuteReader TODO
+//ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
+//For each file the reader will maintain a open handle from which data will be read.
 func (f MultiFilePipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
-	var blocksHandled = 0
 	fileHandles := make(map[string]*os.File, len(f.FilesInfo))
 	var err error
 
@@ -145,12 +147,12 @@ func (f MultiFilePipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ 
 		}
 
 		*readPartsQ <- p
-		blocksHandled++
 	}
 
 }
 
-//GetSourcesInfo TODO
+//GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
+//Returns a print friendly array of strings with the name and size of the files to be transfered.
 func (f MultiFilePipeline) GetSourcesInfo() []string {
 	// Single file support
 	sources := make([]string, len(f.FilesInfo))
@@ -164,6 +166,7 @@ func (f MultiFilePipeline) GetSourcesInfo() []string {
 	return sources
 }
 
+//createPartsFromSource helper that creates an empty (no data) slice of parts from a source.
 func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64, sourceURI string, targetAlias string, bufferQ *chan []byte) []pipeline.Part {
 	var bytesLeft = size
 	var curFileOffset uint64
@@ -189,7 +192,8 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 
 }
 
-//ConstructBlockInfoQueue creates
+//ConstructBlockInfoQueue implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
+//Creates an channel of empty parts (i.e. no data) for all the files to be transfered.
 func (f MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan pipeline.Part, numOfBlocks int, size uint64) {
 	Qcopy := make(chan pipeline.Part, f.TotalNumberOfBlocks)
 	bufferQ := pipeline.NewBytesBufferChan(blockSize)
@@ -203,8 +207,15 @@ func (f MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partsQ *ch
 	}
 
 	//Fill the Q with evenly ordered parts from the sources...
+	//Since rage order in maps is not guranteed, get an array of the keys.
+	keys := make([]string, len(f.FilesInfo))
+	i := 0
+	for k := range f.FilesInfo {
+		keys[i] = k
+		i++
+	}
 	for i := 0; i < f.TotalNumberOfBlocks; i++ {
-		for sourceName := range f.FilesInfo {
+		for _, sourceName := range keys {
 			if i < len(parts[sourceName]) {
 				Qcopy <- parts[sourceName][i]
 			}

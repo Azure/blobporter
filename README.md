@@ -1,4 +1,5 @@
 # BlobPorter
+
 Parallel blob copier.
 
 [![Build Status](https://travis-ci.com/Azure/blobporter.svg?token=Z5GQEwTGA6wT7qdrzXsm&branch=master)](https://travis-ci.com/Azure/blobporter)
@@ -10,91 +11,74 @@ Getting Started
 Linux:
 
 Download, extract and set permissions.
-~~~
-$ wget -O bp_linux.tar https://github.com/Azure/blobporter/releases/download/v0.2.01/bp_linux.tar.gz
-$ tar -xvf bp_linux.tar linux_amd64/blobporter
-$ chmod +x /linux_amd64/blobporter
-$ cd linux_amd64
-~~~
+
+```bash
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.2.04/bp_linux.tar.gz
+tar -xvf bp_linux.tar.gz linux_amd64/blobporter
+chmod +x ~/linux_amd64/blobporter
+cd ~/linux_amd64
+```
 
 Set environment variables.
-~~~
-$ export ACCOUNT_NAME=<STORAGE_ACCOUNT_NAME>
-$ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
-~~~
 
-_Note: You can also set these values via options_
+```bash
+export ACCOUNT_NAME=<STORAGE_ACCOUNT_NAME>
+export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
+```
 
-## Examples:
-Single file upload to block blob storage.
+>Note: You can also set these values via options
+
+## Examples
+
+Single file upload to Azure Blob Storage.
 
 `./blobporter -f /datadrive/myfile.tar -c mycontainer`
 
-Download from blob storage.
-
-`./blobporter -f mydownloadedfile.tar -c mycontainer -n /datadrive/myfile.tar -t blob-file`
-
-Multi file upload – upload all files that match the pattern.
+Upload all files that match the pattern to Azure Blob Storage.
 
 `./blobporter -f "/datadrive/*.tar" -c mycontainer`
 
-Transfer from a HTTP source to block blob storage.
+Transfer a file via HTTP to Azure Blob Storage.
 
 `./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-block`
 
+Download a blob from Azure Blob Storage to a local file.
 
-Download a HTTP source, the container option is not required.
+`./blobporter -f /datadrive/file.bam  -c mycontainer -n file.bam -t blob-file`
+
+Download a file via HTTP to a local file.
 
 `./blobporter -f "http://mysource/file.bam"  -n /datadrive/file.bam -t http-file`
 
+## Command Options
 
-# Command Options
+- `-f` *string* or `--file` *string* URL, file or files (e.g. /data/*.gz) to upload. Destination file for download.
 
-- `-a` string  
-  `--account_name` string  
-Storage account name (e.g. mystorage). Can also be specified via the ACCOUNT_NAME environment variable.
+- `-c` *string* or `--container_name` *string* container name (e.g. `mycontainer`).
 
-- `-b` string  
-`--block_size` string  
-Desired size of each blob block. 
-Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB (default "4MB").
+- `-n` *string* or `--blob_name` *string* blob name (e.g. myblob.txt).
 
-- `-c` string  
-`--container_name` string  
-Container name (e.g. `mycontainer`)
+- `-g` *int* or `--concurrent_workers` *int* number of routines for parallel upload.
 
-- `-d` string  
-`--dup_check_level` string    
-Desired level of effort to detect duplicate data blocks to minimize upload size.
-Must be one of None, ZeroOnly, Full (default "None")
+- `-r` *int* or `--concurrent_readers` *int* number of routines for parallel reading of the input.
 
-- `-f` *string*  
-`--file` string
-URL, file or files (e.g. /data/*.gz) to upload. \nDestination file for download.
+- `-b` *string* or `--block_size` *string* desired size of each blob block. Can be specified as an integer byte count or integer suffixed with B, KB or MB (default "4MB", maximum "100MB").
 
+- - *Note:* For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
 
-- `-g` int  
-`--concurrent_workers` int
-Number of threads for parallel upload
+- - `Minimum Block Size = File Size / 50000`
 
-- `-k` string  
-`--account_key` string
-Storage account key string
-(e.g. `4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==`).
-Can also be specified via the ACCOUNT_KEY environment variable.
+- `-a` *string* or `--account_name` *string* storage account name (e.g. mystorage). Can also be specified via the ACCOUNT_NAME environment variable.
 
-- `-n` string
-`--blob_name` string
-Blob name (e.g. myblob.txt)
+- `-k` *string* or `--account_key` *string* storage account key string (e.g. `4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==`). Can also be specified via the ACCOUNT_KEY environment variable.
 
-- `-r` int
-`--concurrent_readers` int
-Number of threads for parallel reading of the input file
+- `-d` *string* or `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
-- `-v`  
-`--verbose `
-Display verbose output.
+## Contribute
 
-# Contributors
-- Jesus Aguilar
-- Shawn Elliott
+If you would like to become an active contributor to this project please follow the instructions provided in [Microsoft Azure Projects Contribution Guidelines](http://azure.github.io/guidelines/).
+
+-----
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+This project has adopted the Microsoft Open Source Code of Conduct. For more information see the Code of Conduct FAQ or contact opencode@microsoft.com with any additional questions or comments.
