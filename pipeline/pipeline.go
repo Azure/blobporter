@@ -1,6 +1,6 @@
 package pipeline
 
-// blobporter Tool
+// BlobPorter Tool
 //
 // Copyright (c) Microsoft Corporation
 //
@@ -39,7 +39,9 @@ import (
 	"github.com/Azure/blobporter/util"
 )
 
-//NewBytesBufferChan TODO
+//NewBytesBufferChan creates a channel with 'n' slices of []bytes.
+//'n' is the bufferQCapacity. If the bufferQCapacity times bufferSize is greater than 1 GB
+// 'n' is limited to a value that meets the constraint.
 func NewBytesBufferChan(bufferSize uint64) *chan []byte {
 
 	bufferQCapacity := uint64(util.BufferQCapacity)
@@ -56,14 +58,14 @@ func NewBytesBufferChan(bufferSize uint64) *chan []byte {
 	return &c
 }
 
-//SourcePipeline  Operations to create the channel of parts and the reader execution
+//SourcePipeline operations that abstract the creation of the empty and read parts channels.
 type SourcePipeline interface {
 	ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan Part, numOfBlocks int, Size uint64)
 	ExecuteReader(partsQ *chan Part, readPartsQ *chan Part, id int, wg *sync.WaitGroup)
 	GetSourcesInfo() []string
 }
 
-//TargetPipeline  Operations write to target
+//TargetPipeline operations that abstract how parts a written and processed to a given target
 type TargetPipeline interface {
 	CommitList(listInfo *TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error)
 	WritePart(part *Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error)
@@ -85,7 +87,7 @@ type WorkerResult struct {
 	Stats                   *WorkerResultStats
 }
 
-//WorkerResultStats
+//WorkerResultStats stats at the worker level.
 type WorkerResultStats struct {
 	Duration         time.Duration
 	StartTime        time.Time
@@ -94,18 +96,18 @@ type WorkerResultStats struct {
 	NumOfWrites      int64
 }
 
-//TargetCommittedListInfo TODO
+//TargetCommittedListInfo contains a list parts that have been written to a target.
 type TargetCommittedListInfo struct {
 	List interface{}
 }
 
-// MD5ToBlockID - Simple lookup table mapping an MD5 string to a blockID
+// MD5ToBlockID simple lookup table mapping an MD5 string to a blockID
 var MD5ToBlockID = make(map[string]int)
 
-// MD5ToBlockIDLock - a lock for the map
+// MD5ToBlockIDLock a lock for the map
 var MD5ToBlockIDLock sync.RWMutex
 
-// Part -- Description of and data for a block of the input
+// Part description of and data for a block of the source
 type Part struct {
 	Offset                  uint64
 	BytesToRead             uint32
@@ -121,7 +123,7 @@ type Part struct {
 	returnToBuffer          bool
 }
 
-// StorageAccountCredentials - a central location for account info.
+// StorageAccountCredentials a central location for account info.
 type StorageAccountCredentials struct {
 	AccountName string // short name of the storage account.  e.g., mystore
 	AccountKey  string // Base64-encoded storage account key
@@ -192,13 +194,14 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, ta
 
 }
 
-//ToString - Print friendly format.
+//ToString prints friendly format.
 func (p *Part) ToString() string {
 	str := fmt.Sprintf("  [FileChunk(%s):(Offset=%v,Size=%vB)]\n", p.BlockID, p.Offset, p.BytesToRead)
 	return str
 }
 
-//GetBuffer TODO
+//GetBuffer sets the part's buffer (p.Data) to slice of bytes of size BytesToRead.
+//The slice is read from channel of pre-allocated buffers. If the channel is empty a new slice is allocated.
 func (p *Part) GetBuffer() {
 
 	//if the channel is empty allocate more memory to avoid blocking the reader
@@ -212,12 +215,13 @@ func (p *Part) GetBuffer() {
 
 }
 
-//ReturnBuffer TODO
+//ReturnBuffer adds part's buffer to channel so it can be reused.
 func (p *Part) ReturnBuffer() {
 
 	//Return only if the buffer came for the pool.
 	//Returning the extra buffer will block the worker when the pool is full
 	if p.returnToBuffer {
+		p.Data = p.Data[0:0]
 		(*p.BufferQ) <- p.Data
 		p.Data = nil
 	}
@@ -226,7 +230,7 @@ func (p *Part) ReturnBuffer() {
 
 }
 
-// MD5 - return computed MD5 for this block or empty string if no data yet.
+// MD5  returns computed MD5 for this block or empty string if no data yet.
 func (p *Part) MD5() string {
 	// haven't yet computed the MD5, and have data to do so
 	if p.md5Value == "" && p.Data != nil {
@@ -237,7 +241,7 @@ func (p *Part) MD5() string {
 	return p.md5Value
 }
 
-// LookupMD5DupeOrdinal - find the ordinal of a block which has the same data as this one. If none, then -1.
+// LookupMD5DupeOrdinal finds the ordinal of a block which has the same data as this one. If none, then -1.
 func (p *Part) LookupMD5DupeOrdinal() (ordinal int) {
 
 	if p.Data == nil { // error, somehow don't have any data yet

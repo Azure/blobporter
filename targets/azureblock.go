@@ -1,15 +1,6 @@
 package targets
 
-import (
-	"fmt"
-	"time"
-
-	"github.com/Azure/azure-sdk-for-go/storage"
-	"github.com/Azure/blobporter/pipeline"
-	"github.com/Azure/blobporter/util"
-)
-
-// blobporter Tool
+// BlobPorter Tool
 //
 // Copyright (c) Microsoft Corporation
 //
@@ -36,31 +27,40 @@ import (
 // DEALINGS IN THE SOFTWARE.
 //
 
+import (
+	"fmt"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/blobporter/pipeline"
+	"github.com/Azure/blobporter/util"
+)
+
 ////////////////////////////////////////////////////////////
 ///// AzureBlock Target
 ////////////////////////////////////////////////////////////
 
-//AzureBlock TODO
+//AzureBlock represents an Azure Block target
 type AzureBlock struct {
 	Creds     *pipeline.StorageAccountCredentials
 	Container string
 }
 
-//NewAzureBlock TODO
+//NewAzureBlock creates a new Azure Block target
 func NewAzureBlock(accountName string, accountKey string, container string) pipeline.TargetPipeline {
 	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 	return AzureBlock{Creds: &creds, Container: container}
 }
 
-//CommitList TODO
+//CommitList implements CommitList from the pipeline.TargetPipeline interface.
+//Commits the list of blocks to Azure Storage to finalize the transfer.
 func (t AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
 
 	lInfo := (*listInfo)
-	//blobInfo := (*lInfo.Info)
 
 	blockList := convertToStorageBlockList(lInfo.List, numberOfBlocks)
 
-	if util.Verbose { //TODO: should add option to turn on this level of tracing
+	if util.Verbose {
 		fmt.Printf("Final BlockList:\n")
 		for j := 0; j < numberOfBlocks; j++ {
 			fmt.Printf("   [%2d]: ID=%s, Status=%s", j, blockList[j].ID, blockList[j].Status)
@@ -91,7 +91,9 @@ func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Bloc
 	return list.([]storage.Block)
 }
 
-//ProcessWrittenPart TODO
+//ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
+//Appends the written part to a list. If the part is duplicated the list is updated with a reference, to the first occurance of the block.
+//If the first occurance has not yet being processed, the part is requested to be placed back in the results channel (requeue == true).
 func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	blockList := convertToStorageBlockList((*listInfo).List, result.NumberOfBlocks)
@@ -112,7 +114,8 @@ func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 	return
 }
 
-//WritePart TODO
+//WritePart implements WritePart from the pipeline.TargetPipeline interface.
+//Performs a PUT block operation with the data contained in the part.
 func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
@@ -132,6 +135,5 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 
 		return nil
 	})
-	(*part).ReturnBuffer()
 	return
 }

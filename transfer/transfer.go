@@ -1,6 +1,6 @@
 package transfer
 
-// blobporter Tool
+// BlobPorter Tool
 //
 // Copyright (c) Microsoft Corporation
 //
@@ -41,13 +41,8 @@ import (
 	"github.com/Azure/blobporter/pipeline"
 )
 
-const (
-	scriptVersion = "2016.11.09.A"
-)
-
 // Worker represents a worker routine that transfers data to a target
 type Worker struct {
-	//Info        *SourceAndTargetInfo
 	WorkerID    int
 	WorkerQueue *chan pipeline.Part
 	Result      *chan pipeline.WorkerResult
@@ -68,8 +63,8 @@ const (
 //DupeCheckLevelStr list of duplicate blob check strategies
 const DupeCheckLevelStr = "None, ZeroOnly, Full" //TODO: package this better so it can stay in sync w/declaration
 
-// ToString - printable representation of duplicate level values
-// ... For now, handle error as fatal, shouldn't be possible
+// ToString printable representation of duplicate level values.
+// For now, handle error as fatal, shouldn't be possible
 func (d *DupeCheckLevel) ToString() string {
 	var res = "None"
 	if *d == ZeroOnly {
@@ -84,7 +79,7 @@ func (d *DupeCheckLevel) ToString() string {
 	return res
 }
 
-// ParseDupeCheckLevel - convert string to DupeCheckLevel
+// ParseDupeCheckLevel converts string to DupeCheckLevel
 func ParseDupeCheckLevel(str string) (res DupeCheckLevel, err error) {
 	var s = strings.ToLower(str)
 
@@ -100,7 +95,7 @@ func ParseDupeCheckLevel(str string) (res DupeCheckLevel, err error) {
 	return res, err
 }
 
-//Definition TODO
+//Definition represents the supported source and target combinations
 type Definition string
 
 // The different transfers types
@@ -112,7 +107,7 @@ const (
 	none                  = "none"
 )
 
-//ToString TODO
+//ToString converts the enum value to string
 func (d *Definition) ToString() string {
 	switch *d {
 	case FileToBlob:
@@ -128,7 +123,7 @@ func (d *Definition) ToString() string {
 	}
 }
 
-//ParseTransferDefinition TODO
+//ParseTransferDefinition parses a Definition from a string.
 func ParseTransferDefinition(str string) (Definition, error) {
 	val := strings.ToLower(str)
 	switch val {
@@ -197,7 +192,7 @@ func checkForDuplicateChunk(current *pipeline.Part, dupeLevel DupeCheckLevel) {
 	}
 }
 
-// newWorker - creates a new instance of upload Worker
+// newWorker creates a new instance of upload Worker
 func newWorker(workerID int, workerQueue *chan pipeline.Part,
 	resultQueue *chan pipeline.WorkerResult, wg *sync.WaitGroup, d DupeCheckLevel) Worker {
 	return Worker{
@@ -210,7 +205,7 @@ func newWorker(workerID int, workerQueue *chan pipeline.Part,
 
 }
 
-// recordStatus -- record the upload status for a completed block to the results Queue.
+// recordStatus -- record the upload status for a completed block to the results channel.
 // ... Can be executed sync or async.
 func (w *Worker) recordStatus(tb *pipeline.Part, startTime time.Time, d time.Duration, status string, retries int) {
 
@@ -265,22 +260,22 @@ type WaitGroups struct {
 	Commits sync.WaitGroup
 }
 
-//Channels TODO
+//Channels represents all the control channels in the transfer.
 type Channels struct {
 	ReadParts *chan pipeline.Part
 	Parts     *chan pipeline.Part
 	Results   *chan pipeline.WorkerResult
 }
 
-const (
-	extraWorkerBufferSlots = 5
-	maxReadPartsBufferSize = 30
-)
+const workerDelayStarTime = 300 * time.Millisecond
+const extraWorkerBufferSlots = 5
+const maxReadPartsBufferSize = 30
+const extraThreadTarget = 4
 
-//NewTransfer Creates a new Transfer, this will adjust the thread target
+//NewTransfer creates a new Transfer, this will adjust the thread target
 //and initialize the channels and the wait groups for the writers, readers and the committers
 func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipeline, readers int, workers int, blockSize uint64) *Transfer {
-	threadTarget := readers + workers + 4
+	threadTarget := readers + workers + extraThreadTarget
 	runtime.GOMAXPROCS(threadTarget)
 
 	wg := WaitGroups{}
@@ -315,8 +310,8 @@ func (t *Transfer) getReadPartsBufferSize() int {
 	return t.readPartsBufferSize
 }
 
-//StartTransfer Starts the readers and readers. Process and commits the results of the write operations.
-//The duration counter is started.
+//StartTransfer starts the readers and readers. Process and commits the results of the write operations.
+//The duration timer is started.
 func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate ProgressUpdate) {
 
 	t.Stats.StartTime = time.Now()
@@ -329,11 +324,14 @@ func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate P
 
 }
 
-//WaitForCompletion  Blocks until the readers, writers and commit operations complete.
+//WaitForCompletion blocks until the readers, writers and commit operations complete.
 //Duration property is set and returned.
 func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
+
 	t.SyncWaitGroups.Readers.Wait()
+
 	close((*(*t.ControlChannels).ReadParts))
+
 	t.SyncWaitGroups.Workers.Wait() // Ensure all upload workers complete
 	t.SyncWaitGroups.Commits.Wait() // Ensure all commits complete
 	t.Stats.Duration = time.Now().Sub(t.Stats.StartTime)
@@ -341,17 +339,18 @@ func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
 	return t.Stats.Duration, t.Stats.CumWriteDuration
 }
 
-// StartWorkers - Create and start the set of Workers to send data blocks
-// ... from the worker queue to Azure Storage.
+// StartWorkers creates and starts the set of Workers to send data blocks
+// from the to the target. Workers are started after waiting workerDelayStarTime.
 func (t *Transfer) startWorkers(workerQ *chan pipeline.Part, resultQ *chan pipeline.WorkerResult, numOfWorkers int, wg *sync.WaitGroup, d DupeCheckLevel, target *pipeline.TargetPipeline) {
 	for w := 0; w < numOfWorkers; w++ {
 		worker := newWorker(w, workerQ, resultQ, wg, d)
 		worker.startWorker(target)
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(workerDelayStarTime)
 	}
 }
 
-//ProcessAndCommitResults TODO
+//ProcessAndCommitResults reads from the results channel and calls the target's implementations of the ProcessWrittenPart
+// and CommitList, if the last part is received. The update delegate is called as well.
 func (t *Transfer) processAndCommitResults(resultQ *chan pipeline.WorkerResult, update ProgressUpdate, target *pipeline.TargetPipeline, commitWg *sync.WaitGroup) {
 
 	lists := make(map[string]pipeline.TargetCommittedListInfo)
@@ -381,7 +380,6 @@ func (t *Transfer) processAndCommitResults(resultQ *chan pipeline.WorkerResult, 
 		}
 
 		if numOfBlocks == result.NumberOfBlocks {
-
 			if _, err := (*target).CommitList(&list, numOfBlocks, result.TargetName); err != nil {
 				log.Fatal(err)
 			}
@@ -397,15 +395,15 @@ func (t *Transfer) processAndCommitResults(resultQ *chan pipeline.WorkerResult, 
 	}
 }
 
-// StartReaders - Start 'n' reader "threads"
+// StartReaders starts 'n' readers. Each reader is a routine that executes the source's implementations of ExecuteReader.
 func (t *Transfer) startReaders(partsQ *chan pipeline.Part, workerQ *chan pipeline.Part, numberOfReaders int, wg *sync.WaitGroup, pipeline *pipeline.SourcePipeline) {
 	for i := 0; i < numberOfReaders; i++ {
 		go (*pipeline).ExecuteReader(partsQ, workerQ, i, wg)
 	}
 }
 
-// startWorker - Helper to start a single upload worker function which will read each
-// ... block from WorkerQueue channel and reflect results to the ResultQ channel.
+// startWorker starts a worker that reads from the worker queue channel. Which contains the read parts from the source.
+// Calls the target's WritePart implementation and sends the result to the results channel.
 func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 	var t = (*target)
 	go func() {
@@ -415,8 +413,6 @@ func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 			tb, ok = <-*w.WorkerQueue
 
 			if !ok { // Work queue has been closed, so done.
-				//var duration = float64(w.Stats.CumWriteDuration) / float64(w.Stats.NumOfWrites)
-				//w.Stats.AvgCumWriteDuration = duration
 				w.Wg.Done()
 				return
 			}
@@ -432,8 +428,7 @@ func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 			}
 
 			if duration, startTime, retries, err := t.WritePart(&tb); err == nil {
-				//w.Stats.NumOfWrites++
-				//w.Stats.CumWriteDuration = w.Stats.CumWriteDuration + duration
+				tb.ReturnBuffer()
 				w.recordStatus(&tb, startTime, duration, "Success", retries)
 			} else {
 				panic(err)
