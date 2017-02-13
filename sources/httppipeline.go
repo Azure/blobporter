@@ -1,6 +1,6 @@
 package sources
 
-// blobporter Tool
+// BlobPorter Tool
 //
 // Copyright (c) Microsoft Corporation
 //
@@ -38,7 +38,6 @@ import (
 
 	"fmt"
 
-	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -49,25 +48,20 @@ import (
 
 const sasTokenNumberOfHours = 4
 
-// HTTPPipeline - Contructs blocks queue and implements data readers for file exposed via HTTP
+// HTTPPipeline  contructs parts  channel and implements data readers for file exposed via HTTP
 type HTTPPipeline struct {
-	SourceURI  string
-	SourceSize uint64
-	SourceName string
+	SourceURI   string
+	SourceSize  uint64
+	TargetAlias string
 }
 
-//NewHTTPAzureBlockPipeline TODO
+//NewHTTPAzureBlockPipeline creates a new instance of HTTPPipeline
+//Creates a SASURI to the blobName with an expiration of sasTokenNumberOfHours.
+//blobName is used as the target alias.
 func NewHTTPAzureBlockPipeline(container string, blobName string, accountName string, accountKey string) pipeline.SourcePipeline {
 	var err error
-	var sc storage.Client
-	var bc storage.BlobStorageClient
-	sc, err = storage.NewBasicClient(accountName, accountKey)
 
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	bc = sc.GetBlobService()
+	bc := util.GetBlobStorageClient(accountName, accountKey)
 
 	//Expiration in 4 hours
 	date := time.Now().UTC().Add(time.Duration(sasTokenNumberOfHours) * time.Hour)
@@ -80,8 +74,9 @@ func NewHTTPAzureBlockPipeline(container string, blobName string, accountName st
 	return NewHTTPPipeline(sasURL, blobName)
 }
 
-// NewHTTPPipeline TODO
-func NewHTTPPipeline(sourceURI string, sourceName string) pipeline.SourcePipeline {
+//NewHTTPPipeline creates a new instance of HTTPPipeline
+//To check obtain the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
+func NewHTTPPipeline(sourceURI string, targetAlias string) pipeline.SourcePipeline {
 
 	client := &http.Client{}
 
@@ -97,10 +92,11 @@ func NewHTTPPipeline(sourceURI string, sourceName string) pipeline.SourcePipelin
 		log.Fatalf("Content-Length is invalid. Expected a numeric value greater than zero. Error: %v", err)
 	}
 
-	return HTTPPipeline{SourceURI: sourceURI, SourceSize: uint64(size), SourceName: sourceName}
+	return HTTPPipeline{SourceURI: sourceURI, SourceSize: uint64(size), TargetAlias: targetAlias}
 }
 
-//GetSourcesInfo TODO
+//GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
+//Returns a print friendly array of strings of len == 1 with the file's URL and size.
 func (f HTTPPipeline) GetSourcesInfo() []string {
 	// Single file support
 	sources := make([]string, 1)
@@ -109,16 +105,15 @@ func (f HTTPPipeline) GetSourcesInfo() []string {
 	return sources
 }
 
-//ExecuteReader TODO
+//ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
+//For each part the reader makes a byte range request to the source
+// starting from the part's Offset to BytesToRead - 1 (zero based).
 func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	var blocksHandled = 0
 	var err error
 	var req *http.Request
 	var res *http.Response
-	client := &http.Client{Transport: &http.Transport{
-		DisableCompression: true,
-	},
-	}
+	client := &http.Client{Transport: &http.Transport{}}
 	for {
 		p, ok := <-(*partsQ)
 
@@ -167,11 +162,12 @@ func (f HTTPPipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ *chan
 
 }
 
-//ConstructBlockInfoQueue TODO
+//ConstructBlockInfoQueue implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
+//Constructs the Part's channel arithmetically from the source size.
 func (f HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan pipeline.Part, numOfBlocks int, size uint64) {
 	size = f.SourceSize
 
-	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize, f.SourceURI, f.SourceName)
+	partsQ, numOfBlocks, _ = pipeline.ConstructPartsQueue(size, blockSize, f.SourceURI, f.TargetAlias)
 
 	return
 }
