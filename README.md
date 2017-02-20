@@ -32,17 +32,17 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 Single file upload to Azure Blob Storage.
 
-`./blobporter -f /datadrive/myfile.tar -c mycontainer`
+`./blobporter -f /datadrive/myfile.tar -c mycontainer -n myfile.tar`
 
 Upload all files that match the pattern to Azure Blob Storage.
 
 `./blobporter -f "/datadrive/*.tar" -c mycontainer`
 
-Transfer a file via HTTP to Azure Blob Storage.
+Transfer a file via HTTP to Azure Blob Storage. 
 
 `./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-block`
 
-Download a blob from Azure Blob Storage to a local file.
+Download a blob from Azure Blob Storage to a local file. 
 
 `./blobporter -f /datadrive/file.bam  -c mycontainer -n file.bam -t blob-file`
 
