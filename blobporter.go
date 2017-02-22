@@ -34,14 +34,12 @@ import (
 	"math"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
-	"time"
-
 	"sync/atomic"
-
-	"net/url"
+	"time"
 
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/sources"
@@ -74,8 +72,11 @@ const (
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
 	profiledataFile          = "blobporterprof"
-	programVersion           = "0.2.04" // version number to show in help
+	programVersion           = "0.2.05" // version number to show in help
 )
+
+const numOfWorkersFactor = 10
+const numOfReadersFactor = 3
 
 func init() {
 
@@ -83,8 +84,8 @@ func init() {
 	fmt.Printf("BlobPorter \nCopyright (c) Microsoft Corporation. \nVersion: %v\n---------------\n", programVersion)
 
 	// shape the default parallelism based on number of CPUs
-	var defaultNumberOfWorkers = int(float32(runtime.NumCPU()) * 10)
-	var defaultNumberOfReaders = int(float32(runtime.NumCPU()) * 5)
+	var defaultNumberOfWorkers = runtime.NumCPU() * numOfWorkersFactor
+	var defaultNumberOfReaders = runtime.NumCPU() * numOfReadersFactor
 	blockSizeStr = "4MB" // default size for blob blocks
 	const (
 		dblockSize             = 4 * util.MB
@@ -139,25 +140,14 @@ func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, thre
 	fmt.Printf("Retries: Avg=%v Total=%v\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
 
 }
-func enableDisableProfiling() {
-
-	//Profiling...
-	if profile {
-		go func() {
-			runtime.SetBlockProfileRate(10)
-			fmt.Println("Profile is active...")
-			log.Println(http.ListenAndServe("localhost:6060", nil))
-		}()
-
-	}
-
-}
 
 func main() {
 
 	parseAndValidate()
 
-	enableDisableProfiling()
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	// Create pipelines
 	sourcePipeline, targetPipeline := getPipelines()
@@ -231,6 +221,7 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 				name = blobName
 			}
 			source = sources.NewHTTPPipeline(sourceURI, name)
+			defValue = transfer.HTTPToBlob
 		} else {
 			source = sources.NewMultiFilePipeline(sourceURI, blockSize, blobName)
 		}

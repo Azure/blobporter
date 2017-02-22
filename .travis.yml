@@ -4,10 +4,10 @@ go:
 - 1.7
 before_install:
 - sudo apt-get install zip
-- go get -v github.com/golang/lint/golint
-- go get -d github.com/Azure/azure-sdk-for-go/storage
+- go get github.com/tools/godep
 - go get -d github.com/stretchr/testify/assert
-- go get -d github.com/Azure/go-autorest/autorest
+install:
+- godep restore
 script:
 - go test -v ./...
 - mkdir linux_amd64
@@ -19,6 +19,7 @@ script:
 - md5sum ./windows_amd64/BlobPorter.exe > ./windows_amd64/BlobPorter.exe.md5
 - tar cvzf bp_linux.tar.gz linux_amd64 
 - zip bp_windows.zip ./windows_amd64/* 
+- sudo ./inttest.sh "inttest"
 deploy:
   provider: releases
   api_key:
