@@ -9,13 +9,13 @@ EXIT_CODE=0
 dd if=/dev/zero of=$REF_FILE bs=$FILE_SIZE count=1
 
 #Set permissions
-sudo chmod +x /linux_amd64/blobporter
+sudo chmod +x ./linux_amd64/blobporter
 
 #Upload file
-/linux_amd64/blobporter -f $REF_FILE -c $CONT 
+./linux_amd64/blobporter -f $REF_FILE -c $CONT 
 
 #Download file
-/linux_amd64/blobporter -f $DOWN_REF_FILE -c $CONT -n $REF_FILE -t blob-file
+./linux_amd64/blobporter -f $DOWN_REF_FILE -c $CONT -n $REF_FILE -t blob-file
 
 #Compare MD5's
 REF_MD5="$(md5sum $REF_FILE | awk '{print $1}')"
