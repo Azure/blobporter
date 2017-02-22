@@ -36,6 +36,8 @@ import (
 	"sync"
 	"time"
 
+	"math"
+
 	"github.com/Azure/blobporter/util"
 )
 
@@ -44,15 +46,13 @@ import (
 // 'n' is limited to a value that meets the constraint.
 func NewBytesBufferChan(bufferSize uint64) *chan []byte {
 
-	bufferQCapacity := uint64(util.BufferQCapacity)
-
-	if bufferQCapacity*bufferSize > util.GB {
-		bufferQCapacity = util.GB / bufferSize
-	}
+	bufferQCapacity := util.GB / bufferSize
 
 	c := make(chan []byte, bufferQCapacity)
 	var index uint64
-	for index = 0; index < bufferQCapacity; index++ {
+	//only preallocated a quarter of the capacity.
+
+	for index = 0; index < uint64(math.Ceil(float64(bufferQCapacity)*.25)); index++ {
 		c <- make([]byte, bufferSize)
 	}
 	return &c
@@ -110,6 +110,7 @@ var MD5ToBlockIDLock sync.RWMutex
 // Part description of and data for a block of the source
 type Part struct {
 	Offset                  uint64
+	BlockSize               uint32
 	BytesToRead             uint32
 	Data                    []byte // The data for the block.  Can be nil if not yet read from the source
 	BlockID                 string
@@ -120,7 +121,6 @@ type Part struct {
 	TargetAlias             string
 	NumberOfBlocks          int
 	BufferQ                 *chan []byte
-	returnToBuffer          bool
 }
 
 // StorageAccountCredentials a central location for account info.
@@ -161,14 +161,14 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, target
 			fp := NewPart(curFileOffset, uint32(chunkSize), i, sourceURI, targetAlias)
 			fp.NumberOfBlocks = numOfBlocks
 			fp.BufferQ = bufferQ
-			Qcopy <- fp // put it on the channel for the Readers
+			fp.BlockSize = uint32(blockSize)
+			Qcopy <- *fp // put it on the channel for the Readers
 
 			curFileOffset = curFileOffset + bsbu64
 			bytesLeft = bytesLeft - chunkSize
 			curCommitList[i] = string(i)
 		}
 
-		//instead of closing, use Zero length part as the signal that the queue is closed.
 		close(Qcopy) // indicate end of the block list
 	}()
 	partsQ = &Qcopy
@@ -177,11 +177,11 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, target
 }
 
 //NewPart TODO
-func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, targetAlias string) Part {
+func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, targetAlias string) *Part {
 
 	var idStr = fmt.Sprintf("%016x", offset)
 
-	return Part{
+	return &Part{
 		Offset:                  offset,
 		BytesToRead:             bytesCount,
 		Data:                    nil,
@@ -189,8 +189,7 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, ta
 		Ordinal:                 ordinal,
 		SourceURI:               sourceURI,
 		TargetAlias:             targetAlias,
-		DuplicateOfBlockOrdinal: -1,
-		returnToBuffer:          true}
+		DuplicateOfBlockOrdinal: -1}
 
 }
 
@@ -206,28 +205,23 @@ func (p *Part) GetBuffer() {
 
 	//if the channel is empty allocate more memory to avoid blocking the reader
 	if len(*p.BufferQ) == 0 {
-		p.Data = make([]byte, p.BytesToRead)
-		p.returnToBuffer = false
+
+		p.Data = make([]byte, p.BlockSize)
 	} else {
 		p.Data = <-(*p.BufferQ)
-		p.Data = p.Data[:p.BytesToRead]
 	}
+
+	p.Data = p.Data[:p.BytesToRead]
 
 }
 
 //ReturnBuffer adds part's buffer to channel so it can be reused.
 func (p *Part) ReturnBuffer() {
-
-	//Return only if the buffer came for the pool.
-	//Returning the extra buffer will block the worker when the pool is full
-	if p.returnToBuffer {
-		p.Data = p.Data[0:0]
+	p.Data = p.Data[0:0]
+	//return only if space in the buffer exists to avoid blocking
+	if len(*p.BufferQ) < cap(*p.BufferQ) {
 		(*p.BufferQ) <- p.Data
-		p.Data = nil
 	}
-
-	p.returnToBuffer = true
-
 }
 
 // MD5  returns computed MD5 for this block or empty string if no data yet.

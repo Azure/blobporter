@@ -1,0 +1,12 @@
+{
+	"ImportPath": "github.com/Azure/blobporter",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/Azure/azure-sdk-for-go/storage",
+			"Comment": "v7.0.1-beta-14-gd05c22d",
+			"Rev": "d05c22dc3f9fdd2ec6e3593839fdd44df17f2de5"
+		}
+	]
+}

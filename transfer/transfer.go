@@ -276,7 +276,7 @@ const extraThreadTarget = 4
 //and initialize the channels and the wait groups for the writers, readers and the committers
 func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipeline, readers int, workers int, blockSize uint64) *Transfer {
 	threadTarget := readers + workers + extraThreadTarget
-	runtime.GOMAXPROCS(threadTarget)
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	wg := WaitGroups{}
 	channels := Channels{}
@@ -344,8 +344,7 @@ func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
 func (t *Transfer) startWorkers(workerQ *chan pipeline.Part, resultQ *chan pipeline.WorkerResult, numOfWorkers int, wg *sync.WaitGroup, d DupeCheckLevel, target *pipeline.TargetPipeline) {
 	for w := 0; w < numOfWorkers; w++ {
 		worker := newWorker(w, workerQ, resultQ, wg, d)
-		worker.startWorker(target)
-		time.Sleep(workerDelayStarTime)
+		go worker.startWorker(target)
 	}
 }
 
@@ -356,6 +355,12 @@ func (t *Transfer) processAndCommitResults(resultQ *chan pipeline.WorkerResult, 
 	lists := make(map[string]pipeline.TargetCommittedListInfo)
 	blocksProcessed := make(map[string]int)
 	committedCount := 0
+	var list pipeline.TargetCommittedListInfo
+	var numOfBlocks int
+	var requeue bool
+	var err error
+	var workerBufferLevel int
+
 	for {
 		result, ok := <-(*resultQ)
 
@@ -363,10 +368,10 @@ func (t *Transfer) processAndCommitResults(resultQ *chan pipeline.WorkerResult, 
 			break
 		}
 
-		list := lists[result.SourceURI]
-		numOfBlocks := blocksProcessed[result.SourceURI]
+		list = lists[result.SourceURI]
+		numOfBlocks = blocksProcessed[result.SourceURI]
 
-		if requeue, err := (*target).ProcessWrittenPart(&result, &list); err == nil {
+		if requeue, err = (*target).ProcessWrittenPart(&result, &list); err == nil {
 			lists[result.SourceURI] = list
 			if requeue {
 				(*resultQ) <- result
@@ -387,7 +392,7 @@ func (t *Transfer) processAndCommitResults(resultQ *chan pipeline.WorkerResult, 
 			commitWg.Done()
 		}
 
-		workerBufferLevel := int(float64(len(*t.ControlChannels.ReadParts)) / float64(t.getReadPartsBufferSize()) * 100)
+		workerBufferLevel = int(float64(len(*t.ControlChannels.ReadParts)) / float64(t.getReadPartsBufferSize()) * 100)
 
 		// call update delegate
 		update(result, committedCount, workerBufferLevel)
@@ -406,34 +411,39 @@ func (t *Transfer) startReaders(partsQ *chan pipeline.Part, workerQ *chan pipeli
 // Calls the target's WritePart implementation and sends the result to the results channel.
 func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 	var t = (*target)
-	go func() {
-		var tb pipeline.Part
-		var ok bool
-		for {
-			tb, ok = <-*w.WorkerQueue
 
-			if !ok { // Work queue has been closed, so done.
-				w.Wg.Done()
-				return
-			}
+	var tb pipeline.Part
+	var ok bool
+	var duration time.Duration
+	var startTime time.Time
+	var retries int
+	var err error
 
-			checkForDuplicateChunk(&tb, w.dupeLevel)
+	for {
+		tb, ok = <-*w.WorkerQueue
 
-			if tb.DuplicateOfBlockOrdinal >= 0 {
-				// This block is a duplicate of another, so don't upload it.
-				// Instead, just reflect it (with it's "duplicate" status)
-				// onwards in the completion channel
-				w.recordStatus(&tb, time.Now(), 0, "Success", 0)
-				continue
-			}
-
-			if duration, startTime, retries, err := t.WritePart(&tb); err == nil {
-				tb.ReturnBuffer()
-				w.recordStatus(&tb, startTime, duration, "Success", retries)
-			} else {
-				panic(err)
-			}
-
+		if !ok { // Work queue has been closed, so done.
+			w.Wg.Done()
+			return
 		}
-	}()
+
+		checkForDuplicateChunk(&tb, w.dupeLevel)
+
+		if tb.DuplicateOfBlockOrdinal >= 0 {
+			// This block is a duplicate of another, so don't upload it.
+			// Instead, just reflect it (with it's "duplicate" status)
+			// onwards in the completion channel
+			w.recordStatus(&tb, time.Now(), 0, "Success", 0)
+			continue
+		}
+
+		if duration, startTime, retries, err = t.WritePart(&tb); err == nil {
+			tb.ReturnBuffer()
+			w.recordStatus(&tb, startTime, duration, "Success", retries)
+		} else {
+			panic(err)
+		}
+
+	}
+
 }

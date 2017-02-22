@@ -111,9 +111,14 @@ func NewMultiFilePipeline(sourcePattern string, blockSize uint64, targetAlias st
 func (f MultiFilePipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ *chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	fileHandles := make(map[string]*os.File, len(f.FilesInfo))
 	var err error
+	var p pipeline.Part
+
+	var ok bool
+	var fileURI string
+	var fileHandle *os.File
 
 	for {
-		p, ok := <-(*partsQ)
+		p, ok = <-(*partsQ)
 
 		if !ok {
 			wg.Done()
@@ -123,9 +128,9 @@ func (f MultiFilePipeline) ExecuteReader(partsQ *chan pipeline.Part, readPartsQ 
 			return // no more blocks of file data to be read
 		}
 
-		fileURI := f.FilesInfo[p.SourceURI].SourceURI
+		fileURI = f.FilesInfo[p.SourceURI].SourceURI
 
-		fileHandle := fileHandles[fileURI]
+		fileHandle = fileHandles[fileURI]
 
 		if fileHandle == nil {
 			if fileHandle, err = os.Open(fileURI); err != nil {
@@ -182,8 +187,9 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 
 		fp.NumberOfBlocks = sourceNumOfBlocks
 		fp.BufferQ = bufferQ
+		fp.BlockSize = uint32(blockSize)
 
-		parts[i] = fp
+		parts[i] = *fp
 		curFileOffset = curFileOffset + blockSize
 		bytesLeft = bytesLeft - partSize
 	}
