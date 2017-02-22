@@ -40,7 +40,7 @@ Upload all files that match the pattern to Azure Blob Storage.
 
 Transfer a file via HTTP to Azure Blob Storage. 
 
-`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-block`
+`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blob`
 
 Download a blob from Azure Blob Storage to a local file. 
 

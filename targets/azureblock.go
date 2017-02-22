@@ -42,14 +42,16 @@ import (
 
 //AzureBlock represents an Azure Block target
 type AzureBlock struct {
-	Creds     *pipeline.StorageAccountCredentials
-	Container string
+	Creds         *pipeline.StorageAccountCredentials
+	Container     string
+	StorageClient storage.BlobStorageClient
 }
 
 //NewAzureBlock creates a new Azure Block target
 func NewAzureBlock(accountName string, accountKey string, container string) pipeline.TargetPipeline {
 	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
-	return AzureBlock{Creds: &creds, Container: container}
+
+	return AzureBlock{Creds: &creds, Container: container, StorageClient: util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)}
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
@@ -105,6 +107,7 @@ func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 			requeue = true
 		}
 	} else {
+
 		blockList[result.Ordinal].ID = result.ItemID
 		blockList[result.Ordinal].Status = "Uncommitted"
 	}
@@ -119,13 +122,13 @@ func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
+
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
-		bc := util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey)
-		if err := bc.PutBlock(t.Container, (*part).TargetAlias, (*part).BlockID, (*part).Data); err != nil {
+		if err := t.StorageClient.PutBlock(t.Container, (*part).TargetAlias, (*part).BlockID, (*part).Data); err != nil {
 			if util.Verbose {
 				fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
 			}
-			bc = util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey) // reset to a fresh client for the retry
+			t.StorageClient = util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey) // reset to a fresh client for the retry
 			return err
 		}
 
@@ -136,4 +139,5 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 		return nil
 	})
 	return
+
 }
