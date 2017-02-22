@@ -32,8 +32,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"net/http"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"runtime"
@@ -144,10 +142,6 @@ func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, thre
 func main() {
 
 	parseAndValidate()
-
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
 
 	// Create pipelines
 	sourcePipeline, targetPipeline := getPipelines()
