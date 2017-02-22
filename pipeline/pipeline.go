@@ -193,25 +193,6 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, ta
 
 }
 
-//ClonePart TODO
-func (p *Part) ClonePart() *Part {
-
-	return &Part{
-		Offset:                  p.Offset,
-		BytesToRead:             p.BytesToRead,
-		Data:                    p.Data,
-		BlockID:                 p.BlockID,
-		Ordinal:                 p.Ordinal,
-		BlockSize:               p.BlockSize,
-		BufferQ:                 p.BufferQ,
-		SourceURI:               p.SourceURI,
-		TargetAlias:             p.TargetAlias,
-		NumberOfBlocks:          p.NumberOfBlocks,
-		md5Value:                p.md5Value,
-		DuplicateOfBlockOrdinal: p.DuplicateOfBlockOrdinal}
-
-}
-
 //ToString prints friendly format.
 func (p *Part) ToString() string {
 	str := fmt.Sprintf("  [FileChunk(%s):(Offset=%v,Size=%vB)]\n", p.BlockID, p.Offset, p.BytesToRead)

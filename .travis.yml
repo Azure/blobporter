@@ -19,7 +19,7 @@ script:
 - md5sum ./windows_amd64/BlobPorter.exe > ./windows_amd64/BlobPorter.exe.md5
 - tar cvzf bp_linux.tar.gz linux_amd64 
 - zip bp_windows.zip ./windows_amd64/* 
-- sudo ./inttest.sh "inttest"
+- sudo ./inttest.sh inttest
 deploy:
   provider: releases
   api_key:
