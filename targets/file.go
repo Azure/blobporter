@@ -1,32 +1,5 @@
 package targets
 
-// BlobPorter Tool
-//
-// Copyright (c) Microsoft Corporation
-//
-// All rights reserved.
-//
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
-//
-
 import (
 	"fmt"
 	"log"
@@ -45,7 +18,7 @@ type File struct {
 	Creds          *pipeline.StorageAccountCredentials
 	Container      string
 	TargetFileName string
-	FileHandles    *chan *os.File
+	FileHandles    chan *os.File
 	FileStat       *os.FileInfo
 }
 
@@ -82,18 +55,18 @@ func NewFile(targetFileName string, overwrite bool, numberOfHandles int) pipelin
 		}
 	}
 
-	return File{FileHandles: &fhQ, FileStat: &fileStat, TargetFileName: targetFileName}
+	return File{FileHandles: fhQ, FileStat: &fileStat, TargetFileName: targetFileName}
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //For a file download a final commit is not required and this implementation closes all the filehandles.
 func (t File) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
 
-	close((*t.FileHandles))
+	close(t.FileHandles)
 
 	for {
 
-		fh, ok := <-(*t.FileHandles)
+		fh, ok := <-t.FileHandles
 
 		if !ok {
 			break
@@ -118,13 +91,13 @@ func (t File) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeli
 //Writes to a local file using a filehandle received from a channel.
 func (t File) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	startTime = time.Now()
-	fh := <-(*t.FileHandles)
+	fh := <-t.FileHandles
 	if _, err := fh.WriteAt((*part).Data, int64((*part).Offset)); err != nil {
 		log.Fatal(err)
 	}
 	duration = time.Now().Sub(startTime)
 
-	(*t.FileHandles) <- fh
+	t.FileHandles <- fh
 
 	return
 }

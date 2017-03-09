@@ -1,32 +1,5 @@
 package main
 
-// BlobPorter Tool
-//
-// Copyright (c) Microsoft Corporation
-//
-// All rights reserved.
-//
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
-//
-
 import (
 	"flag"
 	"fmt"
@@ -47,8 +20,8 @@ import (
 )
 
 var containerName string
-var blobName string
-var sourceURI string
+var blobNames util.ListFlag
+var sourceURIs util.ListFlag
 var numberOfWorkers int
 
 var blockSize uint64
@@ -69,12 +42,11 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	profiledataFile          = "blobporterprof"
-	programVersion           = "0.2.05" // version number to show in help
+	programVersion           = "0.3.01" // version number to show in help
 )
 
-const numOfWorkersFactor = 10
-const numOfReadersFactor = 3
+const numOfWorkersFactor = 9
+const numOfReadersFactor = 6
 
 func init() {
 
@@ -90,8 +62,8 @@ func init() {
 		extraWorkerBufferSlots = 5
 	)
 
-	util.StringVarAlias(&sourceURI, "f", "file", "", "URL, file or files (e.g. /data/*.gz) to upload. \nDestination file for download.")
-	util.StringVarAlias(&blobName, "n", "name", "", "Blob name to upload or download from Azure Blob Storage. \nDestination file for download from URL")
+	util.StringListVarAlias(&sourceURIs, "f", "file", "", "URL, file or files (e.g. /data/*.gz) to upload. \nDestination file for download.")
+	util.StringListVarAlias(&blobNames, "n", "name", "", "Blob name to upload or download from Azure Blob Storage. \nDestination file for download from URL")
 	util.StringVarAlias(&containerName, "c", "container_name", "", "container name (e.g. mycontainer)")
 	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, ""+
 		"number of threads for parallel upload")
@@ -115,7 +87,7 @@ func init() {
 		"Defines the source and target of the transfer. Must be one of file-blob, http-blob, blob-file or http-file")
 }
 
-var dataTransfered int64
+var dataTransfered uint64
 var targetRetries int32
 
 func displayFilesToTransfer(sourcesInfo []string) {
@@ -183,7 +155,7 @@ func validateReaders(numOfSources int) {
 
 func isSourceHTTP() bool {
 
-	url, err := url.Parse(sourceURI)
+	url, err := url.Parse(sourceURIs[0])
 
 	return err != nil || strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https"
 }
@@ -210,34 +182,27 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 		//Since this is default value detect if the source is http
 		if isSourceHTTP() {
-			var name = sourceURI
-			if blobName != "" {
-				name = blobName
-			}
-			source = sources.NewHTTPPipeline(sourceURI, name)
+			source = sources.NewHTTPPipeline(sourceURIs, blobNames)
 			defValue = transfer.HTTPToBlob
 		} else {
-			source = sources.NewMultiFilePipeline(sourceURI, blockSize, blobName)
+			source = sources.NewMultiFilePipeline(sourceURIs, blockSize, blobNames, numberOfReaders)
 		}
 	case transfer.HTTPToBlob:
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-		var name = sourceURI
-		if blobName != "" {
-			name = blobName
-		}
-		source = sources.NewHTTPPipeline(sourceURI, name)
+
+		source = sources.NewHTTPPipeline(sourceURIs, blobNames)
 	case transfer.BlobToFile:
-		if blobName == "" {
-			log.Fatal("Blob name (-n) is required when downloading data from blob")
+		if len(blobNames) == 0 {
+			log.Fatal("Blob name(s) (-n) is required when downloading data from blob")
 		}
-		target = targets.NewFile(sourceURI, true, numberOfWorkers)
-		source = sources.NewHTTPAzureBlockPipeline(containerName, blobName, storageAccountName, storageAccountKey)
+		target = targets.NewFile(sourceURIs[0], true, numberOfWorkers)
+		source = sources.NewHTTPAzureBlockPipeline(containerName, blobNames, storageAccountName, storageAccountKey)
 	case transfer.HTTPToFile:
-		if blobName == "" {
+		if len(blobNames) == 0 || blobNames[0] == "" {
 			log.Fatal("File name (-n) is required when downloading data from a URL")
 		}
-		target = targets.NewFile(blobName, true, numberOfWorkers)
-		source = sources.NewHTTPPipeline(sourceURI, blobName)
+		target = targets.NewFile(blobNames[0], true, numberOfWorkers)
+		source = sources.NewHTTPPipeline(sourceURIs, blobNames)
 	}
 
 	return source, target
@@ -248,7 +213,7 @@ func parseAndValidate() {
 
 	flag.Parse()
 
-	if sourceURI == "" {
+	if len(sourceURIs) == 0 {
 		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
 	}
 
@@ -293,7 +258,7 @@ func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, comm
 
 		atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
 
-		dataTransfered = dataTransfered + int64(r.BlockSize)
+		dataTransfered = dataTransfered + uint64(r.BlockSize)
 		p := int(math.Ceil((float64(dataTransfered) / float64(totalSize)) * 100))
 		var ind string
 		var pchar string
