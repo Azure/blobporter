@@ -49,9 +49,6 @@ Upload all files that match the pattern to Azure Blob Storage.
 
 `./blobporter -f "/datadrive/*.tar" -c mycontainer`
 
-<<<<<<< HEAD
-Transfer a file via HTTP to Azure Blob Storage. 
-=======
 You can also specify a list of files or patterns explicitly.
 
 `./blobporter -f "/datadrive/*.tar" -f "/datadrive/readme.md" -f "/datadrive/log" -c mycontainer`
@@ -60,9 +57,7 @@ When the file list results in a known number of files and you want to upload the
 
 `./blobporter -f /datadrive/f1.tar -f /datadrive/f2.md -n b1 -n b2 -c mycontainer`
 
-
 Transfer a file via HTTP to Azure Blob Storage.
->>>>>>> dev
 
 `./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blob`
 
