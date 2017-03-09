@@ -4,7 +4,7 @@
 
 ## Introduction
 
-BlobPorter is data transfer tool for Azure Blob storage that maximizes throughput through concurrent reads and writes.
+BlobPorter is a data transfer tool for Azure Blob storage that maximizes throughput through concurrent reads and writes.
 
 Getting Started
 
@@ -99,13 +99,13 @@ Download a file via HTTP to a local file.
 
 By default BlobPorter creates 9 readers and 6 workers for each core in the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
 
-- If during the transfer the buffer level is constant at 000%, workers could be waiting for data. Consider increasing the number of readers. If the level is 100% the oposite applies, increasing the number of workers could help.
+- If during the transfer the buffer level is constant at 000%, workers could be waiting for data. Consider increasing the number of readers. If the level is 100% the opposite applies; increasing the number of workers could help.
 
-- BlobPorter uses GO's goroutines, each reader or worker corelates to one goroutine. Goroutines are lightweight and a GO program can have a high number of them. However, there's a point where the overhead of context switching impacts overall performance. Increase these values in small increments, e.g. 5.
+- BlobPorter uses GO's goroutines, each reader or worker correlates to one goroutine. Goroutines are lightweight and a GO program can have a high number of them. However, there's a point where the overhead of context switching impacts overall performance. Increase these values in small increments, e.g. 5.
 
-- For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resources's utilization. Lowering these numbers reduces contention and the likelyhood of experiencing throttling conditions.
+- For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
-- In Linux, BlobPorter reduces the number of readers if number of files results in a number of handles greater than 1024. Linux restricts the number of files open by a process. Each reader holds a handle to the file to transfer. For example, you can reach this limit if you have 10 readers and want to transfer more than 102 files. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
+- In Linux, BlobPorter reduces the number of readers if the number of files results in greater than 1024 handles. Linux restricts the number of files open by a process. Each reader holds a handle to the file to transfer. For example, you can reach this limit if you have 10 readers and want to transfer more than 102 files. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
 
 ## Contribute
 
