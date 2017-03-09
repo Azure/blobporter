@@ -4,7 +4,7 @@
 
 ## Introduction
 
-BlobPorter is an Azure Block Blob data transfer tool that maximizes throughput through concurrent reads and writes.
+BlobPorter is data transfer tool for Azure Blob storage that maximizes throughput through concurrent reads and writes.
 
 Getting Started
 
