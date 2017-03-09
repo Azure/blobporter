@@ -105,7 +105,7 @@ By default BlobPorter creates 9 readers and 6 workers for each core in the compu
 
 - For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
-- In Linux, BlobPorter reduces the number of readers if the number of files results in a handle count greater than 1024. Linux restricts the number of files open by a process. Each reader holds a handle to the file to transfer. For example, you can reach this limit if you have 10 readers and want to transfer more than 102 files. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
+- In Linux, BlobPorter reduces the number of readers if the number of files results in greater than 1024 handles. Linux restricts the number of files open by a process. Each reader holds a handle to the file to transfer. For example, you can reach this limit if you have 10 readers and want to transfer more than 102 files. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
 
 ## Contribute
 
