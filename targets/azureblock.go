@@ -1,32 +1,5 @@
 package targets
 
-// BlobPorter Tool
-//
-// Copyright (c) Microsoft Corporation
-//
-// All rights reserved.
-//
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
-//
-
 import (
 	"fmt"
 	"time"
@@ -122,7 +95,6 @@ func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
-
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
 		if err := t.StorageClient.PutBlock(t.Container, (*part).TargetAlias, (*part).BlockID, (*part).Data); err != nil {
 			if util.Verbose {
@@ -135,9 +107,7 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 		if util.Verbose {
 			fmt.Printf("OKA|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
 		}
-
 		return nil
 	})
 	return
-
 }

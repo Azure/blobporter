@@ -1,32 +1,5 @@
 package pipeline
 
-// BlobPorter Tool
-//
-// Copyright (c) Microsoft Corporation
-//
-// All rights reserved.
-//
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
-//
-
 import (
 	"crypto/md5"
 	"encoding/base64"
@@ -44,7 +17,7 @@ import (
 //NewBytesBufferChan creates a channel with 'n' slices of []bytes.
 //'n' is the bufferQCapacity. If the bufferQCapacity times bufferSize is greater than 1 GB
 // 'n' is limited to a value that meets the constraint.
-func NewBytesBufferChan(bufferSize uint64) *chan []byte {
+func NewBytesBufferChan(bufferSize uint64) chan []byte {
 
 	bufferQCapacity := util.GB / bufferSize
 
@@ -55,13 +28,13 @@ func NewBytesBufferChan(bufferSize uint64) *chan []byte {
 	for index = 0; index < uint64(math.Ceil(float64(bufferQCapacity)*.25)); index++ {
 		c <- make([]byte, bufferSize)
 	}
-	return &c
+	return c
 }
 
 //SourcePipeline operations that abstract the creation of the empty and read parts channels.
 type SourcePipeline interface {
-	ConstructBlockInfoQueue(blockSize uint64) (partsQ *chan Part, numOfBlocks int, Size uint64)
-	ExecuteReader(partsQ *chan Part, readPartsQ *chan Part, id int, wg *sync.WaitGroup)
+	ConstructBlockInfoQueue(blockSize uint64) (partitionQ chan PartsPartition, partsQ chan Part, numOfBlocks int, Size uint64)
+	ExecuteReader(partitionQ chan PartsPartition, partsQ chan Part, readPartsQ chan Part, id int, wg *sync.WaitGroup)
 	GetSourcesInfo() []string
 }
 
@@ -120,7 +93,7 @@ type Part struct {
 	SourceURI               string
 	TargetAlias             string
 	NumberOfBlocks          int
-	BufferQ                 *chan []byte
+	BufferQ                 chan []byte
 }
 
 // StorageAccountCredentials a central location for account info.
@@ -129,8 +102,83 @@ type StorageAccountCredentials struct {
 	AccountKey  string // Base64-encoded storage account key
 }
 
-//ConstructPartsQueue  TODO
-func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, targetAlias string) (partsQ *chan Part, numOfBlocks int, commmitList []string) {
+//PartsPartition represents a set of parts that can be read sequentially
+//starting at the partition's Offset
+type PartsPartition struct {
+	Offset          int64
+	NumOfParts      int
+	TotalNumOfParts int64
+	TotalSize       int64
+	PartitionSize   int64
+	Parts           []Part
+}
+
+//createPartsInPartition creates the parts in the partition arithmetically.
+func createPartsInPartition(partitionSize int64, partitionOffSet int64, ordinalStart int, sourceNumOfBlocks int, blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) (parts []Part, ordinal int, numOfPartsInPartition int) {
+	var bytesLeft = partitionSize
+	curFileOffset := partitionOffSet
+	numOfPartsInPartition = int((partitionSize + blockSize - 1) / blockSize)
+	parts = make([]Part, numOfPartsInPartition)
+	ordinal = ordinalStart
+	for i := 0; i < numOfPartsInPartition; i++ {
+		var partSize = blockSize
+		if bytesLeft < blockSize { // last is a short block
+			partSize = bytesLeft
+		}
+		fp := NewPart(uint64(curFileOffset), uint32(partSize), ordinal, sourceURI, targetAlias)
+
+		fp.NumberOfBlocks = sourceNumOfBlocks
+		fp.BufferQ = bufferQ
+		fp.BlockSize = uint32(blockSize)
+
+		parts[i] = *fp
+		curFileOffset = curFileOffset + blockSize
+		bytesLeft = bytesLeft - partSize
+		ordinal++
+	}
+
+	return
+}
+
+//ConstructPartsPartition creates a slice of PartsPartition with a len of numberOfPartitions.
+func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) []PartsPartition {
+	//bsib := uint64(blockSize)
+	numOfBlocks := int((size + blockSize - 1) / blockSize)
+
+	if numOfBlocks > util.MaxBlockCount { // more than 50,000 blocks needed, so can't work
+		var minBlkSize = (size + util.MaxBlockCount - 1) / util.MaxBlockCount
+		log.Fatalf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
+	}
+
+	Partitions := make([]PartsPartition, numberOfPartitions)
+	//the size of the partition needs to be a multiple (blockSize * int) to make sure all but the last part/block
+	//are the same size
+	partitionSize := (int64(size) / int64(numberOfPartitions) / blockSize) * blockSize
+
+	var bytesLeft = size
+	var parts []Part
+	var numOfPartsInPartition int
+	var partOrdinal int
+	for p := 0; p < numberOfPartitions; p++ {
+		poffSet := int64(int64(p) * partitionSize)
+		if p == numberOfPartitions-1 {
+			partitionSize = int64(bytesLeft)
+		}
+		partition := PartsPartition{TotalNumOfParts: int64(numOfBlocks), TotalSize: size, Offset: poffSet, PartitionSize: partitionSize}
+		parts, partOrdinal, numOfPartsInPartition = createPartsInPartition(partitionSize, poffSet, partOrdinal, numOfBlocks, blockSize, sourceURI, targetAlias, bufferQ)
+
+		partition.Parts = parts
+		partition.NumOfParts = numOfPartsInPartition
+		Partitions[p] = partition
+
+		bytesLeft = bytesLeft - int64(partitionSize)
+	}
+
+	return Partitions
+}
+
+//ConstructPartsQueue  constructs a slice of parts calculated arithmetically from blockSize and size.
+func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, targetAlias string, bufferQ chan []byte) (parts []Part, numOfBlocks int) {
 	var bsib = blockSize
 	numOfBlocks = int((size + (bsib - 1)) / bsib)
 
@@ -139,44 +187,31 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, target
 		log.Fatalf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
 	}
 
-	//Qcopy := make(chan Part, numOfBlocks)
-	Qcopy := make(chan Part)
+	parts = make([]Part, numOfBlocks)
 
 	var curFileOffset uint64
 	var bytesLeft = size
 	bsbu64 := blockSize
 
-	var curCommitList = make([]string, numOfBlocks)
-	commmitList = curCommitList
-
-	bufferQ := NewBytesBufferChan(blockSize)
-
-	go func() {
-		for i := 0; i < numOfBlocks; i++ {
-			var chunkSize = bsbu64
-			if bytesLeft < bsbu64 { // last is a short block
-				chunkSize = bytesLeft
-			}
-
-			fp := NewPart(curFileOffset, uint32(chunkSize), i, sourceURI, targetAlias)
-			fp.NumberOfBlocks = numOfBlocks
-			fp.BufferQ = bufferQ
-			fp.BlockSize = uint32(blockSize)
-			Qcopy <- *fp // put it on the channel for the Readers
-
-			curFileOffset = curFileOffset + bsbu64
-			bytesLeft = bytesLeft - chunkSize
-			curCommitList[i] = string(i)
+	for i := 0; i < numOfBlocks; i++ {
+		var chunkSize = bsbu64
+		if bytesLeft < bsbu64 { // last is a short block
+			chunkSize = bytesLeft
 		}
 
-		close(Qcopy) // indicate end of the block list
-	}()
-	partsQ = &Qcopy
+		fp := NewPart(curFileOffset, uint32(chunkSize), i, sourceURI, targetAlias)
+		fp.NumberOfBlocks = numOfBlocks
+		fp.BufferQ = bufferQ
+		fp.BlockSize = uint32(blockSize)
+		parts[i] = *fp
+		curFileOffset = curFileOffset + bsbu64
+		bytesLeft = bytesLeft - chunkSize
+	}
 
 	return
 }
 
-//NewPart TODO
+//NewPart represents a block of data to be read from the source and written to the target
 func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, targetAlias string) *Part {
 
 	var idStr = fmt.Sprintf("%016x", offset)
@@ -190,7 +225,6 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, ta
 		SourceURI:               sourceURI,
 		TargetAlias:             targetAlias,
 		DuplicateOfBlockOrdinal: -1}
-
 }
 
 //ToString prints friendly format.
@@ -203,25 +237,25 @@ func (p *Part) ToString() string {
 //The slice is read from channel of pre-allocated buffers. If the channel is empty a new slice is allocated.
 func (p *Part) GetBuffer() {
 
-	//if the channel is empty allocate more memory to avoid blocking the reader
-	if len(*p.BufferQ) == 0 {
-
+	select {
+	case p.Data = <-p.BufferQ:
+	default:
 		p.Data = make([]byte, p.BlockSize)
-	} else {
-		p.Data = <-(*p.BufferQ)
 	}
 
 	p.Data = p.Data[:p.BytesToRead]
-
 }
 
 //ReturnBuffer adds part's buffer to channel so it can be reused.
 func (p *Part) ReturnBuffer() {
-	p.Data = p.Data[0:0]
-	//return only if space in the buffer exists to avoid blocking
-	if len(*p.BufferQ) < cap(*p.BufferQ) {
-		(*p.BufferQ) <- p.Data
+
+	select {
+	case p.BufferQ <- p.Data:
+	default:
+		//avoids blocking when the channel is full...
 	}
+
+	p.Data = nil
 }
 
 // MD5  returns computed MD5 for this block or empty string if no data yet.
