@@ -1,6 +1,6 @@
 # BlobPorter
 
-[![Build Status](https://travis-ci.com/Azure/blobporter.svg?token=Z5GQEwTGA6wT7qdrzXsm&branch=master)](https://travis-ci.com/Azure/blobporter)
+[![Build Status](https://travis-ci.org/Azure/blobporter.svg?branch=master)](https://travis-ci.org/Azure/blobporter)
 
 ## Introduction
 
