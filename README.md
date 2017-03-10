@@ -92,7 +92,7 @@ Download a file via HTTP to a local file:
 
   - *Note:* For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
 
-  - `Minimum Block Size = File Size / 50000`
+    - `Minimum Block Size = File Size / 50000`
 
   - The maximum block size is 100MB
 
