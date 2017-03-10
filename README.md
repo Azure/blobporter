@@ -90,11 +90,11 @@ Download a file via HTTP to a local file:
 
 - `-b` *string* or `--block_size` *string* desired size of each blob block. Can be specified as an integer byte count or integer suffixed with B, KB or MB (default "4MB", maximum "100MB").
 
-- - *Note:* For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
+  - *Note:* For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
 
-- - `Minimum Block Size = File Size / 50000`
+  - `Minimum Block Size = File Size / 50000`
 
-- - The maximum block size is 100MB
+  - The maximum block size is 100MB
 
 - `-a` *string* or `--account_name` *string* storage account name (e.g. mystorage). Can also be specified via the ACCOUNT_NAME environment variable.
 
