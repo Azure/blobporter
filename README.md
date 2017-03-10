@@ -6,9 +6,9 @@
 
 BlobPorter is a data transfer tool for Azure Blob storage that maximizes throughput through concurrent reads and writes.
 
-Getting Started
+### Getting Started
 
-### Linux
+#### Linux
 
 Download, extract and set permissions:
 
@@ -28,7 +28,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 >Note: You can also set these values via options
 
-### Windows
+#### Windows
 
 Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.3.01/bp_windows.zip)
 
