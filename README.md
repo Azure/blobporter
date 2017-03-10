@@ -8,9 +8,9 @@ BlobPorter is a data transfer tool for Azure Blob storage that maximizes through
 
 Getting Started
 
-Linux:
+### Linux
 
-Download, extract and set permissions.
+Download, extract and set permissions:
 
 ```bash
 wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.3.01/bp_linux.tar.gz
@@ -19,7 +19,7 @@ chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
 ```
 
-Set environment variables.
+Set environment variables:
 
 ```bash
 export ACCOUNT_NAME=<STORAGE_ACCOUNT_NAME>
@@ -28,44 +28,51 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 >Note: You can also set these values via options
 
-Windows:
+### Windows
 
 Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.3.01/bp_windows.zip)
 
-Set environment variables.
+Set environment variables (if using the command prompt):
 
-```powershell
+```batchfile
+set ACCOUNT_NAME=<STORAGE_ACCOUNT_NAME>
+set ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
+```
+
+Set environment variables (if using PowerShell):
+
+```PowerShell
 env$:ACCOUNT_NAME="<STORAGE_ACCOUNT_NAME>"
 env$:ACCOUNT_KEY="<STORAGE_ACCOUNT_KEY>"
 ```
 
 ## Examples
 
-Single file upload to Azure Blob Storage.
+Single file upload to Azure Blob Storage:
 
 `./blobporter -f /datadrive/myfile.tar -c mycontainer -n myfile.tar`
 
-Upload all files that match the pattern to Azure Blob Storage.
+Upload all files that match the pattern to Azure Blob Storage:
 
 `./blobporter -f "/datadrive/*.tar" -c mycontainer`
 
-You can also specify a list of files or patterns explicitly.
+You can also specify a list of files or patterns explicitly:
 
 `./blobporter -f "/datadrive/*.tar" -f "/datadrive/readme.md" -f "/datadrive/log" -c mycontainer`
 
-When the file list results in a known number of files and you want to upload them with a different name, you can use the -n option.
+When the file list results in a known number of files and you want to upload them with a different name, you can use the -n option:
 
 `./blobporter -f /datadrive/f1.tar -f /datadrive/f2.md -n b1 -n b2 -c mycontainer`
 
-Transfer a file via HTTP to Azure Blob Storage.
+Transfer a file from an HTTP/HTTPS source to Azure Blob Storage:
 
 `./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blob`
 
-Download a blob from Azure Blob Storage to a local file. 
+Download a blob from Azure Blob Storage to a local file:
 
 `./blobporter -f /datadrive/file.bam  -c mycontainer -n file.bam -t blob-file`
 
-Download a file via HTTP to a local file.
+Download a file via HTTP to a local file:
 
 `./blobporter -f "http://mysource/file.bam"  -n /datadrive/file.bam -t http-file`
 
