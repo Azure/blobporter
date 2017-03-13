@@ -66,6 +66,10 @@ func NewMultiFilePipeline(sourcePatterns []string, blockSize uint64, targetAlias
 			log.Fatalf("Error: %v", err)
 		}
 
+		if fileStat.Size() == 0 {
+			log.Fatalf("Empty files are not allowed. The file %v is empty", files[f])
+		}
+
 		numOfBlocks := util.GetNumberOfBlocks(uint64(fileStat.Size()), blockSize)
 		totalSize = totalSize + uint64(fileStat.Size())
 		totalNumberOfBlocks = totalNumberOfBlocks + numOfBlocks

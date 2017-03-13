@@ -13,7 +13,7 @@ Linux:
 Download, extract and set permissions.
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.3.01/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.3.02/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -30,7 +30,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 Windows:
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.3.01/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.3.02/bp_windows.zip)
 
 Set environment variables.
 
@@ -43,7 +43,7 @@ env$:ACCOUNT_KEY="<STORAGE_ACCOUNT_KEY>"
 
 Single file upload to Azure Blob Storage.
 
-`./blobporter -f /datadrive/myfile.tar -c mycontainer`
+`./blobporter -f /datadrive/myfile.tar -c mycontainer -n myfile.tar`
 
 Upload all files that match the pattern to Azure Blob Storage.
 
@@ -57,12 +57,11 @@ When the file list results in a known number of files and you want to upload the
 
 `./blobporter -f /datadrive/f1.tar -f /datadrive/f2.md -n b1 -n b2 -c mycontainer`
 
-
 Transfer a file via HTTP to Azure Blob Storage.
 
 `./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blob`
 
-Download a blob from Azure Blob Storage to a local file.
+Download a blob from Azure Blob Storage to a local file. 
 
 `./blobporter -f /datadrive/file.bam  -c mycontainer -n file.bam -t blob-file`
 
