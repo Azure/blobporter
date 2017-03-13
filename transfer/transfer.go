@@ -294,9 +294,9 @@ func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate P
 
 	t.Stats.StartTime = time.Now()
 
-	go t.startReaders(t.ControlChannels.Partitions, t.ControlChannels.Parts, t.ControlChannels.ReadParts, t.NumOfReaders, &t.SyncWaitGroups.Readers, t.SourcePipeline)
+	t.startReaders(t.ControlChannels.Partitions, t.ControlChannels.Parts, t.ControlChannels.ReadParts, t.NumOfReaders, &t.SyncWaitGroups.Readers, t.SourcePipeline)
 
-	go t.startWorkers(t.ControlChannels.ReadParts, t.ControlChannels.Results, t.NumOfWorkers, &t.SyncWaitGroups.Workers, dupeLevel, t.TargetPipeline)
+	t.startWorkers(t.ControlChannels.ReadParts, t.ControlChannels.Results, t.NumOfWorkers, &t.SyncWaitGroups.Workers, dupeLevel, t.TargetPipeline)
 
 	go t.processAndCommitResults(t.ControlChannels.Results, progressBarDelegate, t.TargetPipeline, &t.SyncWaitGroups.Commits)
 
