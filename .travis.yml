@@ -17,14 +17,13 @@ script:
 - go build  -o ./windows_amd64/BlobPorter.exe github.com/Azure/blobporter
 - md5sum ./linux_amd64/blobporter > ./linux_amd64/blobporter.md5
 - md5sum ./windows_amd64/BlobPorter.exe > ./windows_amd64/BlobPorter.exe.md5
-- tar cvzf bp_linux.tar.gz linux_amd64 
-- zip bp_windows.zip ./windows_amd64/* 
+- tar cvzf bp_linux.tar.gz linux_amd64
+- zip bp_windows.zip ./windows_amd64/*
 - bash inttest.sh inttest
 deploy:
   provider: releases
   api_key:
-    secure: h81WRMxDgNoQ81VIEEXypp1lHXwxHGPjoLIFNG7aSxKqfRbWT+xGyGNFCU59FY0ge2TLsZp+ohDSPPhDbQ5kFb5xBIhODNbUuFw2SSsTa57AtmPrvzJ6kJ8/1l7D8xMn1OCiIUWw6YNLCtkMCPvJfowJEBo+dTuU7xW/Sr5Y3CDaDOoJQCEHQ5bj3ZKpwAlHdwTHtdE3UOamGTgoB7HkO/sLhlaNSxFf4q/3w2J4kbsTuC/eb5vc61VXXWketzXCKuZ0wEPKrFD1tDrH6M6eHRGNzkPOtIVoHffCeVsfvoGyMsIkKBjpPduJF9ZPB1JfElZAvhaTEsI6dVHus8Exugyzib4phUd/wNJ5mbS7FptVrQswUZ7h+of+c1/P9LhOEIFWLJZa5ey58RWL7dGDxF0dCTGkciiXL35bbztD6J+U+qttPHCM2gXSKhTvwz0qZYzYG+RiVG+1SeVibUgBNOY1Td5+cIL9OQ4fMWNjd0rdPEB0Teuq1gIRY8/qQipCxNlVdOJk7YIoI2Zjoo/Yuq4wVXdusCG6/5tCxEtLOf6LedZEPBm3ya/9kyjYc+qtFnSGu9SLw068zCOMTQZboSLyih7wgWR9IERUNwsNzHLYNOWTwZb70JIZmmsHZFqj51tMw44Uz8Yx/yMhmmwbiChR1+3gpMNVUBuNGOD1v3c=
-  
+    secure: IJQWazKnfh5JQTiegmATLZ5d2hFKEoASolasshpNWdkEGCFMunBORCxlhUwu1Sy1Snu87fnqKROvE6qm4bCiUC58LKPAn08gdUbDbecj6dQJi/KW04W3vnoqD5bZzKW3JM+RyPpT9qCWjVSzsrUnL6FtPF9u0vV4aFqL6vnUbMirwLjvqz36DoBqZPDpyGLcraPFwsWLymmKEGN2egFaPq3hwxd56PZdETTlTqFrAyFbY/v0gyhD8Rwy2KJKgU0xaOypxc0duaVtCoIzPyy4IFOilLJg1e14k8EuQiIzYN7QxZpRjRxpM8slUb+xH4lmF90YhZ4Pm9gip4EzdcZEEFXaV/aCo+m7CqynQDGStaDZk0acmnQm2e4cODtP2UXz5vfaeRUGcfjgq4RsZaOIdjtItDyKFkEb7TBlAH8DMhV7TVlZnE7clpMxuABzVL6QoxJ5T0Oqb6v0A7YqobD2pa0yFUQNvCOLGetxhCDzMwglQAr80P8xbBtDEFWgX/srtXDrr1yQgX7GrZ5wa0PAEtmkLnV3zkhEKhyH/P4s8w2G2CNwq8IvxxSJhfLVGRSglBTqfqmpFf5L1ErS8WqixxVR171lqGlp3RelPOvAQnT85WSvizmWpLyd2PF5lYaTRR52mN3CfjHSqL077bh87Wrqs7xDwCOqzdra579nytw= 
   file: 
     - bp_linux.tar.gz
     - bp_windows.zip
