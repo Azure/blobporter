@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"net/http"
+
 	"github.com/Azure/azure-sdk-for-go/storage"
 )
 
@@ -216,7 +218,40 @@ func GetBlobStorageClient(accountName string, accountKey string) storage.BlobSto
 		log.Fatal(err)
 	}
 
+	client.HTTPClient = getStorageHTTPClient()
+
 	bc = client.GetBlobService()
 
 	return bc
+}
+
+var storageHTTPClient *http.Client
+
+//HTTPClientTimeout HTTP timeout of the HTTP client used by the storage client.
+var HTTPClientTimeout = 30
+
+const (
+	maxIdleConns        = 100
+	maxIdelConnsPerHost = 100
+)
+
+func getStorageHTTPClient() *http.Client {
+	if storageHTTPClient == nil {
+		storageHTTPClient = NewHTTPClient()
+	}
+
+	return storageHTTPClient
+
+}
+
+//NewHTTPClient  creates a new HTTP client with the configured timeout and MaxIdleConnsPerHost = 100
+func NewHTTPClient() *http.Client {
+
+	c := http.Client{
+		Timeout: time.Duration(HTTPClientTimeout) * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        maxIdleConns,
+			MaxIdleConnsPerHost: maxIdelConnsPerHost}}
+
+	return &c
 }

@@ -36,13 +36,13 @@ var transferDefStr string
 var defaultTransferDef = transfer.FileToBlob
 var storageAccountName string
 var storageAccountKey string
-var profile bool
+var storageClientHTTPTimeout int
 
 const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.3.02" // version number to show in help
+	programVersion           = "0.3.03" // version number to show in help
 )
 
 const numOfWorkersFactor = 9
@@ -72,7 +72,7 @@ func init() {
 	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, "desired size of each blob block. "+
 		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
 	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, "display verbose output (Version="+programVersion+")")
-	util.BoolVarAlias(&profile, "p", "profile", false, "enables profiling.")
+	util.IntVarAlias(&util.HTTPClientTimeout, "s", "http_timeout", util.HTTPClientTimeout, "sets the HTTP client timeout in seconds. \nDefault value is 30s.")
 	util.StringVarAlias(&storageAccountName, "a", "account_name", "", ""+
 		"storage account name (e.g. mystorage). "+
 		"Can also be specified via the "+storageAccountNameEnvVar+" environment variable.")
@@ -135,7 +135,7 @@ func main() {
 
 const openFileLimitForLinux = 1024
 
-//validates if the number of readers needs to be adjusted to accomodate max filehandle limits in Debian systems
+//validates if the number of readers needs to be adjusted to accommodate max filehandle limits in Debian systems
 func validateReaders(numOfSources int) {
 
 	if runtime.GOOS == "linux" {
@@ -143,7 +143,7 @@ func validateReaders(numOfSources int) {
 			numberOfReaders = openFileLimitForLinux / numOfSources
 
 			if numberOfReaders == 0 {
-				log.Fatal("Too many files in the transfer. Reduce the number of files to be transfered")
+				log.Fatal("Too many files in the transfer. Reduce the number of files to be transferred")
 			}
 
 			fmt.Printf("Warning! The requested number of readers will exceed the allowed limit of files open by the OS.\nThe number will be adjusted to: %v\n", numberOfReaders)
@@ -183,7 +183,7 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 		//Since this is default value detect if the source is http
 		if isSourceHTTP() {
 			source = sources.NewHTTPPipeline(sourceURIs, blobNames)
-			defValue = transfer.HTTPToBlob
+			transferDefStr = transfer.HTTPToBlob
 		} else {
 			source = sources.NewMultiFilePipeline(sourceURIs, blockSize, blobNames, numberOfReaders)
 		}
@@ -213,14 +213,25 @@ func parseAndValidate() {
 
 	flag.Parse()
 
+	if util.HTTPClientTimeout < 5 {
+		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 30s \n")
+		util.HTTPClientTimeout = 30
+	}
+
 	if len(sourceURIs) == 0 {
 		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
+	}
+
+	var defValue transfer.Definition
+	var err error
+	if defValue, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
+		log.Fatal(err)
 	}
 
 	// wasn't specified, try the environment variable
 	if storageAccountName == "" {
 		envVal := os.Getenv(storageAccountNameEnvVar)
-		if envVal == "" {
+		if envVal == "" && defValue != transfer.HTTPToFile {
 			log.Fatal("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
 		}
 		storageAccountName = envVal
@@ -229,7 +240,7 @@ func parseAndValidate() {
 	// wasn't specified, try the environment variable
 	if storageAccountKey == "" {
 		envVal := os.Getenv(storageAccountKeyEnvVar)
-		if envVal == "" {
+		if envVal == "" && defValue != transfer.HTTPToFile {
 			log.Fatal("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
 		}
 		storageAccountKey = envVal

@@ -112,7 +112,7 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 	var err error
 	var req *http.Request
 	var res *http.Response
-	client := &http.Client{Transport: &http.Transport{}}
+	client := util.NewHTTPClient()
 	for {
 		p, ok := <-partsQ
 
