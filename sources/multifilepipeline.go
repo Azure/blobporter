@@ -28,7 +28,7 @@ type MultiFilePipeline struct {
 	NumOfPartitions     int
 }
 
-//FileInfo Contains the metadata associated with a file to be transfered
+//FileInfo Contains the metadata associated with a file to be transferred
 type FileInfo struct {
 	FileStats   *os.FileInfo
 	SourceURI   string
@@ -148,11 +148,10 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 }
 
 //GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
-//Returns a print friendly array of strings with the name and size of the files to be transfered.
+//Returns a print friendly array of strings with the name and size of the files to be transferred.
 func (f MultiFilePipeline) GetSourcesInfo() []string {
 	// Single file support
 	sources := make([]string, len(f.FilesInfo))
-
 	var i = 0
 	for _, file := range f.FilesInfo {
 		sources[i] = fmt.Sprintf("File:%v, Size:%v", file.SourceURI, (*file.FileStats).Size())
@@ -212,7 +211,6 @@ func (f MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partitions
 		pindex++
 	}
 
-	pindex = 0
 	for fi := 0; fi < maxpartitionNumber; fi++ {
 		for _, partition := range allPartitions {
 			if len(partition) > fi {

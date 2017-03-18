@@ -44,8 +44,7 @@ func (t AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numbe
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, _, _ := util.RetriableOperation(func(r int) error {
-		var bc = util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey)
-		if err := bc.PutBlockList(t.Container, targetName, blockList); err != nil {
+		if err := t.StorageClient.PutBlockList(t.Container, targetName, blockList); err != nil {
 			return err
 		}
 		return nil
@@ -67,8 +66,8 @@ func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Bloc
 }
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
-//Appends the written part to a list. If the part is duplicated the list is updated with a reference, to the first occurance of the block.
-//If the first occurance has not yet being processed, the part is requested to be placed back in the results channel (requeue == true).
+//Appends the written part to a list. If the part is duplicated the list is updated with a reference, to the first occurrence of the block.
+//If the first occurrence has not yet being processed, the part is requested to be placed back in the results channel (requeue == true).
 func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	blockList := convertToStorageBlockList((*listInfo).List, result.NumberOfBlocks)
@@ -100,7 +99,6 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 			if util.Verbose {
 				fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
 			}
-			t.StorageClient = util.GetBlobStorageClient(t.Creds.AccountName, t.Creds.AccountKey) // reset to a fresh client for the retry
 			return err
 		}
 
