@@ -264,7 +264,7 @@ func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipelin
 	//Setup the wait groups
 	t.SyncWaitGroups.Readers.Add(readers)
 	t.SyncWaitGroups.Workers.Add(workers)
-	t.SyncWaitGroups.Commits.Add(len((*source).GetSourcesInfo()))
+	t.SyncWaitGroups.Commits.Add(1)
 
 	//Create buffered chanels
 	channels.Partitions, channels.Parts, t.TotalNumOfBlocks, t.TotalSize = (*source).ConstructBlockInfoQueue(blockSize)
@@ -307,9 +307,10 @@ func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate P
 func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
 
 	t.SyncWaitGroups.Readers.Wait()
-	cc := t.ControlChannels
-	close((*cc).ReadParts)
+	cc := (*t.ControlChannels)
+	close(cc.ReadParts)
 	t.SyncWaitGroups.Workers.Wait() // Ensure all upload workers complete
+	close(cc.Results)
 	t.SyncWaitGroups.Commits.Wait() // Ensure all commits complete
 	t.Stats.Duration = time.Now().Sub(t.Stats.StartTime)
 
@@ -337,6 +338,7 @@ func (t *Transfer) processAndCommitResults(resultQ chan pipeline.WorkerResult, u
 	var requeue bool
 	var err error
 	var workerBufferLevel int
+	defer commitWg.Done()
 
 	for {
 		result, ok := <-resultQ
@@ -366,14 +368,12 @@ func (t *Transfer) processAndCommitResults(resultQ chan pipeline.WorkerResult, u
 				log.Fatal(err)
 			}
 			committedCount++
-			commitWg.Done()
 		}
 
 		workerBufferLevel = int(float64(len(t.ControlChannels.ReadParts)) / float64(t.getReadPartsBufferSize()) * 100)
 
 		// call update delegate
 		update(result, committedCount, workerBufferLevel)
-
 	}
 }
 
@@ -395,7 +395,6 @@ func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 	var retries int
 	var err error
 	var t = (*target)
-
 	for {
 		tb, ok = <-w.WorkerQueue
 
@@ -413,7 +412,6 @@ func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 			w.recordStatus(&tb, time.Now(), 0, "Success", 0)
 			continue
 		}
-
 		if duration, startTime, retries, err = t.WritePart(&tb); err == nil {
 			tb.ReturnBuffer()
 			w.recordStatus(&tb, startTime, duration, "Success", retries)

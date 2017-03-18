@@ -1,10 +1,13 @@
 # BlobPorter
 
 [![Build Status](https://travis-ci.org/Azure/blobporter.svg?branch=master)](https://travis-ci.org/Azure/blobporter)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Azure/blobporter)](https://goreportcard.com/report/github.com/Azure/blobporter)
 
 ## Introduction
 
 BlobPorter is a data transfer tool for Azure Blob storage that maximizes throughput through concurrent reads and writes.
+
+![](img/bptransfer.png?raw=true)
 
 ### Getting Started
 
@@ -13,7 +16,7 @@ BlobPorter is a data transfer tool for Azure Blob storage that maximizes through
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.3.02/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.3.03/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -30,7 +33,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 #### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.3.02/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.3.03/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -100,6 +103,8 @@ Download a file via HTTP to a local file:
 
 - `-k` *string* or `--account_key` *string* storage account key string (e.g. `4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==`). Can also be specified via the ACCOUNT_KEY environment variable.
 
+- `-s` *int* or `--http_timeout` *int* HTTP client timeout in seconds. Default value is 30s.
+
 - `-d` *string* or `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
 ## Performance Considerations
@@ -108,7 +113,7 @@ By default BlobPorter creates 9 readers and 6 workers for each core in the compu
 
 - If during the transfer the buffer level is constant at 000%, workers could be waiting for data. Consider increasing the number of readers. If the level is 100% the opposite applies; increasing the number of workers could help.
 
-- BlobPorter uses GO's goroutines, each reader or worker correlates to one goroutine. Goroutines are lightweight and a GO program can have a high number of them. However, there's a point where the overhead of context switching impacts overall performance. Increase these values in small increments, e.g. 5.
+- In BlobPorter, each reader or worker correlates to one goroutine. Goroutines are lightweight and a Go program can have a high number of them. However, there's a point where the overhead of context switching impacts overall performance. Increase these values in small increments, e.g. 5.
 
 - For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
