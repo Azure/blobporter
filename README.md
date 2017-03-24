@@ -3,7 +3,6 @@
 [![Build Status](https://travis-ci.org/Azure/blobporter.svg?branch=master)](https://travis-ci.org/Azure/blobporter)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Azure/blobporter)](https://goreportcard.com/report/github.com/Azure/blobporter)
 
-
 ## Introduction
 
 BlobPorter is a data transfer tool for Azure Blob Storage that maximizes throughput through concurrent reads and writes that can scale up and down independently.
@@ -19,9 +18,9 @@ Sources and targets are decoupled, this design enables the composition of variou
 | Azure Block Blob | Yes**            | Yes**            | Yes             |
 | Azure Page Blob  | Yes**            | Yes**            | Yes             |
 
-<sub>\*   The HTTP/HTTPS source must support HTTP byte ranges and return the file size as a response to a HTTP HEAD request.</sub>
+*\*   The HTTP/HTTPS source must support HTTP byte ranges and return the file size as a response to a HTTP HEAD request.*
 
-<sub>\*\* Using the Blob URL with a valid SAS Token with read access .</sub>
+*\*\* Using the Blob URL with a valid SAS Token with read access .*
 
 ## Getting Started
 
@@ -65,7 +64,6 @@ env$:ACCOUNT_KEY="<STORAGE_ACCOUNT_KEY>"
 
 ## Examples
 
-
 ### Upload to Azure Block Blob Storage
 
 Single file upload:
@@ -84,7 +82,6 @@ If you want to rename multiple files, you can use the -n option:
 
 `./blobporter -f /datadrive/f1.tar -f /datadrive/f2.md -n b1 -n b2 -c mycontainer`
 
-
 ### Upload to Azure Page Blob Storage
 
 Same as uploading to block blob storage, but with the transfer type (-t option) specified.
@@ -94,7 +91,6 @@ For example, a single file upload becomes:
 `./blobporter -f /datadrive/mydisk.vhd -c mycontainer -n mydisk.vhd -t file-pageblob`
 
 >Note: The file size and block size must be a multiple of 512 (bytes). The maximum block size is 4MB.
-
 
 ### Upload from an HTTP/HTTPS source to Azure Blob Storage
 
@@ -157,7 +153,6 @@ From blob Storage to a local file, the source can be a page or block blob:
 - `-d` *string* or `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
 - `-t` *string* or `--transfer_type` *string*  defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file
-
 
 ## Performance Considerations
 
