@@ -84,7 +84,7 @@ If you want to rename multiple files, you can use the -n option:
 
 ### Upload to Azure Page Blob Storage
 
-Same as uploading to block blob storage, but with the transfer type (-t option) specified.
+Same as uploading to block blob storage, but with setting the transfer definiton (-t option) to the value file-pageblob.
 
 For example, a single file upload becomes:
 
@@ -100,7 +100,7 @@ To block blob storage:
 
 To page blob storage:
 
-`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blockblob`
+`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-pageblob`
 
 You can use this approach to transfer data between Azure Storage accounts and blob types - e.g. transfer a blob from one account to another or from a page blob to block blob.
 
@@ -108,7 +108,7 @@ The source is a page blob with a SAS token and the target is block blob:
 
 `./blobporter -f "https://myaccount.blob.core.windows.net/vhds/my.vhd?st=2015-03-23T03%3A59%3A00Z&se=2015-03-24T03%3A59%3A00Z&sp=rl&sv=2015-12-11&sr=b&sig=123rfdAsYyqOxxOGe28%3Fp4H6r5reR8pdSBdlchi64wgs3D"  -c mycontainer -n my.vhd -t http-blockblob`
 
->Note: In HTTP/HTTPS to blob transfers data is downloaded and uploaded as it is received without disk IO, however, since data is read and sent via the network, the process is network and memory bound.
+>Note: In HTTP/HTTPS to blob transfers, data is downloaded and uploaded as it is received without disk IO.
 
 ### Download from Azure Blob Storage
 
