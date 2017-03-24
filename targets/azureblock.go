@@ -65,6 +65,12 @@ func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Bloc
 	return list.([]storage.Block)
 }
 
+//PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
+//Passthrough no need to pre-process for blob blocks.
+func (t AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+	return nil
+}
+
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Appends the written part to a list. If the part is duplicated the list is updated with a reference, to the first occurrence of the block.
 //If the first occurrence has not yet being processed, the part is requested to be placed back in the results channel (requeue == true).

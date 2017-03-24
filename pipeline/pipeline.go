@@ -35,11 +35,19 @@ func NewBytesBufferChan(bufferSize uint64) chan []byte {
 type SourcePipeline interface {
 	ConstructBlockInfoQueue(blockSize uint64) (partitionQ chan PartsPartition, partsQ chan Part, numOfBlocks int, Size uint64)
 	ExecuteReader(partitionQ chan PartsPartition, partsQ chan Part, readPartsQ chan Part, id int, wg *sync.WaitGroup)
-	GetSourcesInfo() []string
+	GetSourcesInfo() []SourceInfo
+}
+
+//SourceInfo TODO
+type SourceInfo struct {
+	SourceName  string
+	Size        uint64
+	TargetAlias string
 }
 
 //TargetPipeline operations that abstract how parts a written and processed to a given target
 type TargetPipeline interface {
+	PreProcessSourceInfo(source *SourceInfo) (err error)
 	CommitList(listInfo *TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error)
 	WritePart(part *Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error)
 	ProcessWrittenPart(result *WorkerResult, listInfo *TargetCommittedListInfo) (requeue bool, err error)

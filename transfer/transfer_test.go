@@ -31,6 +31,43 @@ const (
 	containerName2 = "bphttptest"
 )
 
+func TestFileToPageHTTPToPage(t *testing.T) {
+	container, containerHTTP := getContainers()
+
+	var sourceFile = createPageFile("tb", 1)
+
+	fp := sources.NewMultiFilePipeline([]string{sourceFile}, blockSize, nil, numOfReaders)
+	ap := targets.NewAzurePage(accountName, accountKey, container)
+	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+	sourceURI, err := createSasTokenURL(sourceFile, container)
+
+	assert.NoError(t, err)
+
+	ap = targets.NewAzurePage(accountName, accountKey, containerHTTP)
+	fp = sources.NewHTTPPipeline([]string{sourceURI}, []string{sourceFile})
+	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+
+	os.Remove(sourceFile)
+}
+
+func TestFileToPage(t *testing.T) {
+	var sourceFile = createPageFile("tb", 1)
+	container, _ := getContainers()
+
+	fp := sources.NewMultiFilePipeline([]string{sourceFile}, blockSize, nil, numOfReaders)
+	pt := targets.NewAzurePage(accountName, accountKey, container)
+
+	tfer := NewTransfer(&fp, &pt, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+
+	os.Remove(sourceFile)
+}
+
 func TestFileToFile(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
 	var destFile = "d" + sourceFile
@@ -215,7 +252,38 @@ func createSasTokenURL(blobName string, container string) (string, error) {
 func getStorageAccountCreds() *pipeline.StorageAccountCredentials {
 	return &pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 }
+func createPageFile(prefix string, sizeInMB int) string {
+	fileName := fmt.Sprintf("%v%v", prefix, time.Now().Nanosecond())
+	var file *os.File
+	var err error
 
+	defer func() {
+		if file != nil {
+			file.Close()
+		}
+	}()
+
+	if file, err = os.Create(fileName); os.IsExist(err) {
+		if err = os.Remove(fileName); err != nil {
+			log.Fatal(err)
+		}
+		if file, err = os.Create(fileName); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	b := make([]byte, util.MiByte)
+
+	for i := 0; i < util.MiByte; i++ {
+		b[i] = 1
+	}
+
+	for i := 0; i < sizeInMB; i++ {
+		file.Write(b)
+	}
+
+	return fileName
+}
 func createFile(prefix string, approxSizeInMB int) string {
 	fileName := fmt.Sprintf("%v%v", prefix, time.Now().Nanosecond())
 	var file *os.File

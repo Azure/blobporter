@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -33,7 +34,7 @@ var dedupeLevel = transfer.None
 var dedupeLevelOptStr = dedupeLevel.ToString()
 var transferDef transfer.Definition
 var transferDefStr string
-var defaultTransferDef = transfer.FileToBlob
+var defaultTransferDef = transfer.FileToBlock
 var storageAccountName string
 var storageAccountKey string
 var storageClientHTTPTimeout int
@@ -42,7 +43,7 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.3.03" // version number to show in help
+	programVersion           = "0.4.01" // version number to show in help
 )
 
 const numOfWorkersFactor = 9
@@ -83,18 +84,18 @@ func init() {
 	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, ""+
 		"Desired level of effort to detect duplicate data blocks to minimize upload size. "+
 		"Must be one of "+transfer.DupeCheckLevelStr)
-	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", defaultTransferDef.ToString(),
-		"Defines the source and target of the transfer. Must be one of file-blob, http-blob, blob-file or http-file")
+	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", string(defaultTransferDef),
+		"Defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file")
 }
 
 var dataTransfered uint64
 var targetRetries int32
 
-func displayFilesToTransfer(sourcesInfo []string) {
+func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo) {
 	fmt.Printf("Transfer Task: %v\n", transferDefStr)
 	fmt.Printf("Files to Transfer:\n")
 	for _, source := range sourcesInfo {
-		fmt.Printf("%v\n", source)
+		fmt.Printf("Source: %v Size:%v \n", source.SourceName, source.Size)
 	}
 }
 
@@ -178,18 +179,23 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 	}
 
 	switch defValue {
-	case transfer.FileToBlob:
+	case transfer.FileToPage:
+		target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+		source = sources.NewMultiFilePipeline(sourceURIs, blockSize, blobNames, numberOfReaders)
+	case transfer.FileToBlock:
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 		//Since this is default value detect if the source is http
 		if isSourceHTTP() {
 			source = sources.NewHTTPPipeline(sourceURIs, blobNames)
-			transferDefStr = transfer.HTTPToBlob
+			transferDefStr = transfer.HTTPToBlock
 		} else {
 			source = sources.NewMultiFilePipeline(sourceURIs, blockSize, blobNames, numberOfReaders)
 		}
-	case transfer.HTTPToBlob:
+	case transfer.HTTPToPage:
+		target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+		source = sources.NewHTTPPipeline(sourceURIs, blobNames)
+	case transfer.HTTPToBlock:
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-
 		source = sources.NewHTTPPipeline(sourceURIs, blobNames)
 	case transfer.BlobToFile:
 		if len(blobNames) == 0 {
@@ -213,55 +219,82 @@ func parseAndValidate() {
 
 	flag.Parse()
 
+	var err error
 	if util.HTTPClientTimeout < 5 {
 		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 30s \n")
 		util.HTTPClientTimeout = 30
 	}
 
-	if len(sourceURIs) == 0 {
+	if len(sourceURIs) == 0 || sourceURIs == nil {
 		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
 	}
 
-	var defValue transfer.Definition
-	var err error
-	if defValue, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
+	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
+	if err != nil {
+		log.Fatal("Invalid block size specified: " + blockSizeStr)
+	}
+
+	blockSizeMax := util.LargeBlockSizeMax
+	if blockSize > blockSizeMax {
+		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blockSizeMax))
+	}
+
+	dedupeLevel, err = transfer.ParseDupeCheckLevel(dedupeLevelOptStr)
+	if err != nil {
+		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, transfer.DupeCheckLevelStr)
+	}
+
+	err = validateTransferTypesParams()
+	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+//validates command line params considering the type of transfer
+func validateTransferTypesParams() error {
+	var transt transfer.Definition
+	storeCredsReq := true
+	var err error
+	if transt, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
+		return err
+	}
+
+	switch {
+	case transt == transfer.HTTPToPage || transt == transfer.FileToPage:
+		if blockSize%uint64(targets.PageSize) != 0 || blockSize > 4*util.MB {
+			return fmt.Errorf("Invalid block size (%v) for a page blob. The size must be a multiple of %v (bytes) and less or equal to %v (4MB)", blockSize, targets.PageSize, 4*util.MB)
+		}
+	case transt == transfer.BlobToFile:
+		if len(blobNames) == 0 {
+			return errors.New("Blob name(s) (-n) is required when downloading data from a blob")
+		}
+	case transt == transfer.HTTPToFile:
+		storeCredsReq = false
+		if len(blobNames) == 0 || blobNames[0] == "" {
+			return errors.New("File name (-n) is required when downloading data from an URL")
+		}
+
 	}
 
 	// wasn't specified, try the environment variable
-	if storageAccountName == "" {
+	if storageAccountName == "" && storeCredsReq {
 		envVal := os.Getenv(storageAccountNameEnvVar)
-		if envVal == "" && defValue != transfer.HTTPToFile {
-			log.Fatal("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
+		if envVal == "" {
+			return errors.New("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
 		}
 		storageAccountName = envVal
 	}
 
 	// wasn't specified, try the environment variable
-	if storageAccountKey == "" {
+	if storageAccountKey == "" && storeCredsReq {
 		envVal := os.Getenv(storageAccountKeyEnvVar)
-		if envVal == "" && defValue != transfer.HTTPToFile {
-			log.Fatal("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
+		if envVal == "" {
+			return errors.New("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
 		}
 		storageAccountKey = envVal
 	}
 
-	var errx error
-	blockSize, errx = util.ByteCountFromSizeString(blockSizeStr)
-	if errx != nil {
-		log.Fatal("Invalid block size specified: " + blockSizeStr)
-	}
-
-	blockSizeMax := util.LargeBlockSizeMax
-
-	if blockSize > blockSizeMax {
-		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blockSizeMax))
-	}
-
-	dedupeLevel, errx = transfer.ParseDupeCheckLevel(dedupeLevelOptStr)
-	if errx != nil {
-		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, transfer.DupeCheckLevelStr)
-	}
+	return nil
 }
 
 func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {

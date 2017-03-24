@@ -204,7 +204,7 @@ func GetNumberOfBlocks(size uint64, blockSize uint64) int {
 	return numOfBlocks
 }
 
-//GetBlobStorageClient gets a storage client with support for larg block blobs
+//GetBlobStorageClient gets a storage client with support for large block blobs
 func GetBlobStorageClient(accountName string, accountKey string) storage.BlobStorageClient {
 	var bc storage.BlobStorageClient
 	var client storage.Client
