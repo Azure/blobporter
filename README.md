@@ -19,10 +19,9 @@ Sources and targets are decoupled, this design enables the composition of variou
 | Azure Block Blob | Yes**            | Yes**            | Yes             |
 | Azure Page Blob  | Yes**            | Yes**            | Yes             |
 
-||
-|:-------|
-|<sub>\*   The HTTP/HTTPS source must support HTTP byte ranges and return the file size as a response to a HTTP HEAD request.</sub>|
-|<sub>\*\* Using the Blob URL with a valid SAS Token with read access .</sub>|
+<sub>\*   The HTTP/HTTPS source must support HTTP byte ranges and return the file size as a response to a HTTP HEAD request.</sub>
+
+<sub>\*\* Using the Blob URL with a valid SAS Token with read access .</sub>
 
 ## Getting Started
 
