@@ -112,7 +112,7 @@ The source is a page blob with a SAS token and the target is block blob:
 
 ### Download from Azure Blob Storage
 
-From blob Storage to a local file, the source can be a page or block blob:
+From blob storage to a local file, the source can be a page or block blob:
 
 `./blobporter -f /datadrive/file.bam  -c mycontainer -n file.bam -t blob-file`
 
