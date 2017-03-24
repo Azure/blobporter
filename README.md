@@ -3,20 +3,35 @@
 [![Build Status](https://travis-ci.org/Azure/blobporter.svg?branch=master)](https://travis-ci.org/Azure/blobporter)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Azure/blobporter)](https://goreportcard.com/report/github.com/Azure/blobporter)
 
+
 ## Introduction
 
-BlobPorter is a data transfer tool for Azure Blob storage that maximizes throughput through concurrent reads and writes.
+BlobPorter is a data transfer tool for Azure Blob Storage that maximizes throughput through concurrent reads and writes that can scale up and down independently.
 
 ![](img/bptransfer.png?raw=true)
 
-### Getting Started
+Sources and targets are decoupled, this design enables the composition of various transfer scenarios.
 
-#### Linux
+| From/To          | Azure Block Blob | Azure Page Blob  | File (Download) |
+| ---------------  | -----------------| -----------------|-----------------|
+| File (Upload)    | Yes              | Yes              | NA              |
+| HTTP/HTTPS*      | Yes              | Yes              | Yes             |
+| Azure Block Blob | Yes**            | Yes**            | Yes             |
+| Azure Page Blob  | Yes**            | Yes**            | Yes             |
+
+||
+|:-------|
+|<sub>\*   The HTTP/HTTPS source must support HTTP byte ranges and return the file size as a response to a HTTP HEAD request.</sub>|
+|<sub>\*\* Using the Blob URL with a valid SAS Token with read access .</sub>|
+
+## Getting Started
+
+### Linux
 
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.3.03/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.4.01/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -31,9 +46,9 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 >Note: You can also set these values via options
 
-#### Windows
+### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.3.03/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.4.01/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -51,11 +66,14 @@ env$:ACCOUNT_KEY="<STORAGE_ACCOUNT_KEY>"
 
 ## Examples
 
-Single file upload to Azure Blob Storage:
+
+### Upload to Azure Block Blob Storage
+
+Single file upload:
 
 `./blobporter -f /datadrive/myfile.tar -c mycontainer -n myfile.tar`
 
-Upload all files that match the pattern to Azure Blob Storage:
+Upload all files that match the pattern:
 
 `./blobporter -f "/datadrive/*.tar" -c mycontainer`
 
@@ -63,21 +81,53 @@ You can also specify a list of files or patterns explicitly:
 
 `./blobporter -f "/datadrive/*.tar" -f "/datadrive/readme.md" -f "/datadrive/log" -c mycontainer`
 
-When the file list results in a known number of files and you want to upload them with a different name, you can use the -n option:
+If you want to rename multiple files, you can use the -n option:
 
 `./blobporter -f /datadrive/f1.tar -f /datadrive/f2.md -n b1 -n b2 -c mycontainer`
 
-Transfer a file from an HTTP/HTTPS source to Azure Blob Storage:
 
-`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blob`
+### Upload to Azure Page Blob Storage
 
-Download a blob from Azure Blob Storage to a local file:
+Same as uploading to block blob storage, but with the transfer type (-t option) specified.
+
+For example, a single file upload becomes:
+
+`./blobporter -f /datadrive/mydisk.vhd -c mycontainer -n mydisk.vhd -t file-pageblob`
+
+>Note: The file size and block size must be a multiple of 512 (bytes). The maximum block size is 4MB.
+
+
+### Upload from an HTTP/HTTPS source to Azure Blob Storage
+
+To block blob storage:
+
+`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blockblob`
+
+To page blob storage:
+
+`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-blockblob`
+
+You can use this approach to transfer data between Azure Storage accounts and blob types - e.g. transfer a blob from one account to another or from a page blob to block blob.
+
+The source is a page blob with a SAS token and the target is block blob:
+
+`./blobporter -f "https://myaccount.blob.core.windows.net/vhds/my.vhd?st=2015-03-23T03%3A59%3A00Z&se=2015-03-24T03%3A59%3A00Z&sp=rl&sv=2015-12-11&sr=b&sig=123rfdAsYyqOxxOGe28%3Fp4H6r5reR8pdSBdlchi64wgs3D"  -c mycontainer -n my.vhd -t http-blockblob`
+
+>Note: In HTTP/HTTPS to blob transfers data is downloaded and uploaded as it is received without disk IO, however, since data is read and sent via the network, the process is network and memory bound.
+
+### Download from Azure Blob Storage
+
+From blob Storage to a local file, the source can be a page or block blob:
 
 `./blobporter -f /datadrive/file.bam  -c mycontainer -n file.bam -t blob-file`
 
-Download a file via HTTP to a local file:
+>Note: The blob name is specified using the -n option and the value of the -f option is the local filename.
+
+### Download a file via HTTP to a local file
 
 `./blobporter -f "http://mysource/file.bam"  -n /datadrive/file.bam -t http-file`
+
+>Note: The ACCOUNT_NAME and ACCOUNT_KEY environment variables are not required in this scenario.
 
 ## Command Options
 
@@ -107,13 +157,16 @@ Download a file via HTTP to a local file:
 
 - `-d` *string* or `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
+- `-t` *string* or `--transfer_type` *string*  defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file
+
+
 ## Performance Considerations
 
-By default BlobPorter creates 9 readers and 6 workers for each core in the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
+By default, BlobPorter creates 9 readers and 6 workers for each core on the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
 
 - If during the transfer the buffer level is constant at 000%, workers could be waiting for data. Consider increasing the number of readers. If the level is 100% the opposite applies; increasing the number of workers could help.
 
-- In BlobPorter, each reader or worker correlates to one goroutine. Goroutines are lightweight and a Go program can have a high number of them. However, there's a point where the overhead of context switching impacts overall performance. Increase these values in small increments, e.g. 5.
+- In BlobPorter, each reader or worker correlates to one goroutine. Goroutines are lightweight and a Go program can create a high number of goroutines, however, there's a point where the overhead of context switching impacts overall performance. Increase these values in small increments, e.g. 5.
 
 - For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 

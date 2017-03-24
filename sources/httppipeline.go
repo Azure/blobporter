@@ -92,13 +92,12 @@ func getSourceSize(sourceURI string) (size int) {
 }
 
 //GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
-//Returns a print friendly array of strings of len == 1 with the file's URL and size.
-func (f HTTPPipeline) GetSourcesInfo() []string {
-	// Single file support
-	sources := make([]string, len(f.Sources))
+//Returns an array of pipeline.SourceInfo[] with the files URL, alias and size.
+func (f HTTPPipeline) GetSourcesInfo() []pipeline.SourceInfo {
+	sources := make([]pipeline.SourceInfo, len(f.Sources))
 
 	for i := 0; i < len(f.Sources); i++ {
-		sources[i] = fmt.Sprintf("URL:%v, Size:%v", f.Sources[i].SourceURI, f.Sources[i].SourceSize)
+		sources[i] = pipeline.SourceInfo{SourceName: f.Sources[i].SourceURI, TargetAlias: f.Sources[i].TargetAlias, Size: f.Sources[i].SourceSize}
 	}
 
 	return sources
