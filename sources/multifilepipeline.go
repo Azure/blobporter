@@ -148,13 +148,13 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 }
 
 //GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
-//Returns a print friendly array of strings with the name and size of the files to be transferred.
-func (f MultiFilePipeline) GetSourcesInfo() []string {
-	// Single file support
-	sources := make([]string, len(f.FilesInfo))
+//Returns an an array of SourceInfo with the name, alias and size of the files to be transferred.
+func (f MultiFilePipeline) GetSourcesInfo() []pipeline.SourceInfo {
+
+	sources := make([]pipeline.SourceInfo, len(f.FilesInfo))
 	var i = 0
 	for _, file := range f.FilesInfo {
-		sources[i] = fmt.Sprintf("File:%v, Size:%v", file.SourceURI, (*file.FileStats).Size())
+		sources[i] = pipeline.SourceInfo{SourceName: file.SourceURI, TargetAlias: file.TargetAlias, Size: uint64((*file.FileStats).Size())}
 		i++
 	}
 

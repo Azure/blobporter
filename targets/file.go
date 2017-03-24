@@ -58,6 +58,12 @@ func NewFile(targetFileName string, overwrite bool, numberOfHandles int) pipelin
 	return File{FileHandles: fhQ, FileStat: &fileStat, TargetFileName: targetFileName}
 }
 
+//PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
+//Passthrough no need to pre-process for a file target.
+func (t File) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+	return nil
+}
+
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //For a file download a final commit is not required and this implementation closes all the filehandles.
 func (t File) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {

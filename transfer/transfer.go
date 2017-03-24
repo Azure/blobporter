@@ -73,43 +73,41 @@ type Definition string
 
 // The different transfers types
 const (
-	FileToBlob Definition = "file-blob"
-	HTTPToBlob            = "http-blob"
-	BlobToFile            = "blob-file"
-	HTTPToFile            = "http-file"
-	none                  = "none"
+	FileToBlock Definition = "file-blockblob"
+	HTTPToBlock            = "http-blockblob"
+	BlobToFile             = "blob-file"
+	FileToPage             = "file-pageblob"
+	HTTPToPage             = "http-pageblob"
+	HTTPToFile             = "http-file"
+	none                   = "none"
 )
-
-//ToString converts the enum value to string
-func (d *Definition) ToString() string {
-	switch *d {
-	case FileToBlob:
-		return "file-blob"
-	case HTTPToBlob:
-		return "http-blob"
-	case BlobToFile:
-		return "blob-file"
-	case HTTPToFile:
-		return "http-file"
-	default:
-		return "none"
-	}
-}
 
 //ParseTransferDefinition parses a Definition from a string.
 func ParseTransferDefinition(str string) (Definition, error) {
 	val := strings.ToLower(str)
 	switch val {
 	case "file-blob":
-		return FileToBlob, nil
+		return FileToBlock, nil
+	case "file-blockblob":
+		return FileToBlock, nil
 	case "http-blob":
-		return HTTPToBlob, nil
+		return HTTPToBlock, nil
+	case "http-blockblob":
+		return HTTPToBlock, nil
 	case "blob-file":
+		return BlobToFile, nil
+	case "pageblob-file":
+		return BlobToFile, nil
+	case "blockblob-file":
 		return BlobToFile, nil
 	case "http-file":
 		return HTTPToFile, nil
+	case "file-pageblob":
+		return FileToPage, nil
+	case "http-pageblob":
+		return HTTPToPage, nil
 	default:
-		return none, fmt.Errorf("%v is not a valid transfer definition value.\n Valid values: file-blob, http-blob, blob-file, http-file", str)
+		return none, fmt.Errorf("%v is not a valid transfer definition value.\n Valid values: file-blockblob, http-blockblob,file-pageblob, http-pageblob, pageblob-file, blockblob-file, http-file", str)
 	}
 }
 
@@ -208,7 +206,7 @@ func (w *Worker) recordStatus(tb *pipeline.Part, startTime time.Time, d time.Dur
 //ProgressUpdate called whenever a worker completes successfully
 type ProgressUpdate func(results pipeline.WorkerResult, committedCount int, bufferSize int)
 
-//Transfer TODO
+//Transfer top data structure holding the state of the transfer.
 type Transfer struct {
 	SourcePipeline      *pipeline.SourcePipeline
 	TargetPipeline      *pipeline.TargetPipeline
@@ -223,14 +221,14 @@ type Transfer struct {
 	readPartsBufferSize int
 }
 
-//StatsInfo TODO
+//StatsInfo contains transfer statistics, used at the end of the transfer
 type StatsInfo struct {
 	StartTime        time.Time
 	Duration         time.Duration
 	CumWriteDuration time.Duration
 }
 
-//WaitGroups  TODO
+//WaitGroups holds all wait groups involved in the transfer.
 type WaitGroups struct {
 	Readers sync.WaitGroup
 	Workers sync.WaitGroup
@@ -294,6 +292,8 @@ func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate P
 
 	t.Stats.StartTime = time.Now()
 
+	t.preprocessSources()
+
 	t.startReaders(t.ControlChannels.Partitions, t.ControlChannels.Parts, t.ControlChannels.ReadParts, t.NumOfReaders, &t.SyncWaitGroups.Readers, t.SourcePipeline)
 
 	t.startWorkers(t.ControlChannels.ReadParts, t.ControlChannels.Results, t.NumOfWorkers, &t.SyncWaitGroups.Workers, dupeLevel, t.TargetPipeline)
@@ -302,15 +302,24 @@ func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate P
 
 }
 
+//Sequentially calls the PreProcessSourceInfo implementation of the target pipeline for each source in the transfer.
+func (t *Transfer) preprocessSources() {
+	sourcesInfo := (*t.SourcePipeline).GetSourcesInfo()
+	for i := 0; i < len(sourcesInfo); i++ {
+		if err := (*t.TargetPipeline).PreProcessSourceInfo(&sourcesInfo[i]); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
 //WaitForCompletion blocks until the readers, writers and commit operations complete.
 //Duration property is set and returned.
 func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
 
 	t.SyncWaitGroups.Readers.Wait()
-	cc := (*t.ControlChannels)
-	close(cc.ReadParts)
+	close(t.ControlChannels.ReadParts)
 	t.SyncWaitGroups.Workers.Wait() // Ensure all upload workers complete
-	close(cc.Results)
+	close(t.ControlChannels.Results)
 	t.SyncWaitGroups.Commits.Wait() // Ensure all commits complete
 	t.Stats.Duration = time.Now().Sub(t.Stats.StartTime)
 
@@ -387,7 +396,6 @@ func (t *Transfer) startReaders(partitionsQ chan pipeline.PartsPartition, partsQ
 // startWorker starts a worker that reads from the worker queue channel. Which contains the read parts from the source.
 // Calls the target's WritePart implementation and sends the result to the results channel.
 func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
-
 	var tb pipeline.Part
 	var ok bool
 	var duration time.Duration
@@ -395,11 +403,11 @@ func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 	var retries int
 	var err error
 	var t = (*target)
+	defer w.Wg.Done()
 	for {
 		tb, ok = <-w.WorkerQueue
 
 		if !ok { // Work queue has been closed, so done.
-			w.Wg.Done()
 			return
 		}
 
@@ -416,7 +424,7 @@ func (w *Worker) startWorker(target *pipeline.TargetPipeline) {
 			tb.ReturnBuffer()
 			w.recordStatus(&tb, startTime, duration, "Success", retries)
 		} else {
-			panic(err)
+			log.Fatal(err)
 		}
 	}
 
