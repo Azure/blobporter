@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -204,7 +205,7 @@ func GetNumberOfBlocks(size uint64, blockSize uint64) int {
 	return numOfBlocks
 }
 
-//GetBlobStorageClient gets a storage client with support for large block blobs
+//GetBlobStorageClient gets a storage client with support for larg block blobs
 func GetBlobStorageClient(accountName string, accountKey string) storage.BlobStorageClient {
 	var bc storage.BlobStorageClient
 	var client storage.Client
@@ -223,6 +224,46 @@ func GetBlobStorageClient(accountName string, accountKey string) storage.BlobSto
 	bc = client.GetBlobService()
 
 	return bc
+}
+
+//AskUser places a yes/no question to the user provided by the stdin
+func AskUser(question string) bool {
+	fmt.Printf(question)
+	for {
+		var input string
+		n, err := fmt.Scanln(&input)
+		if n < 1 || err != nil {
+			fmt.Println("invalid input")
+		}
+		input = strings.ToLower(input)
+		switch input {
+		case "y":
+			return true
+		case "n":
+			return false
+		default:
+			fmt.Printf("Invalid response.\n")
+			fmt.Printf(question)
+		}
+	}
+}
+
+//ValidContainerName is true if the name of the container is valid, false if is not
+func ValidContainerName(name string) bool {
+	if len(name) < 3 {
+		return false
+	}
+	expr := "^[a-z0-9]+([-]?[a-z0-9]){1,63}$"
+	valid := regexp.MustCompile(expr)
+	resp := valid.MatchString(name)
+	if !resp {
+		fmt.Printf("The name provided for the container is invalid, it must conform the following rules:\n")
+		fmt.Printf("1. Container names must start with a letter or number, and can contain only letters, numbers, and the dash (-) character.\n")
+		fmt.Printf("2. Every dash (-) character must be immediately preceded and followed by a letter or number; consecutive dashes are not permitted in container names.\n")
+		fmt.Printf("3. All letters in a container name must be lowercase.\n")
+		fmt.Printf("4. Container names must be from 3 through 63 characters long.\n")
+	}
+	return resp
 }
 
 var storageHTTPClient *http.Client
