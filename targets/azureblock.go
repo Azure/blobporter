@@ -2,7 +2,6 @@ package targets
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/storage"
@@ -23,26 +22,12 @@ type AzureBlock struct {
 
 //NewAzureBlock creates a new Azure Block target
 func NewAzureBlock(accountName string, accountKey string, container string) pipeline.TargetPipeline {
-	if !util.ValidContainerName(container) {
-		log.Fatalf("Container name was invalid")
-	}
+
+	util.CreateContainerIfNotExists(container, accountName, accountKey)
+
 	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 	bc := util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)
-	ok, err := bc.ContainerExists(container)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if ok == false {
-		q := "Container '" + container + "' does not exist. Would you like to create it?[y/n]"
-		if !util.AskUser(q) {
-			log.Fatal("Container was not created")
-		}
-		if err := bc.CreateContainer(container, "container"); err != nil { //TODO: Do we need to specify the type of container?
-			log.Fatalf("Could not create the container '%v'. Error: %v\n", container, err)
 
-		}
-		fmt.Printf("Created.\n")
-	}
 	return AzureBlock{Creds: &creds, Container: container, StorageClient: bc}
 }
 

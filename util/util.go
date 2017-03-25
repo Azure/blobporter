@@ -205,6 +205,29 @@ func GetNumberOfBlocks(size uint64, blockSize uint64) int {
 	return numOfBlocks
 }
 
+//CreateContainerIfNotExists Creates a new container if doesn't exists. Validates the name of the container.
+func CreateContainerIfNotExists(container string, accountName string, accountKey string) {
+
+	if !isValidContainerName(container) {
+		log.Fatalf("Container name is invalid")
+	}
+
+	bc := GetBlobStorageClient(accountName, accountKey)
+
+	if exists, err := bc.ContainerExists(container); err == nil {
+		if !exists {
+			fmt.Printf("Info! The container doesn't exist. Creating it...\n")
+			if err := bc.CreateContainer(container, storage.ContainerAccessTypePrivate); err != nil {
+				log.Fatalf("Could not create the container '%v'. Error: %v\n", container, err)
+
+			}
+		}
+	} else {
+		log.Fatal(err)
+	}
+
+}
+
 //GetBlobStorageClient gets a storage client with support for larg block blobs
 func GetBlobStorageClient(accountName string, accountKey string) storage.BlobStorageClient {
 	var bc storage.BlobStorageClient
@@ -248,8 +271,8 @@ func AskUser(question string) bool {
 	}
 }
 
-//ValidContainerName is true if the name of the container is valid, false if is not
-func ValidContainerName(name string) bool {
+//isValidContainerName is true if the name of the container is valid, false if not
+func isValidContainerName(name string) bool {
 	if len(name) < 3 {
 		return false
 	}

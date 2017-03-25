@@ -22,6 +22,7 @@ type AzurePage struct {
 
 //NewAzurePage creates a new Azure Block target
 func NewAzurePage(accountName string, accountKey string, container string) pipeline.TargetPipeline {
+	util.CreateContainerIfNotExists(container, accountName, accountKey)
 	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 	client := util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)
 	return AzurePage{Creds: &creds, Container: container, StorageClient: &client}
@@ -64,7 +65,7 @@ func (t AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, Number
 }
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
-//Passthrough no need to process a written part when transfering to a page blob.
+//Passthrough no need to process a written part when transferring to a page blob.
 func (t AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	err = nil
