@@ -101,12 +101,11 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 	var fileURI string
 	var fileHandle *os.File
 	var bytesRead int
-
+	defer wg.Done()
 	for {
 		partition, ok = <-partitionsQ
 
 		if !ok {
-			wg.Done()
 			for _, fh := range fileHandles {
 				fh.Close()
 			}

@@ -112,11 +112,11 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 	var req *http.Request
 	var res *http.Response
 	client := util.NewHTTPClient()
+	defer wg.Done()
 	for {
 		p, ok := <-partsQ
 
 		if !ok {
-			wg.Done()
 			return // no more blocks of file data to be read
 		}
 

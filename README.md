@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.4.01/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.4.02/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.4.01/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.4.02/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -70,6 +70,8 @@ Single file upload:
 
 `./blobporter -f /datadrive/myfile.tar -c mycontainer -n myfile.tar`
 
+>Note: If the container does not exist, it will be created.
+
 Upload all files that match the pattern:
 
 `./blobporter -f "/datadrive/*.tar" -c mycontainer`
@@ -84,9 +86,9 @@ If you want to rename multiple files, you can use the -n option:
 
 ### Upload to Azure Page Blob Storage
 
-Same as uploading to block blob storage, but with setting the transfer definiton (-t option) to the value file-pageblob.
+Same as uploading to block blob storage, but with the transfer definiton (-t option) set to file-pageblob.
 
-For example, a single file upload becomes:
+For example, a single file upload to page blob:
 
 `./blobporter -f /datadrive/mydisk.vhd -c mycontainer -n mydisk.vhd -t file-pageblob`
 
@@ -164,7 +166,7 @@ By default, BlobPorter creates 9 readers and 6 workers for each core on the comp
 
 - For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
-- In Linux, BlobPorter reduces the number of readers if the number of files results in greater than 1024 handles. Linux restricts the number of files open by a process. Each reader holds a handle to the file to transfer. For example, you can reach this limit if you have 10 readers and want to transfer more than 102 files. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
+- In Linux, BlobPorter reduces the number of readers if the number of open files during the transfer is greater than 1024. Linux restricts the number of files open by a process and since each reader holds a handle to the file to transfer, you can reach this limit if you want transfer multiple files with a relative low number of readers. For example, if you have 10 readers and want to transfer more than 102 files you will reach this limit. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
 
 ## Contribute
 
