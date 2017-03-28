@@ -22,9 +22,13 @@ type AzureBlock struct {
 
 //NewAzureBlock creates a new Azure Block target
 func NewAzureBlock(accountName string, accountKey string, container string) pipeline.TargetPipeline {
-	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 
-	return AzureBlock{Creds: &creds, Container: container, StorageClient: util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)}
+	util.CreateContainerIfNotExists(container, accountName, accountKey)
+
+	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
+	bc := util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)
+
+	return AzureBlock{Creds: &creds, Container: container, StorageClient: bc}
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
