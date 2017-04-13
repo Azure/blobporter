@@ -163,7 +163,8 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 //Constructs the Part's channel arithmetically from the size of the sources.
 func (f HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
 	allParts := make([][]pipeline.Part, len(f.Sources))
-	bufferQ := pipeline.NewBytesBufferChan(blockSize)
+	//disable memory buffer for parts (bufferQ == nil)
+	var bufferQ chan []byte
 	for i, source := range f.Sources {
 		size = size + source.SourceSize
 		parts, sourceNumOfBlocks := pipeline.ConstructPartsQueue(source.SourceSize, blockSize, source.SourceURI, source.TargetAlias, bufferQ)

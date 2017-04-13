@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.4.02/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.4.03/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.4.02/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.4.03/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -58,8 +58,8 @@ set ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 Set environment variables (if using PowerShell):
 
 ```PowerShell
-env$:ACCOUNT_NAME="<STORAGE_ACCOUNT_NAME>"
-env$:ACCOUNT_KEY="<STORAGE_ACCOUNT_KEY>"
+$env:ACCOUNT_NAME="<STORAGE_ACCOUNT_NAME>"
+$env:ACCOUNT_KEY="<STORAGE_ACCOUNT_KEY>"
 ```
 
 ## Examples
@@ -158,7 +158,7 @@ From blob storage to a local file, the source can be a page or block blob:
 
 ## Performance Considerations
 
-By default, BlobPorter creates 9 readers and 6 workers for each core on the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
+By default, BlobPorter creates 6 readers and 9 workers for each core on the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
 
 - If during the transfer the buffer level is constant at 000%, workers could be waiting for data. Consider increasing the number of readers. If the level is 100% the opposite applies; increasing the number of workers could help.
 
@@ -166,7 +166,7 @@ By default, BlobPorter creates 9 readers and 6 workers for each core on the comp
 
 - For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
-- In Linux, BlobPorter reduces the number of readers if the number of open files during the transfer is greater than 1024. Linux restricts the number of files open by a process and since each reader holds a handle to the file to transfer, you can reach this limit if you want transfer multiple files with a relative low number of readers. For example, if you have 10 readers and want to transfer more than 102 files you will reach this limit. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
+- In Linux, BlobPorter reduces the number of readers if the number of open files during the transfer is greater than 1024. Linux restricts the number of files open by a process and since each reader holds a handle to the file to transfer, you can reach this limit if you want transfer multiple files even with a relatively low number of readers. For example, if you have 10 readers and want to transfer more than 102 files you will reach this limit. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
 
 ## Contribute
 

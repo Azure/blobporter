@@ -245,6 +245,11 @@ func (p *Part) ToString() string {
 //The slice is read from channel of pre-allocated buffers. If the channel is empty a new slice is allocated.
 func (p *Part) GetBuffer() {
 
+	//only retrive from the buffer if channel is available
+	if p.BufferQ == nil {
+		return
+	}
+
 	select {
 	case p.Data = <-p.BufferQ:
 	default:
@@ -256,6 +261,12 @@ func (p *Part) GetBuffer() {
 
 //ReturnBuffer adds part's buffer to channel so it can be reused.
 func (p *Part) ReturnBuffer() {
+
+	//only return to the buffer if channel is available
+	if p.BufferQ == nil {
+		p.Data = nil
+		return
+	}
 
 	select {
 	case p.BufferQ <- p.Data:
