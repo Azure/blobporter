@@ -19,7 +19,7 @@ sudo chmod +x ./linux_amd64/blobporter
 
 #Compare MD5's
 REF_MD5="$(md5sum $REF_FILE | awk '{print $1}')"
-VAL_MD5="$(md5sum $DOWN_REF_FILE | awk '{print $1}')"
+VAL_MD5="$(md5sum $UP_REF_FILE | awk '{print $1}')"
 
 if [ "$REF_MD5" = "$VAL_MD5" ] ; then
     echo "Success!"
@@ -31,6 +31,6 @@ else
 fi
 #clean up
 rm $REF_FILE
-rm $DOWN_REF_FILE
+rm $UP_REF_FILE
 
 exit $EXIT_CODE
