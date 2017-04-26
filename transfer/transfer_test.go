@@ -166,7 +166,7 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	sourceFiles[0] = "d" + sourceFile
-	ap = targets.NewFile(sourceFile, true, numOfWorkers)
+	ap = targets.NewMultiFile(true, numOfWorkers)
 	fp = sources.NewHTTP([]string{sourceURI}, sourceFiles)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -186,13 +186,12 @@ func TestFileToBlobToFile(t *testing.T) {
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
-	ap = targets.NewFile("d"+sourceFile, true, numOfWorkers)
+	ap = targets.NewMultiFile(true, numOfWorkers)
 	fp = sources.NewAzureBlob(container, []string{sourceFile}, accountName, accountKey)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
-	os.Remove("d" + sourceFile)
 	os.Remove(sourceFile)
 
 }
@@ -207,7 +206,7 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
-	ap = targets.NewFile(alias, true, numOfWorkers)
+	ap = targets.NewMultiFile(true, numOfWorkers)
 	fp = sources.NewAzureBlob(container, []string{alias}, accountName, accountKey)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
