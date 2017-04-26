@@ -5,11 +5,9 @@ import (
 	"log"
 	"strconv"
 	"sync"
-	"time"
-
-	"net/http"
 
 	"fmt"
+	"net/http"
 
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
@@ -21,9 +19,10 @@ import (
 
 const sasTokenNumberOfHours = 4
 
-// HTTPPipeline  contructs parts  channel and implements data readers for file exposed via HTTP
+// HTTPPipeline  constructs parts  channel and implements data readers for file exposed via HTTP
 type HTTPPipeline struct {
-	Sources []SourceInfo
+	Sources    []SourceInfo
+	HTTPClient *http.Client
 }
 
 //SourceInfo TODO
@@ -36,6 +35,7 @@ type SourceInfo struct {
 //NewHTTPAzureBlockPipeline creates a new instance of HTTPPipeline
 //Creates a SASURI to the blobName with an expiration of sasTokenNumberOfHours.
 //blobName is used as the target alias.
+/*
 func NewHTTPAzureBlockPipeline(container string, blobNames []string, accountName string, accountKey string) pipeline.SourcePipeline {
 	var err error
 	sourceURIs := make([]string, len(blobNames))
@@ -53,25 +53,34 @@ func NewHTTPAzureBlockPipeline(container string, blobNames []string, accountName
 		sourceURIs[i] = sasURL
 	}
 
-	return NewHTTPPipeline(sourceURIs, blobNames)
+	return NewHTTPPipeline(sourceURIs, nil)
 }
+*/
 
-//NewHTTPPipeline creates a new instance of HTTPPipeline
+//NewHTTP creates a new instance of an HTTP source
 //To get the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
-func NewHTTPPipeline(sourceURIs []string, targetAliases []string) pipeline.SourcePipeline {
+func NewHTTP(sourceURIs []string, targetAliases []string) pipeline.SourcePipeline {
 	setTargetAlias := len(sourceURIs) == len(targetAliases)
 	sources := make([]SourceInfo, len(sourceURIs))
 	for i := 0; i < len(sourceURIs); i++ {
 		targetAlias := sourceURIs[i]
 		if setTargetAlias {
 			targetAlias = targetAliases[i]
+		} else {
+			var err error
+			targetAlias, err = util.GetFileNameFromURL(sourceURIs[i])
+
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
+
 		sources[i] = SourceInfo{
 			SourceSize:  uint64(getSourceSize(sourceURIs[i])),
 			TargetAlias: targetAlias,
 			SourceURI:   sourceURIs[i]}
 	}
-	return HTTPPipeline{Sources: sources}
+	return HTTPPipeline{Sources: sources, HTTPClient: util.NewHTTPClient()}
 }
 
 func getSourceSize(sourceURI string) (size int) {
@@ -111,7 +120,6 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 	var err error
 	var req *http.Request
 	var res *http.Response
-	client := util.NewHTTPClient()
 	defer wg.Done()
 	for {
 		p, ok := <-partsQ
@@ -128,9 +136,8 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 		req.Header.Set("Range", header)
 
 		util.RetriableOperation(func(r int) error {
-			if res, err = client.Do(req); err != nil || res.StatusCode != 206 {
+			if res, err = f.HTTPClient.Do(req); err != nil || res.StatusCode != 206 {
 				var status int
-
 				if res != nil {
 					status = res.StatusCode
 					err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
@@ -141,17 +148,18 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 				}
 				return err
 			}
+
+			p.Data, err = ioutil.ReadAll(res.Body)
+			res.Body.Close()
+			if err != nil {
+				return err
+			}
+
 			if util.Verbose {
 				fmt.Printf("OK|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 			}
 			return nil
 		})
-
-		p.GetBuffer()
-		if p.Data, err = ioutil.ReadAll(res.Body); err != nil {
-			log.Fatal(err)
-		}
-		res.Body.Close()
 
 		readPartsQ <- p
 		blocksHandled++
@@ -165,18 +173,24 @@ func (f HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ cha
 	allParts := make([][]pipeline.Part, len(f.Sources))
 	//disable memory buffer for parts (bufferQ == nil)
 	var bufferQ chan []byte
+	largestNumOfParts := 0
 	for i, source := range f.Sources {
 		size = size + source.SourceSize
 		parts, sourceNumOfBlocks := pipeline.ConstructPartsQueue(source.SourceSize, blockSize, source.SourceURI, source.TargetAlias, bufferQ)
 		allParts[i] = parts
 		numOfBlocks = numOfBlocks + sourceNumOfBlocks
+		if largestNumOfParts < len(parts) {
+			largestNumOfParts = len(parts)
+		}
 	}
 
 	partsQ = make(chan pipeline.Part, numOfBlocks)
 
-	for _, ps := range allParts {
-		for _, p := range ps {
-			partsQ <- p
+	for i := 0; i < largestNumOfParts; i++ {
+		for _, ps := range allParts {
+			if i < len(ps) {
+				partsQ <- ps[i]
+			}
 		}
 	}
 
