@@ -36,10 +36,10 @@ type FileInfo struct {
 	NumOfBlocks int
 }
 
-// NewMultiFilePipeline creates a new MultiFilePipeline.
+// NewMultiFile creates a new MultiFilePipeline.
 // If the sourcePattern results in a single file, the targetAlias, if set, will be used as the target name.
 // Otherwise the full original file name will be used instead.
-func NewMultiFilePipeline(sourcePatterns []string, blockSize uint64, targetAliases []string, numOfPartitions int) pipeline.SourcePipeline {
+func NewMultiFile(sourcePatterns []string, blockSize uint64, targetAliases []string, numOfPartitions int) pipeline.SourcePipeline {
 	var files []string
 	var err error
 	//get files from patterns
@@ -189,7 +189,7 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 
 //ConstructBlockInfoQueue implements ConstructBlockInfoQueue from the pipeline.SourcePipeline Interface.
 // this implementation uses partitions to group parts into a set that can be read sequentially.
-// This is to avoid Window's memory preasure when calling SetFilePointer numerous times on the same handle
+// This is to avoid Window's memory pressure when calling SetFilePointer numerous times on the same handle
 func (f MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
 	numOfBlocks = f.TotalNumberOfBlocks
 	size = f.TotalSize

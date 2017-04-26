@@ -259,12 +259,18 @@ func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipelin
 	t := Transfer{ThreadTarget: threadTarget, NumOfReaders: readers, NumOfWorkers: workers, SourcePipeline: source,
 		TargetPipeline: target, SyncWaitGroups: &wg, ControlChannels: &channels, Stats: &StatsInfo{}}
 
+	//validate that all sourceURIs are unique
+	sources := (*source).GetSourcesInfo()
+
+	if s := getFirstDuplicateSource(sources); s != nil {
+		log.Fatalf("Invalid input. You can't start a transfer with duplicate sources.\nFirst duplicate detected:%v\n", s)
+	}
 	//Setup the wait groups
 	t.SyncWaitGroups.Readers.Add(readers)
 	t.SyncWaitGroups.Workers.Add(workers)
 	t.SyncWaitGroups.Commits.Add(1)
 
-	//Create buffered chanels
+	//Create buffered channels
 	channels.Partitions, channels.Parts, t.TotalNumOfBlocks, t.TotalSize = (*source).ConstructBlockInfoQueue(blockSize)
 	readParts := make(chan pipeline.Part, t.getReadPartsBufferSize())
 	results := make(chan pipeline.WorkerResult, t.TotalNumOfBlocks)
@@ -274,7 +280,20 @@ func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipelin
 
 	return &t
 }
+func getFirstDuplicateSource(sources []pipeline.SourceInfo) *pipeline.SourceInfo {
+	countMap := make(map[string]int, len(sources))
 
+	for _, item := range sources {
+		x := countMap[item.SourceName]
+		x++
+		if x == 2 {
+			return &item
+		}
+		countMap[item.SourceName] = x
+	}
+
+	return nil
+}
 func (t *Transfer) getReadPartsBufferSize() int {
 	if t.readPartsBufferSize == 0 {
 		t.readPartsBufferSize = t.NumOfReaders

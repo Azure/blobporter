@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.4.03/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.01/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.4.03/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.01/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -116,9 +116,16 @@ The source is a page blob with a SAS token and the target is block blob:
 
 From blob storage to a local file, the source can be a page or block blob:
 
-`./blobporter -f /datadrive/file.bam  -c mycontainer -n file.bam -t blob-file`
+`./blobporter  -c mycontainer -n file.bam -t blob-file`
 
->Note: The blob name is specified using the -n option and the value of the -f option is the local filename.
+You can use the -n option to specify a prefix. All blobs that match the prefix will be downloaded.
+The following will download all blobs in the container that start with `f`
+
+`./blobporter  -c mycontainer -n f -t blob-file`
+
+Without the -n option all files in the container will be downloaded.
+
+`./blobporter  -c mycontainer -t blob-file`
 
 ### Download a file via HTTP to a local file
 
@@ -128,17 +135,17 @@ From blob storage to a local file, the source can be a page or block blob:
 
 ## Command Options
 
-- `-f` *string* or `--file` *string* URL, file or files (e.g. /data/*.gz) to upload. Destination file for download scenarios.
+- `-f`, `--file` *string* URL, file or files (e.g. /data/*.gz) to upload. Destination file for download scenarios.
 
-- `-c` *string* or `--container_name` *string* container name (e.g. `mycontainer`).
+- `-c`, `--container_name` *string* container name (e.g. `mycontainer`).
 
-- `-n` *string* or `--blob_name` *string* blob name (e.g. myblob.txt).
+- `-n`, `--blob_name` *string* blob name (e.g. myblob.txt) or prefix for download scenarios.
 
-- `-g` *int* or `--concurrent_workers` *int* number of routines for parallel upload.
+- `-g`, `--concurrent_workers` *int* number of routines for parallel upload.
 
-- `-r` *int* or `--concurrent_readers` *int* number of routines for parallel reading of the input.
+- `-r`, `--concurrent_readers` *int* number of routines for parallel reading of the input.
 
-- `-b` *string* or `--block_size` *string* desired size of each blob block. Can be specified as an integer byte count or integer suffixed with B, KB or MB (default "4MB", maximum "100MB").
+- `-b`, `--block_size` *string* desired size of each blob block. Can be specified as an integer byte count or integer suffixed with B, KB or MB (default "4MB", maximum "100MB").
 
   - *Note:* For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
 
@@ -146,15 +153,15 @@ From blob storage to a local file, the source can be a page or block blob:
 
   - The maximum block size is 100MB
 
-- `-a` *string* or `--account_name` *string* storage account name (e.g. mystorage). Can also be specified via the ACCOUNT_NAME environment variable.
+- `-a`, `--account_name` *string* storage account name (e.g. mystorage). Can also be specified via the ACCOUNT_NAME environment variable.
 
-- `-k` *string* or `--account_key` *string* storage account key string (e.g. `4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==`). Can also be specified via the ACCOUNT_KEY environment variable.
+- `-k`, `--account_key` *string* storage account key string (e.g. `4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==`). Can also be specified via the ACCOUNT_KEY environment variable.
 
-- `-s` *int* or `--http_timeout` *int* HTTP client timeout in seconds. Default value is 30s.
+- `-s`, `--http_timeout` *int* HTTP client timeout in seconds. Default value is 30s.
 
-- `-d` *string* or `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
+- `-d`, `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
-- `-t` *string* or `--transfer_type` *string*  defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file
+- `-t`, `--transfer_type` *string*  defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file
 
 ## Performance Considerations
 
