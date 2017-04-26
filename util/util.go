@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"net/http"
+	"net/url"
 
 	"github.com/Azure/azure-sdk-for-go/storage"
 )
@@ -115,7 +116,7 @@ func ByteCountFromSizeString(sizeStr string) (uint64, error) {
 //StringVarAlias  string commandline option
 func StringVarAlias(varPtr *string, shortflag string, longflag string, defaultVal string, description string) {
 	flag.StringVar(varPtr, shortflag, defaultVal, description)
-	flag.StringVar(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
+	flag.StringVar(varPtr, longflag, defaultVal, "")
 }
 
 //ListFlag TODO
@@ -135,32 +136,32 @@ func (lst *ListFlag) Set(value string) error {
 //StringListVarAlias  string commandline option
 func StringListVarAlias(varPtr *ListFlag, shortflag string, longflag string, defaultVal string, description string) {
 	flag.Var(varPtr, shortflag, description)
-	flag.Var(varPtr, longflag, description+" [Same as -"+shortflag+"]")
+	flag.Var(varPtr, longflag, "")
 }
 
 //IntVarAlias  int commandline option
 func IntVarAlias(varPtr *int, shortflag string, longflag string, defaultVal int, description string) {
 	flag.IntVar(varPtr, shortflag, defaultVal, description)
-	flag.IntVar(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
+	flag.IntVar(varPtr, longflag, defaultVal, "")
 }
 
 //Uint64VarAlias  uint64 commandline option
 func Uint64VarAlias(varPtr *uint64, shortflag string, longflag string, defaultVal uint64, description string) {
 	flag.Uint64Var(varPtr, shortflag, defaultVal, description)
-	flag.Uint64Var(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
+	flag.Uint64Var(varPtr, longflag, defaultVal, "")
 }
 
 //BoolVarAlias bool commandline option
 func BoolVarAlias(varPtr *bool, shortflag string, longflag string, defaultVal bool, description string) {
 	flag.BoolVar(varPtr, shortflag, defaultVal, description)
-	flag.BoolVar(varPtr, longflag, defaultVal, description+" [Same as -"+shortflag+"]")
+	flag.BoolVar(varPtr, longflag, defaultVal, "")
 }
 
 ///////////////////////////////////////////////////////////////////
-// Retriable execution of a function -- used for Azure Storage requests
+// Retriable execution of a function
 ///////////////////////////////////////////////////////////////////
 
-const retryLimit = 30                             // max retries for an operation in retriableOperation
+const retryLimit = 50                             // max retries for an operation in retriableOperation
 const retrySleepDuration = time.Millisecond * 200 // Retry wait interval in retriableOperation
 
 //RetriableOperation executes a function, retrying up to "retryLimit" times and waiting "retrySleepDuration" between attempts
@@ -171,8 +172,13 @@ func RetriableOperation(operation func(r int) error) (duration time.Duration, st
 
 	for {
 		if retries >= retryLimit {
-			fmt.Print("Max number of retries exceeded.")
-			panic(err)
+			fmt.Print("Max number of retries was exceeded.\n")
+
+			if !Verbose {
+				handleExceededRetries(err)
+			} else {
+				panic(err)
+			}
 		}
 		if err = operation(retries); err == nil {
 			t1 := time.Now()
@@ -292,11 +298,11 @@ func isValidContainerName(name string) bool {
 var storageHTTPClient *http.Client
 
 //HTTPClientTimeout HTTP timeout of the HTTP client used by the storage client.
-var HTTPClientTimeout = 60
+var HTTPClientTimeout = 600
 
 const (
 	maxIdleConns        = 100
-	maxIdelConnsPerHost = 100
+	maxIdleConnsPerHost = 100
 )
 
 func getStorageHTTPClient() *http.Client {
@@ -315,7 +321,40 @@ func NewHTTPClient() *http.Client {
 		Timeout: time.Duration(HTTPClientTimeout) * time.Second,
 		Transport: &http.Transport{
 			MaxIdleConns:        maxIdleConns,
-			MaxIdleConnsPerHost: maxIdelConnsPerHost}}
+			MaxIdleConnsPerHost: maxIdleConnsPerHost}}
 
 	return &c
+}
+
+func handleExceededRetries(err error) {
+	errMsg := fmt.Sprintf("The number of retries has exceeded the maximum allowed.\nError: %v\nSuggestion:%v\n", err.Error(), getSuggestion(err))
+	log.Fatal(errMsg)
+}
+func getSuggestion(err error) string {
+	switch {
+	case strings.Contains(err.Error(), "ErrorMessage=The specified blob or block content is invalid"):
+		return "Try using a different container or upload and then delete a small blob with the same name."
+	case strings.Contains(err.Error(), "Client.Timeout"):
+		return "Try increasing the timeout using the -s option or reducing the number of workers and readers, options: -r and -g"
+	default:
+		return ""
+	}
+}
+
+//GetFileNameFromURL returns last part of URL (filename)
+func GetFileNameFromURL(sourceURI string) (string, error) {
+
+	purl, err := url.Parse(sourceURI)
+
+	if err != nil {
+		return "", err
+	}
+
+	parts := strings.Split(purl.Path, "/")
+
+	if len(parts) == 0 {
+		return "", fmt.Errorf("Invalid URL file was not found in the path")
+	}
+
+	return parts[len(parts)-1], nil
 }
