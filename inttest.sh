@@ -1,6 +1,6 @@
 #!/bin/bash
 REF_FILE="tempfile"
-DOWN_REF_FILE="dfile"
+UP_REF_FILE="dfile"
 CONT=$1
 FILE_SIZE=5242880 #5MiB
 EXIT_CODE=0
@@ -12,10 +12,10 @@ dd if=/dev/zero of=$REF_FILE bs=$FILE_SIZE count=1
 sudo chmod +x ./linux_amd64/blobporter
 
 #Upload file
-./linux_amd64/blobporter -f $REF_FILE -c $CONT 
+./linux_amd64/blobporter -f $REF_FILE -n $UP_REF_FILE -c $CONT 
 
 #Download file
-./linux_amd64/blobporter -f $DOWN_REF_FILE -c $CONT -n $REF_FILE -t blob-file
+./linux_amd64/blobporter -c $CONT -n $UP_REF_FILE -t blob-file
 
 #Compare MD5's
 REF_MD5="$(md5sum $REF_FILE | awk '{print $1}')"
