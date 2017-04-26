@@ -43,7 +43,7 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.4.03" // version number to show in help
+	programVersion           = "0.5.01" // version number to show in help
 )
 
 const numOfWorkersFactor = 9
@@ -57,38 +57,28 @@ func init() {
 	// shape the default parallelism based on number of CPUs
 	var defaultNumberOfWorkers = runtime.NumCPU() * numOfWorkersFactor
 	var defaultNumberOfReaders = runtime.NumCPU() * numOfReadersFactor
+
 	blockSizeStr = "4MB" // default size for blob blocks
 	const (
 		dblockSize             = 4 * util.MB
 		extraWorkerBufferSlots = 5
 	)
 
-	util.StringListVarAlias(&sourceURIs, "f", "file", "", "URL, file or files (e.g. /data/*.gz) to upload. \nDestination file for download.")
-	util.StringListVarAlias(&blobNames, "n", "name", "", "Blob name to upload or download from Azure Blob Storage. \nDestination file for download from URL")
+	util.StringListVarAlias(&sourceURIs, "f", "file", "", "URL, file or files (e.g. /data/*.gz) to upload. Destination file for download.")
+	util.StringListVarAlias(&blobNames, "n", "name", "", "Blob name to upload or download from Azure Blob Storage.  Destination file for download from URL")
 	util.StringVarAlias(&containerName, "c", "container_name", "", "container name (e.g. mycontainer)")
-	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, ""+
-		"number of threads for parallel upload")
-	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, ""+
-		"number of threads for parallel reading of the input file")
-	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, "desired size of each blob block. "+
-		"Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
-	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, "display verbose output (Version="+programVersion+")")
-	util.IntVarAlias(&util.HTTPClientTimeout, "s", "http_timeout", util.HTTPClientTimeout, "sets the HTTP client timeout in seconds. \nDefault value is 30s.")
-	util.StringVarAlias(&storageAccountName, "a", "account_name", "", ""+
-		"storage account name (e.g. mystorage). "+
-		"Can also be specified via the "+storageAccountNameEnvVar+" environment variable.")
-	util.StringVarAlias(&storageAccountKey, "k", "account_key", "", ""+
-		"storage account key string (e.g. "+
-		"4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==). "+
-		"Can also be specified via the "+storageAccountKeyEnvVar+" environment variable.")
-	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, ""+
-		"Desired level of effort to detect duplicate data blocks to minimize upload size. "+
-		"Must be one of "+transfer.DupeCheckLevelStr)
-	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", string(defaultTransferDef),
-		"Defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file")
+	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, " Number of routines for parallel upload")
+	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, " Number of threads for parallel reading of the input file")
+	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, " Desired size of each blob block. Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
+	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, " Display verbose output")
+	util.IntVarAlias(&util.HTTPClientTimeout, "s", "http_timeout", util.HTTPClientTimeout, "HTTP client timeout in seconds. Default value is 600s.")
+	util.StringVarAlias(&storageAccountName, "a", "account_name", "", " Storage account name (e.g. mystorage). Can also be specified via the "+storageAccountNameEnvVar+" environment variable.")
+	util.StringVarAlias(&storageAccountKey, "k", "account_key", "", " Storage account key string. Can also be specified via the "+storageAccountKeyEnvVar+" environment variable.")
+	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, " Desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of "+transfer.DupeCheckLevelStr)
+	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", string(defaultTransferDef), "Defines the type of source and target in the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file")
 }
 
-var dataTransfered uint64
+var dataTransferred uint64
 var targetRetries int32
 
 func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo) {
@@ -109,7 +99,6 @@ func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, thre
 	fmt.Printf("Cumulative Writes Duration: Total=%v, Avg Per Worker=%v\n",
 		cumWriteDuration, time.Duration(cumWriteDuration.Nanoseconds()/int64(numberOfWorkers)))
 	fmt.Printf("Retries: Avg=%v Total=%v\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
-
 }
 
 func main() {
@@ -181,34 +170,49 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 	switch defValue {
 	case transfer.FileToPage:
 		target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-		source = sources.NewMultiFilePipeline(sourceURIs, blockSize, blobNames, numberOfReaders)
+		source = sources.NewMultiFile(sourceURIs, blockSize, blobNames, numberOfReaders)
 	case transfer.FileToBlock:
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 		//Since this is default value detect if the source is http
 		if isSourceHTTP() {
-			source = sources.NewHTTPPipeline(sourceURIs, blobNames)
+			source = sources.NewHTTP(sourceURIs, blobNames)
 			transferDefStr = transfer.HTTPToBlock
 		} else {
-			source = sources.NewMultiFilePipeline(sourceURIs, blockSize, blobNames, numberOfReaders)
+			source = sources.NewMultiFile(sourceURIs, blockSize, blobNames, numberOfReaders)
 		}
 	case transfer.HTTPToPage:
 		target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-		source = sources.NewHTTPPipeline(sourceURIs, blobNames)
+		source = sources.NewHTTP(sourceURIs, blobNames)
 	case transfer.HTTPToBlock:
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-		source = sources.NewHTTPPipeline(sourceURIs, blobNames)
+		source = sources.NewHTTP(sourceURIs, blobNames)
 	case transfer.BlobToFile:
+
 		if len(blobNames) == 0 {
-			log.Fatal("Blob name(s) (-n) is required when downloading data from blob")
+			//use empty prefix to get the bloblist
+			blobNames = []string{""}
 		}
-		target = targets.NewFile(sourceURIs[0], true, numberOfWorkers)
-		source = sources.NewHTTPAzureBlockPipeline(containerName, blobNames, storageAccountName, storageAccountKey)
+
+		source = sources.NewAzureBlob(containerName, blobNames, storageAccountName, storageAccountKey)
+		target = targets.NewMultiFile(true, numberOfWorkers)
+
 	case transfer.HTTPToFile:
-		if len(blobNames) == 0 || blobNames[0] == "" {
-			log.Fatal("File name (-n) is required when downloading data from a URL")
+		var targetAliases []string
+
+		if len(blobNames) > 0 {
+			targetAliases = blobNames
+		} else {
+			targetAliases = make([]string, len(sourceURIs))
+			for i, src := range sourceURIs {
+				targetAliases[i], err = util.GetFileNameFromURL(src)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
 		}
-		target = targets.NewFile(blobNames[0], true, numberOfWorkers)
-		source = sources.NewHTTPPipeline(sourceURIs, blobNames)
+
+		target = targets.NewMultiFile(true, numberOfWorkers)
+		source = sources.NewHTTP(sourceURIs, blobNames)
 	}
 
 	return source, target
@@ -220,13 +224,9 @@ func parseAndValidate() {
 	flag.Parse()
 
 	var err error
-	if util.HTTPClientTimeout < 5 {
-		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 30s \n")
-		util.HTTPClientTimeout = 30
-	}
-
-	if len(sourceURIs) == 0 || sourceURIs == nil {
-		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
+	if util.HTTPClientTimeout < 30 {
+		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 600s \n")
+		util.HTTPClientTimeout = 600
 	}
 
 	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
@@ -253,45 +253,41 @@ func parseAndValidate() {
 //validates command line params considering the type of transfer
 func validateTransferTypesParams() error {
 	var transt transfer.Definition
-	storeCredsReq := true
 	var err error
 	if transt, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
 		return err
 	}
 
-	switch {
-	case transt == transfer.HTTPToPage || transt == transfer.FileToPage:
+	if transt == transfer.HTTPToPage || transt == transfer.FileToPage {
 		if blockSize%uint64(targets.PageSize) != 0 || blockSize > 4*util.MB {
 			return fmt.Errorf("Invalid block size (%v) for a page blob. The size must be a multiple of %v (bytes) and less or equal to %v (4MB)", blockSize, targets.PageSize, 4*util.MB)
 		}
-	case transt == transfer.BlobToFile:
-		if len(blobNames) == 0 {
-			return errors.New("Blob name(s) (-n) is required when downloading data from a blob")
-		}
-	case transt == transfer.HTTPToFile:
-		storeCredsReq = false
-		if len(blobNames) == 0 || blobNames[0] == "" {
-			return errors.New("File name (-n) is required when downloading data from an URL")
-		}
-
 	}
 
-	// wasn't specified, try the environment variable
-	if storageAccountName == "" && storeCredsReq {
-		envVal := os.Getenv(storageAccountNameEnvVar)
-		if envVal == "" {
-			return errors.New("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
-		}
-		storageAccountName = envVal
+	isUpload := transt != transfer.BlobToFile && transt != transfer.HTTPToFile
+
+	if (len(sourceURIs) == 0 || sourceURIs == nil) && isUpload {
+		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
 	}
 
-	// wasn't specified, try the environment variable
-	if storageAccountKey == "" && storeCredsReq {
-		envVal := os.Getenv(storageAccountKeyEnvVar)
-		if envVal == "" {
-			return errors.New("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
+	if transt != transfer.HTTPToFile {
+		// wasn't specified, try the environment variable
+		if storageAccountName == "" {
+			envVal := os.Getenv(storageAccountNameEnvVar)
+			if envVal == "" {
+				return errors.New("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
+			}
+			storageAccountName = envVal
 		}
-		storageAccountKey = envVal
+
+		// wasn't specified, try the environment variable
+		if storageAccountKey == "" {
+			envVal := os.Getenv(storageAccountKeyEnvVar)
+			if envVal == "" {
+				return errors.New("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
+			}
+			storageAccountKey = envVal
+		}
 	}
 
 	return nil
@@ -302,8 +298,8 @@ func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, comm
 
 		atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
 
-		dataTransfered = dataTransfered + uint64(r.BlockSize)
-		p := int(math.Ceil((float64(dataTransfered) / float64(totalSize)) * 100))
+		dataTransferred = dataTransferred + uint64(r.BlockSize)
+		p := int(math.Ceil((float64(dataTransferred) / float64(totalSize)) * 100))
 		var ind string
 		var pchar string
 		for i := 0; i < 25; i++ {

@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Launch",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "remotePath": "",
+            "port": 2345,
+            "host": "127.0.0.1",
+            "program": "${fileDirname}",
+            "env": {},
+            "args": [" -f \"http://video.ch9.ms/ch9/d36c/6cfce1e3-63e5-47a7-b3b6-8c813a23d36c/SnackPackPlanetXamarin.mp3\" -f \"http://video.ch9.ms/ch9/d36c/6cfce1e3-63e5-47a7-b3b6-8c813a23d36c/SnackPackPlanetXamarin.mp3\" -n v1.mp3 -n v2.mp3 -t http-file "] ,
+            "showLog": true
+        }
+    ]
+}
