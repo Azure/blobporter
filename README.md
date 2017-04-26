@@ -102,7 +102,7 @@ To block blob storage:
 
 To page blob storage:
 
-`./blobporter -f "http://mysource/file.bam"  -c mycontainer -n file.bam -t http-pageblob`
+`./blobporter -f "http://mysource/my.vhd"  -c mycontainer -n my.vhd -t http-pageblob`
 
 You can use this approach to transfer data between Azure Storage accounts and blob types - e.g. transfer a blob from one account to another or from a page blob to block blob.
 
