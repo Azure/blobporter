@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/blobporter/pipeline"
+	"github.com/Azure/blobporter/util"
 )
 
 // Worker represents a worker routine that transfers data to a target
@@ -219,6 +220,7 @@ type Transfer struct {
 	ControlChannels     *Channels
 	Stats               *StatsInfo
 	readPartsBufferSize int
+	blockSize           uint64
 }
 
 //StatsInfo contains transfer statistics, used at the end of the transfer
@@ -245,7 +247,7 @@ type Channels struct {
 
 const workerDelayStarTime = 300 * time.Millisecond
 const extraWorkerBufferSlots = 5
-const maxReadPartsBufferSize = 30
+const maxMemReadPartsBufferSize = 500 * util.MB
 const extraThreadTarget = 4
 
 //NewTransfer creates a new Transfer, this will adjust the thread target
@@ -257,7 +259,9 @@ func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipelin
 	wg := WaitGroups{}
 	channels := Channels{}
 	t := Transfer{ThreadTarget: threadTarget, NumOfReaders: readers, NumOfWorkers: workers, SourcePipeline: source,
-		TargetPipeline: target, SyncWaitGroups: &wg, ControlChannels: &channels, Stats: &StatsInfo{}}
+		TargetPipeline: target, SyncWaitGroups: &wg, ControlChannels: &channels,
+		Stats:     &StatsInfo{},
+		blockSize: blockSize}
 
 	//validate that all sourceURIs are unique
 	sources := (*source).GetSourcesInfo()
@@ -297,11 +301,11 @@ func getFirstDuplicateSource(sources []pipeline.SourceInfo) *pipeline.SourceInfo
 func (t *Transfer) getReadPartsBufferSize() int {
 	if t.readPartsBufferSize == 0 {
 		t.readPartsBufferSize = t.NumOfReaders
-		if t.readPartsBufferSize > maxReadPartsBufferSize {
-			t.readPartsBufferSize = maxReadPartsBufferSize
+		maxReadBufferSize := int(maxMemReadPartsBufferSize / t.blockSize)
+		if t.readPartsBufferSize > maxReadBufferSize {
+			t.readPartsBufferSize = maxReadBufferSize
 		}
 	}
-
 	return t.readPartsBufferSize
 }
 

@@ -29,10 +29,10 @@ type AzureBlob struct {
 //NewAzureBlob creates a new instance of HTTPPipeline
 //Creates a SASURI to the blobName with an expiration of sasTokenNumberOfHours.
 //blobName is used as the target alias.
-func NewAzureBlob(container string, blobNames []string, accountName string, accountKey string) pipeline.SourcePipeline {
+func NewAzureBlob(container string, blobNames []string, accountName string, accountKey string, md5 bool) pipeline.SourcePipeline {
 	azureSource := AzureBlob{Container: container, BlobNames: blobNames, storageClient: util.GetBlobStorageClient(accountName, accountKey)}
 	if sourceURIs, err := azureSource.getSourceURIs(); err == nil {
-		httpSource := NewHTTP(sourceURIs, nil)
+		httpSource := NewHTTP(sourceURIs, nil, md5)
 		azureSource.HTTPSource = httpSource.(HTTPPipeline)
 	} else {
 		log.Fatal(err)
