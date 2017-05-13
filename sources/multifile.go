@@ -26,6 +26,7 @@ type MultiFilePipeline struct {
 	TotalSize           uint64
 	BlockSize           uint64
 	NumOfPartitions     int
+	includeMD5          bool
 }
 
 //FileInfo Contains the metadata associated with a file to be transferred
@@ -39,7 +40,7 @@ type FileInfo struct {
 // NewMultiFile creates a new MultiFilePipeline.
 // If the sourcePattern results in a single file, the targetAlias, if set, will be used as the target name.
 // Otherwise the full original file name will be used instead.
-func NewMultiFile(sourcePatterns []string, blockSize uint64, targetAliases []string, numOfPartitions int) pipeline.SourcePipeline {
+func NewMultiFile(sourcePatterns []string, blockSize uint64, targetAliases []string, numOfPartitions int, md5 bool) pipeline.SourcePipeline {
 	var files []string
 	var err error
 	//get files from patterns
@@ -86,7 +87,12 @@ func NewMultiFile(sourcePatterns []string, blockSize uint64, targetAliases []str
 		fileInfos[files[f]] = fileInfo
 	}
 
-	return MultiFilePipeline{FilesInfo: fileInfos, TotalNumberOfBlocks: totalNumberOfBlocks, BlockSize: blockSize, TotalSize: totalSize, NumOfPartitions: numOfPartitions}
+	return MultiFilePipeline{FilesInfo: fileInfos,
+		TotalNumberOfBlocks: totalNumberOfBlocks,
+		BlockSize:           blockSize,
+		TotalSize:           totalSize,
+		NumOfPartitions:     numOfPartitions,
+		includeMD5:          md5}
 }
 
 //ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
@@ -128,9 +134,9 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 			}
 
 			if pip == 0 {
-
 				fileHandle.Seek(partition.Offset, io.SeekStart)
 			}
+
 			part.GetBuffer()
 
 			if _, err = fileHandle.Read(part.Data); err != nil && err != io.EOF {
@@ -141,6 +147,11 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 			if util.Verbose {
 				fmt.Printf("OKR|R|%v|%v|%v|%v/n", part.BlockID, bytesRead, part.TargetAlias, part.BytesToRead)
 			}
+
+			if f.includeMD5 {
+				part.MD5()
+			}
+
 			readPartsQ <- part
 		}
 	}
