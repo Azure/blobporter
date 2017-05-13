@@ -38,12 +38,14 @@ var defaultTransferDef = transfer.FileToBlock
 var storageAccountName string
 var storageAccountKey string
 var storageClientHTTPTimeout int
+var quietMode bool
+var calculateMD5 bool
 
 const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.01" // version number to show in help
+	programVersion           = "0.5.02" // version number to show in help
 )
 
 const numOfWorkersFactor = 9
@@ -71,6 +73,8 @@ func init() {
 	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, " Number of threads for parallel reading of the input file")
 	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, " Desired size of each blob block. Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
 	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, " Display verbose output")
+	util.BoolVarAlias(&quietMode, "q", "quiet_mode", false, " Quiet mode, no progress information is written to the stdout. Errors, warnings and final summary still are written")
+	util.BoolVarAlias(&calculateMD5, "m", "compute_blockmd5", false, " Computes the MD5 for the block and includes the value in the block request")
 	util.IntVarAlias(&util.HTTPClientTimeout, "s", "http_timeout", util.HTTPClientTimeout, "HTTP client timeout in seconds. Default value is 600s.")
 	util.StringVarAlias(&storageAccountName, "a", "account_name", "", " Storage account name (e.g. mystorage). Can also be specified via the "+storageAccountNameEnvVar+" environment variable.")
 	util.StringVarAlias(&storageAccountKey, "k", "account_key", "", " Storage account key string. Can also be specified via the "+storageAccountKeyEnvVar+" environment variable.")
@@ -90,12 +94,12 @@ func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo) {
 }
 
 func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, threadTarget int, totalNumberOfBlocks int, totalSize uint64, cumWriteDuration time.Duration) {
-
+	var netMB float64 = 1000000
 	fmt.Printf("\nThe process took %v to run.\n", duration)
-	MBs := float64(totalSize) / float64(util.MB) / duration.Seconds()
+	MBs := float64(totalSize) / netMB / duration.Seconds()
 	fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
-	fmt.Printf("Configuration: R=%d, W=%d, MP=%d DataSize=%s, Blocks=%d\n",
-		numberOfReaders, numberOfWorkers, threadTarget, util.PrintSize(totalSize), totalNumberOfBlocks)
+	fmt.Printf("Configuration: R=%d, W=%d, DataSize=%s, Blocks=%d\n",
+		numberOfReaders, numberOfWorkers, util.PrintSize(totalSize), totalNumberOfBlocks)
 	fmt.Printf("Cumulative Writes Duration: Total=%v, Avg Per Worker=%v\n",
 		cumWriteDuration, time.Duration(cumWriteDuration.Nanoseconds()/int64(numberOfWorkers)))
 	fmt.Printf("Retries: Avg=%v Total=%v\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
@@ -114,7 +118,7 @@ func main() {
 	tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, numberOfReaders, numberOfWorkers, blockSize)
 
 	displayFilesToTransfer(sourcesInfo)
-	pb := getProgressBarDelegate(tfer.TotalSize)
+	pb := getProgressBarDelegate(tfer.TotalSize, quietMode)
 
 	tfer.StartTransfer(dedupeLevel, pb)
 
@@ -169,23 +173,26 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 
 	switch defValue {
 	case transfer.FileToPage:
+		source = sources.NewMultiFile(sourceURIs, blockSize, blobNames, numberOfReaders, calculateMD5)
 		target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-		source = sources.NewMultiFile(sourceURIs, blockSize, blobNames, numberOfReaders)
 	case transfer.FileToBlock:
-		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 		//Since this is default value detect if the source is http
 		if isSourceHTTP() {
-			source = sources.NewHTTP(sourceURIs, blobNames)
+			source = sources.NewHTTP(sourceURIs, blobNames, calculateMD5)
 			transferDefStr = transfer.HTTPToBlock
 		} else {
-			source = sources.NewMultiFile(sourceURIs, blockSize, blobNames, numberOfReaders)
+			source = sources.NewMultiFile(sourceURIs, blockSize, blobNames, numberOfReaders, calculateMD5)
 		}
-	case transfer.HTTPToPage:
-		target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-		source = sources.NewHTTP(sourceURIs, blobNames)
-	case transfer.HTTPToBlock:
 		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-		source = sources.NewHTTP(sourceURIs, blobNames)
+
+	case transfer.HTTPToPage:
+		source = sources.NewHTTP(sourceURIs, blobNames, calculateMD5)
+		target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+
+	case transfer.HTTPToBlock:
+		source = sources.NewHTTP(sourceURIs, blobNames, calculateMD5)
+		target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
+
 	case transfer.BlobToFile:
 
 		if len(blobNames) == 0 {
@@ -193,10 +200,12 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 			blobNames = []string{""}
 		}
 
-		source = sources.NewAzureBlob(containerName, blobNames, storageAccountName, storageAccountKey)
+		source = sources.NewAzureBlob(containerName, blobNames, storageAccountName, storageAccountKey, calculateMD5)
 		target = targets.NewMultiFile(true, numberOfWorkers)
 
 	case transfer.HTTPToFile:
+		source = sources.NewHTTP(sourceURIs, blobNames, calculateMD5)
+
 		var targetAliases []string
 
 		if len(blobNames) > 0 {
@@ -212,7 +221,6 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 		}
 
 		target = targets.NewMultiFile(true, numberOfWorkers)
-		source = sources.NewHTTP(sourceURIs, blobNames)
 	}
 
 	return source, target
@@ -293,8 +301,15 @@ func validateTransferTypesParams() error {
 	return nil
 }
 
-func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
-	delegate := func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
+func getProgressBarDelegate(totalSize uint64, quietMode bool) func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
+	if quietMode {
+		return func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
+			atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
+			dataTransferred = dataTransferred + uint64(r.BlockSize)
+		}
+
+	}
+	return func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
 
 		atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
 
@@ -315,6 +330,4 @@ func getProgressBarDelegate(totalSize uint64) func(r pipeline.WorkerResult, comm
 			fmt.Fprintf(os.Stdout, "\r --> %3d %% [%v] Committed Count: %v Buffer Level: %03d%%", p, ind, committedCount, bufferLevel)
 		}
 	}
-
-	return delegate
 }

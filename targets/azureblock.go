@@ -103,9 +103,19 @@ func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 //Performs a PUT block operation with the data contained in the part.
 func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 
+	headers := make(map[string]string)
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
-		if err := t.StorageClient.PutBlock(t.Container, (*part).TargetAlias, (*part).BlockID, (*part).Data); err != nil {
+		//computation of the MD5 happens is done by the readers.
+		if part.IsMD5Computed() {
+			headers["Content-MD5"] = part.MD5()
+		}
+		if err := t.StorageClient.PutBlockWithLength(t.Container,
+			part.TargetAlias,
+			part.BlockID,
+			uint64(len(part.Data)),
+			part.NewBuffer(),
+			headers); err != nil {
 			if util.Verbose {
 				fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
 			}

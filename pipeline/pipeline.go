@@ -3,13 +3,14 @@ package pipeline
 import (
 	"crypto/md5"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"math"
+
+	"bytes"
 
 	"github.com/Azure/blobporter/util"
 )
@@ -235,6 +236,11 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, ta
 		DuplicateOfBlockOrdinal: -1}
 }
 
+//NewBuffer TODO
+func (p *Part) NewBuffer() *bytes.Buffer {
+	return bytes.NewBuffer(p.Data)
+}
+
 //ToString prints friendly format.
 func (p *Part) ToString() string {
 	str := fmt.Sprintf("  [FileChunk(%s):(Offset=%v,Size=%vB)]\n", p.BlockID, p.Offset, p.BytesToRead)
@@ -277,13 +283,19 @@ func (p *Part) ReturnBuffer() {
 	p.Data = nil
 }
 
+//IsMD5Computed TODO
+func (p *Part) IsMD5Computed() bool {
+	return p.md5Value != ""
+}
+
 // MD5  returns computed MD5 for this block or empty string if no data yet.
 func (p *Part) MD5() string {
 	// haven't yet computed the MD5, and have data to do so
 	if p.md5Value == "" && p.Data != nil {
 		h := md5.New()
+
 		h.Write(p.Data)
-		p.md5Value = hex.EncodeToString(h.Sum(nil))
+		p.md5Value = base64.StdEncoding.EncodeToString(h.Sum(nil))
 	}
 	return p.md5Value
 }
