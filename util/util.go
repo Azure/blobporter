@@ -52,19 +52,19 @@ const (
 func PrintSize(bytes uint64) string {
 	var str = "0"
 	var zeroTrim = true
-	var suffix = "GB"
+	var suffix = "GiB"
 
 	if bytes > GB { // most common case
 		str = fmt.Sprintf("%0.1f", float64(bytes)/GBF) //TODO: rounding
 	} else if bytes <= KB {
 		str = fmt.Sprintf("%d", bytes)
-		suffix = "KB"
+		suffix = "KiB"
 	} else if bytes < MB {
 		str = fmt.Sprintf("%d", bytes+KB-1)
 		suffix = "B"
 	} else { // if bytes < GB {
 		str = fmt.Sprintf("%0.1f", float64(bytes)/MBF)
-		suffix = "MB"
+		suffix = "MiB"
 	}
 
 	if zeroTrim {
@@ -245,6 +245,27 @@ func GetBlobStorageClient(accountName string, accountKey string) storage.BlobSto
 	}
 
 	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
+		log.Fatal(err)
+	}
+
+	client.HTTPClient = getStorageHTTPClient()
+
+	bc = client.GetBlobService()
+
+	return bc
+}
+
+//GetBlobStorageClientWithSASToken gets a storage client with support for large block blobs
+func GetBlobStorageClientWithSASToken(accountName string, sasToken string) storage.BlobStorageClient {
+	var bc storage.BlobStorageClient
+	var client storage.Client
+	var err error
+
+	if accountName == "" || sasToken == "" {
+		log.Fatal("Storage account and/or SAS token not specified via options or in environment variables ACCOUNT_NAME and SAS_TOKEN")
+	}
+
+	if client, err = storage.NewClient(accountName, "", storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
 		log.Fatal(err)
 	}
 

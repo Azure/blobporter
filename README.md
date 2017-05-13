@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.01/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.02/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.01/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.02/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -147,7 +147,9 @@ Without the -n option all files in the container will be downloaded.
 
 - `-b`, `--block_size` *string* desired size of each blob block. Can be specified as an integer byte count or integer suffixed with B, KB or MB (default "4MB", maximum "100MB").
 
-  - *Note:* For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
+  - The block size could have a significant memory impact. If you are using large blocks reduce the number of readers and workers (-r and -g) parameters to reduce the memory pressure during the transfer.
+
+  - For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
 
     - `Minimum Block Size = File Size / 50000`
 
@@ -162,6 +164,10 @@ Without the -n option all files in the container will be downloaded.
 - `-d`, `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
 - `-t`, `--transfer_type` *string*  defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file
+
+- `m`, `--compute_blockmd5` *bool* if present or true, block level MD5 has will be computed and included as a header when the block is sent to blob storage. Default is false.
+
+- `q`, `--quiet_mode` *bool* if present or true, the progress indicator is not displayed. The files to transfer, errors, warnings and transfer completion summary is still displayed.
 
 ## Performance Considerations
 

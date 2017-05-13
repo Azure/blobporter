@@ -79,10 +79,14 @@ func (t AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, start
 
 	offset := int64(part.Offset)
 	endByte := int64(part.Offset + uint64(part.BytesToRead) - 1)
-
+	headers := make(map[string]string)
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
-		if err := (*t.StorageClient).PutPage(t.Container, part.TargetAlias, offset, endByte, "update", part.Data, nil); err != nil {
+		//computation of the MD5 happens is done by the readers.
+		if part.IsMD5Computed() {
+			headers["Content-MD5"] = part.MD5()
+		}
+		if err := (*t.StorageClient).PutPage(t.Container, part.TargetAlias, offset, endByte, "update", part.Data, headers); err != nil {
 			if util.Verbose {
 				fmt.Printf("EH|S|%v|%v|%v|%v\n", part.Offset, len(part.Data), part.TargetAlias, err)
 			}

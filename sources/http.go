@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 
 	"fmt"
@@ -23,6 +24,7 @@ const sasTokenNumberOfHours = 4
 type HTTPPipeline struct {
 	Sources    []SourceInfo
 	HTTPClient *http.Client
+	includeMD5 bool
 }
 
 //SourceInfo TODO
@@ -32,34 +34,9 @@ type SourceInfo struct {
 	TargetAlias string
 }
 
-//NewHTTPAzureBlockPipeline creates a new instance of HTTPPipeline
-//Creates a SASURI to the blobName with an expiration of sasTokenNumberOfHours.
-//blobName is used as the target alias.
-/*
-func NewHTTPAzureBlockPipeline(container string, blobNames []string, accountName string, accountKey string) pipeline.SourcePipeline {
-	var err error
-	sourceURIs := make([]string, len(blobNames))
-
-	bc := util.GetBlobStorageClient(accountName, accountKey)
-
-	//Expiration in 4 hours
-	date := time.Now().UTC().Add(time.Duration(sasTokenNumberOfHours) * time.Hour)
-
-	for i := 0; i < len(sourceURIs); i++ {
-		var sasURL string
-		if sasURL, err = bc.GetBlobSASURI(container, blobNames[i], date, "r"); err != nil {
-			log.Fatal(err)
-		}
-		sourceURIs[i] = sasURL
-	}
-
-	return NewHTTPPipeline(sourceURIs, nil)
-}
-*/
-
 //NewHTTP creates a new instance of an HTTP source
 //To get the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
-func NewHTTP(sourceURIs []string, targetAliases []string) pipeline.SourcePipeline {
+func NewHTTP(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
 	setTargetAlias := len(sourceURIs) == len(targetAliases)
 	sources := make([]SourceInfo, len(sourceURIs))
 	for i := 0; i < len(sourceURIs); i++ {
@@ -80,7 +57,7 @@ func NewHTTP(sourceURIs []string, targetAliases []string) pipeline.SourcePipelin
 			TargetAlias: targetAlias,
 			SourceURI:   sourceURIs[i]}
 	}
-	return HTTPPipeline{Sources: sources, HTTPClient: util.NewHTTPClient()}
+	return HTTPPipeline{Sources: sources, HTTPClient: util.NewHTTPClient(), includeMD5: md5}
 }
 
 func getSourceSize(sourceURI string) (size int) {
@@ -88,13 +65,54 @@ func getSourceSize(sourceURI string) (size int) {
 	resp, err := client.Head(sourceURI)
 
 	if err != nil || resp.StatusCode != 200 {
-		log.Fatalf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
+		err = fmt.Errorf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
+
+		size = getSourceSizeFromByteRangeHeader(sourceURI)
+		return
 	}
 
 	size, err = strconv.Atoi(resp.Header.Get("Content-Length"))
 
 	if err != nil || size <= 0 {
 		log.Fatalf("Content-Length is invalid. Expected a numeric value greater than zero. Error: %v", err)
+	}
+
+	return
+
+}
+
+func getSourceSizeFromByteRangeHeader(sourceURI string) (size int) {
+	var req *http.Request
+	var res *http.Response
+	var err error
+	client := &http.Client{}
+
+	//Issue a fake request to see if can get the file size from the Content-Range header...
+	if req, err = http.NewRequest("GET", sourceURI, nil); err != nil {
+		log.Fatal(err)
+	}
+	header := fmt.Sprintf("bytes=%v-%v", 0, 10)
+	req.Header.Set("Range", header)
+	res, err = client.Get(sourceURI)
+	if res, err = client.Do(req); err != nil || res.StatusCode != 206 {
+		var status int
+		if res != nil {
+			status = res.StatusCode
+			err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
+		}
+		log.Fatal(err)
+	}
+	crange := res.Header.Get("Content-Range")
+	data := strings.Split(crange, "/")
+
+	if len(data) != 2 {
+		log.Fatalf("The Content-Range header does not contain the expected value. Value: %v", crange)
+	}
+
+	size, err = strconv.Atoi(data[1])
+
+	if err != nil || size <= 0 {
+		log.Fatalf("Content-Range is invalid. Expected a numeric value greater than zero. Value: %v", data[1])
 	}
 
 	return
@@ -155,6 +173,9 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 				return err
 			}
 
+			if f.includeMD5 {
+				p.MD5()
+			}
 			if util.Verbose {
 				fmt.Printf("OK|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 			}
