@@ -147,7 +147,7 @@ Without the -n option all files in the container will be downloaded.
 
 - `-b`, `--block_size` *string* desired size of each blob block. Can be specified as an integer byte count or integer suffixed with B, KB or MB (default "4MB", maximum "100MB").
 
-  - The block size could have a significant memory impact. If you are using large blocks reduce the number of readers and workers (-r and -g) parameters to reduce the memory pressure during the transfer.
+  - The block size could have a significant memory impact. If you are using large blocks reduce the number of readers and workers (-r and -g options) to reduce the memory pressure during the transfer.
 
   - For files larger than 200GB, this parameter must be set to a value higher than 4MB. The minimum block size is defined by the following formula:
 
@@ -159,7 +159,7 @@ Without the -n option all files in the container will be downloaded.
 
 - `-k`, `--account_key` *string* storage account key string (e.g. `4Rr8CpUM9Y/3k/SqGSr/oZcLo3zNU6aIo32NVzda4EJj0hjS2Jp7NVLAD3sFp7C67z/i7Rfbrpu5VHgcmOShTg==`). Can also be specified via the ACCOUNT_KEY environment variable.
 
-- `-s`, `--http_timeout` *int* HTTP client timeout in seconds. Default value is 30s.
+- `-s`, `--http_timeout` *int* HTTP client timeout in seconds. Default value is 600s.
 
 - `-d`, `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
