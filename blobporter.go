@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -45,7 +46,7 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.02" // version number to show in help
+	programVersion           = "0.5.03" // version number to show in help
 )
 
 const numOfWorkersFactor = 9
@@ -66,20 +67,55 @@ func init() {
 		extraWorkerBufferSlots = 5
 	)
 
-	util.StringListVarAlias(&sourceURIs, "f", "file", "", "URL, file or files (e.g. /data/*.gz) to upload. Destination file for download.")
-	util.StringListVarAlias(&blobNames, "n", "name", "", "Blob name to upload or download from Azure Blob Storage.  Destination file for download from URL")
-	util.StringVarAlias(&containerName, "c", "container_name", "", "container name (e.g. mycontainer)")
-	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, " Number of routines for parallel upload")
-	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, " Number of threads for parallel reading of the input file")
-	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, " Desired size of each blob block. Can be specified an integer byte count or integer suffixed with B, KB, MB, or GB. ")
-	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, " Display verbose output")
-	util.BoolVarAlias(&quietMode, "q", "quiet_mode", false, " Quiet mode, no progress information is written to the stdout. Errors, warnings and final summary still are written")
-	util.BoolVarAlias(&calculateMD5, "m", "compute_blockmd5", false, " Computes the MD5 for the block and includes the value in the block request")
-	util.IntVarAlias(&util.HTTPClientTimeout, "s", "http_timeout", util.HTTPClientTimeout, "HTTP client timeout in seconds. Default value is 600s.")
-	util.StringVarAlias(&storageAccountName, "a", "account_name", "", " Storage account name (e.g. mystorage). Can also be specified via the "+storageAccountNameEnvVar+" environment variable.")
-	util.StringVarAlias(&storageAccountKey, "k", "account_key", "", " Storage account key string. Can also be specified via the "+storageAccountKeyEnvVar+" environment variable.")
-	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, " Desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of "+transfer.DupeCheckLevelStr)
-	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", string(defaultTransferDef), "Defines the type of source and target in the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file")
+	const (
+		fileMsg              = "URL, file or files (e.g. /data/*.gz) to upload.\n\tDestination file for download."
+		nameMsg              = "Blob name for upload or download scenarios from Azure Blob Storage.\n\tDestination file name for downloads from a URL."
+		containerNameMsg     = "Container name (e.g. mycontainer).\n\tIf the container does not exist, it will be created."
+		concurrentWorkersMsg = "Number of workers for parallel upload."
+		concurrentReadersMsg = "Number of readers for parallel reading of the input file(s)."
+		blockSizeMsg         = "Desired size of each blob block or page.\n\tCan be an integer byte count or integer suffixed with B, KB, MB, or GB.\n\tFor page blobs the value must be a multiple of 512 bytes."
+		verboseMsg           = "Diplay verbose output for debugging."
+		quietModeMsg         = "Quiet mode, no progress information is written to the stdout.\n\tErrors, warnings and final summary still are written."
+		computeBlockMD5Msg   = "Computes the MD5 for the block and includes the value in the block request."
+		httpTimeoutMsg       = "HTTP client timeout in seconds."
+		accountNameMsg       = "Storage account name (e.g. mystorage).\n\tCan also be specified via the " + storageAccountNameEnvVar + " environment variable."
+		accountKeyMsg        = "Storage account key string.\n\tCan also be specified via the " + storageAccountKeyEnvVar + " environment variable."
+		dupcheckLevelMsg     = "Desired level of effort to detect duplicate data to minimize upload size.\n\tMust be one of " + transfer.DupeCheckLevelStr
+		transferDefMsg       = "Defines the type of source and target in the transfer.\n\tMust be one of:\n\tfile-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file,\n\tpageblock-file (alias of blob-file), blockblob-file (alias of blob-file)\n\tor http-file."
+	)
+
+	flag.Usage = func() {
+		util.PrintUsageDefaults("f", "file", "", fileMsg)
+		util.PrintUsageDefaults("n", "name", "", nameMsg)
+		util.PrintUsageDefaults("c", "container_name", "", containerNameMsg)
+		util.PrintUsageDefaults("g", "concurrent_workers", strconv.Itoa(defaultNumberOfWorkers), concurrentWorkersMsg)
+		util.PrintUsageDefaults("r", "concurrent_readers", strconv.Itoa(defaultNumberOfReaders), concurrentReadersMsg)
+		util.PrintUsageDefaults("b", "block_size", blockSizeStr, blockSizeMsg)
+		util.PrintUsageDefaults("v", "verbose", "false", verboseMsg)
+		util.PrintUsageDefaults("q", "quiet_mode", "false", quietModeMsg)
+		util.PrintUsageDefaults("m", "compute_blockmd5", "false", computeBlockMD5Msg)
+		util.PrintUsageDefaults("s", "http_timeout", strconv.Itoa(util.HTTPClientTimeout), httpTimeoutMsg)
+		util.PrintUsageDefaults("a", "account_name", "", accountNameMsg)
+		util.PrintUsageDefaults("k", "account_key", "", accountKeyMsg)
+		util.PrintUsageDefaults("d", "dup_check_level", dedupeLevelOptStr, dupcheckLevelMsg)
+		util.PrintUsageDefaults("t", "transfer_definition", string(defaultTransferDef), transferDefMsg)
+	}
+
+	util.StringListVarAlias(&sourceURIs, "f", "file", "", fileMsg)
+	util.StringListVarAlias(&blobNames, "n", "name", "", nameMsg)
+	util.StringVarAlias(&containerName, "c", "container_name", "", containerNameMsg)
+	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, concurrentWorkersMsg)
+	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, concurrentReadersMsg)
+	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, blockSizeMsg)
+	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, verboseMsg)
+	util.BoolVarAlias(&quietMode, "q", "quiet_mode", false, quietModeMsg)
+	util.BoolVarAlias(&calculateMD5, "m", "compute_blockmd5", false, computeBlockMD5Msg)
+	util.IntVarAlias(&util.HTTPClientTimeout, "s", "http_timeout", util.HTTPClientTimeout, httpTimeoutMsg)
+	util.StringVarAlias(&storageAccountName, "a", "account_name", "", accountNameMsg)
+	util.StringVarAlias(&storageAccountKey, "k", "account_key", "", accountKeyMsg)
+	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, dupcheckLevelMsg)
+	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", string(defaultTransferDef), transferDefMsg)
+
 }
 
 var dataTransferred uint64
@@ -151,7 +187,7 @@ func isSourceHTTP() bool {
 
 	url, err := url.Parse(sourceURIs[0])
 
-	return err != nil || strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https"
+	return err == nil && (strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https")
 }
 
 func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
