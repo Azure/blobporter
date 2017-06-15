@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -117,6 +118,15 @@ func ByteCountFromSizeString(sizeStr string) (uint64, error) {
 func StringVarAlias(varPtr *string, shortflag string, longflag string, defaultVal string, description string) {
 	flag.StringVar(varPtr, shortflag, defaultVal, description)
 	flag.StringVar(varPtr, longflag, defaultVal, "")
+}
+
+//PrintUsageDefaults  print commandline usage options
+func PrintUsageDefaults(shortflag string, longflag string, defaultVal string, description string) {
+	defaultMsg := ""
+	if defaultVal != "" {
+		defaultMsg = fmt.Sprintf("\n\tDefault value: %v", defaultVal)
+	}
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("-%v, --%v :\n\t%v%v", shortflag, longflag, description, defaultMsg))
 }
 
 //ListFlag TODO
