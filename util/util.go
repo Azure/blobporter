@@ -171,7 +171,7 @@ func BoolVarAlias(varPtr *bool, shortflag string, longflag string, defaultVal bo
 // Retriable execution of a function
 ///////////////////////////////////////////////////////////////////
 
-const retryLimit = 50                             // max retries for an operation in retriableOperation
+const retryLimit = 100                            // max retries for an operation in retriableOperation
 const retrySleepDuration = time.Millisecond * 200 // Retry wait interval in retriableOperation
 
 //RetriableOperation executes a function, retrying up to "retryLimit" times and waiting "retrySleepDuration" between attempts
@@ -241,6 +241,31 @@ func CreateContainerIfNotExists(container string, accountName string, accountKey
 	} else {
 		log.Fatal(err)
 	}
+
+}
+
+//CleanUncommittedBlocks clears uncommitted blocks if an existing blob does not exists.
+func CleanUncommittedBlocks(client *storage.BlobStorageClient, container string, blobName string) error {
+	list, _ := client.GetBlockList(container, blobName, "Uncommitted")
+
+	if len(list.UncommittedBlocks) == 0 {
+		return nil
+	}
+
+	fmt.Printf("Warning! uncommitted blocks detected for blob %v \nAttempting to clean them up\n", blobName)
+
+	exists, err := client.BlobExists(container, blobName)
+
+	if exists {
+		fmt.Printf("Can't delete uncommitted blocks for the blob:%v. A committed blob with the same name already exists \n", blobName)
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return client.CreateBlockBlob(container, blobName)
 
 }
 

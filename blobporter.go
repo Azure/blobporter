@@ -41,12 +41,13 @@ var storageAccountKey string
 var storageClientHTTPTimeout int
 var quietMode bool
 var calculateMD5 bool
+var exactNameMatch bool
 
 const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.03" // version number to show in help
+	programVersion           = "0.5.04" // version number to show in help
 )
 
 const numOfWorkersFactor = 9
@@ -68,8 +69,8 @@ func init() {
 	)
 
 	const (
-		fileMsg              = "URL, file or files (e.g. /data/*.gz) to upload.\n\tDestination file for download."
-		nameMsg              = "Blob name for upload or download scenarios from Azure Blob Storage.\n\tDestination file name for downloads from a URL."
+		fileMsg              = "URL, file or files (e.g. /data/*.gz) to upload."
+		nameMsg              = "Blob name (e.g. myblob.txt) or prefix for download scenarios."
 		containerNameMsg     = "Container name (e.g. mycontainer).\n\tIf the container does not exist, it will be created."
 		concurrentWorkersMsg = "Number of workers for parallel upload."
 		concurrentReadersMsg = "Number of readers for parallel reading of the input file(s)."
@@ -82,6 +83,7 @@ func init() {
 		accountKeyMsg        = "Storage account key string.\n\tCan also be specified via the " + storageAccountKeyEnvVar + " environment variable."
 		dupcheckLevelMsg     = "Desired level of effort to detect duplicate data to minimize upload size.\n\tMust be one of " + transfer.DupeCheckLevelStr
 		transferDefMsg       = "Defines the type of source and target in the transfer.\n\tMust be one of:\n\tfile-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file,\n\tpageblock-file (alias of blob-file), blockblob-file (alias of blob-file)\n\tor http-file."
+		exactNameMatchMsg    = "If set or true only blobs that match the name exactly will be downloaded."
 	)
 
 	flag.Usage = func() {
@@ -99,6 +101,7 @@ func init() {
 		util.PrintUsageDefaults("k", "account_key", "", accountKeyMsg)
 		util.PrintUsageDefaults("d", "dup_check_level", dedupeLevelOptStr, dupcheckLevelMsg)
 		util.PrintUsageDefaults("t", "transfer_definition", string(defaultTransferDef), transferDefMsg)
+		util.PrintUsageDefaults("e", "exact_name", "false", exactNameMatchMsg)
 	}
 
 	util.StringListVarAlias(&sourceURIs, "f", "file", "", fileMsg)
@@ -115,7 +118,7 @@ func init() {
 	util.StringVarAlias(&storageAccountKey, "k", "account_key", "", accountKeyMsg)
 	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, dupcheckLevelMsg)
 	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", string(defaultTransferDef), transferDefMsg)
-
+	util.BoolVarAlias(&exactNameMatch, "e", "exact_name", false, exactNameMatchMsg)
 }
 
 var dataTransferred uint64
@@ -236,7 +239,7 @@ func getPipelines() (pipeline.SourcePipeline, pipeline.TargetPipeline) {
 			blobNames = []string{""}
 		}
 
-		source = sources.NewAzureBlob(containerName, blobNames, storageAccountName, storageAccountKey, calculateMD5)
+		source = sources.NewAzureBlob(containerName, blobNames, storageAccountName, storageAccountKey, calculateMD5, exactNameMatch)
 		target = targets.NewMultiFile(true, numberOfWorkers)
 
 	case transfer.HTTPToFile:

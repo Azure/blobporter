@@ -20,17 +20,22 @@ import (
 
 //AzureBlob constructs parts  channel and implements data readers for Azure Blobs exposed via HTTP
 type AzureBlob struct {
-	HTTPSource    HTTPPipeline
-	Container     string
-	BlobNames     []string
-	storageClient storage.BlobStorageClient
+	HTTPSource     HTTPPipeline
+	Container      string
+	BlobNames      []string
+	exactNameMatch bool
+	storageClient  storage.BlobStorageClient
 }
 
 //NewAzureBlob creates a new instance of HTTPPipeline
 //Creates a SASURI to the blobName with an expiration of sasTokenNumberOfHours.
 //blobName is used as the target alias.
-func NewAzureBlob(container string, blobNames []string, accountName string, accountKey string, md5 bool) pipeline.SourcePipeline {
-	azureSource := AzureBlob{Container: container, BlobNames: blobNames, storageClient: util.GetBlobStorageClient(accountName, accountKey)}
+func NewAzureBlob(container string, blobNames []string, accountName string, accountKey string, md5 bool, useExactNameMatch bool) pipeline.SourcePipeline {
+	azureSource := AzureBlob{Container: container,
+		BlobNames:      blobNames,
+		storageClient:  util.GetBlobStorageClient(accountName, accountKey),
+		exactNameMatch: useExactNameMatch}
+
 	if sourceURIs, err := azureSource.getSourceURIs(); err == nil {
 		httpSource := NewHTTP(sourceURIs, nil, md5)
 		azureSource.HTTPSource = httpSource.(HTTPPipeline)
@@ -73,17 +78,29 @@ func (f AzureBlob) getSourceURIs() ([]string, error) {
 	var sourceURI string
 	for _, blobList := range blobLists {
 		for _, blob := range blobList.Blobs {
-			sourceURI, err = f.storageClient.GetBlobSASURI(f.Container, blob.Name, date, "r")
 
-			if err != nil {
-				return nil, err
+			include := true
+			if f.exactNameMatch {
+				include = blob.Name == blobList.Prefix
 			}
-			sourceURIs = append(sourceURIs, sourceURI)
+
+			if include {
+				sourceURI, err = f.storageClient.GetBlobSASURI(f.Container, blob.Name, date, "r")
+
+				if err != nil {
+					return nil, err
+				}
+				sourceURIs = append(sourceURIs, sourceURI)
+			}
 		}
 	}
 
 	if len(sourceURIs) == 0 {
-		return nil, fmt.Errorf("the prefix %v (-n option) did not match any blob names", f.BlobNames)
+		nameMatchMode := "prefix"
+		if f.exactNameMatch {
+			nameMatchMode = "name"
+		}
+		return nil, fmt.Errorf("the %v %s did not match any blob names", nameMatchMode, f.BlobNames)
 	}
 
 	return sourceURIs, nil
@@ -100,12 +117,29 @@ func (f AzureBlob) getBlobLists() ([]storage.BlobListResponse, error) {
 	listOfLists := make([]storage.BlobListResponse, listLength)
 
 	for i, blobname := range f.BlobNames {
+		var list *storage.BlobListResponse
 		params := storage.ListBlobsParameters{Prefix: blobname}
-		var list storage.BlobListResponse
-		if list, err = f.storageClient.ListBlobs(f.Container, params); err != nil {
-			return nil, err
+
+		for {
+			var listpage storage.BlobListResponse
+			if listpage, err = f.storageClient.ListBlobs(f.Container, params); err != nil {
+				return nil, err
+			}
+
+			if list == nil {
+				list = &listpage
+			} else {
+				(*list).Blobs = append((*list).Blobs, listpage.Blobs...)
+			}
+
+			if listpage.NextMarker == "" {
+				break
+			}
+
+			params.Marker = listpage.NextMarker
 		}
-		listOfLists[i] = list
+
+		listOfLists[i] = *list
 	}
 
 	return listOfLists, nil
