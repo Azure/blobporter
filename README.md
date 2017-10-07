@@ -135,7 +135,7 @@ Without the -n option all files in the container will be downloaded.
 
 ## Command Options
 
-- `-f`, `--file` *string* URL, file or files (e.g. /data/*.gz) to upload. Destination file for download scenarios.
+- `-f`, `--file` *string* URL, file or files (e.g. /data/*.gz) to upload.
 
 - `-c`, `--container_name` *string* container name (e.g. `mycontainer`).
 

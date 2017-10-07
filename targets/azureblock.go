@@ -70,9 +70,9 @@ func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Bloc
 }
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
-//Passthrough no need to pre-process for blob blocks.
+//Checks if uncommitted blocks are present and cleans them by creating an empty blob.
 func (t AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
-	return nil
+	return util.CleanUncommittedBlocks(&t.StorageClient, t.Container, source.TargetAlias)
 }
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
