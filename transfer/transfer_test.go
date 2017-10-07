@@ -187,7 +187,7 @@ func TestFileToBlobToFile(t *testing.T) {
 	tfer.WaitForCompletion()
 
 	ap = targets.NewMultiFile(true, numOfWorkers)
-	fp = sources.NewAzureBlob(container, []string{sourceFile}, accountName, accountKey, true)
+	fp = sources.NewAzureBlob(container, []string{sourceFile}, accountName, accountKey, true, false)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -207,7 +207,7 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 	tfer.WaitForCompletion()
 
 	ap = targets.NewMultiFile(true, numOfWorkers)
-	fp = sources.NewAzureBlob(container, []string{alias}, accountName, accountKey, true)
+	fp = sources.NewAzureBlob(container, []string{alias}, accountName, accountKey, true, false)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()

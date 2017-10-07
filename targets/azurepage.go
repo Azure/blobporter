@@ -32,7 +32,7 @@ func NewAzurePage(accountName string, accountKey string, container string) pipel
 const PageSize int64 = 512
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
-//Passthrough no need to pre-process for blob blocks.
+//initializes the page blob.
 func (t AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
 	size := int64(source.Size)
 
