@@ -175,6 +175,10 @@ By default files are downloaded to the same directory where you are running blob
 
 - `q`, `--quiet_mode` *bool* if present or true, the progress indicator is not displayed. The files to transfer, errors, warnings and transfer completion summary is still displayed.
 
+- `x`, `---files_per_transfer` *int* number of files in a batch transfer. Default is 200.
+
+- `h`, `----handles_per_file` *int* number of open handles for concurrent reads and writes per file. Default is 2.
+
 ## Performance Considerations
 
 By default, BlobPorter creates 5 readers and 8 workers for each core on the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
@@ -189,7 +193,7 @@ By default, BlobPorter creates 5 readers and 8 workers for each core on the comp
 
 - - Transfers are batched. Each batch transfer will concurrently read and transfer up to 200 files (default value) from the source. The batch size can be modified using the -x option, the maximum value is 500.
 
-- - Blobs smaller than the block size are transferred in a single operation. With relatively small files (<32MB) performance may be higher if you set a block size equal to the size of the files. Setting the number of workers and readers to the number of files could also, yeild performance gains.
+- - Blobs smaller than the block size are transferred in a single operation. With relatively small files (<32MB) performance may be better if you set a block size equal to the size of the files. Setting the number of workers and readers to the number of files could yield performance gains.
 
 ## Issues and Feedback
 
