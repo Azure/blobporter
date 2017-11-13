@@ -209,22 +209,23 @@ type ProgressUpdate func(results pipeline.WorkerResult, committedCount int, buff
 
 //Transfer top data structure holding the state of the transfer.
 type Transfer struct {
-	SourcePipeline      *pipeline.SourcePipeline
-	TargetPipeline      *pipeline.TargetPipeline
-	NumOfReaders        int
-	NumOfWorkers        int
-	TotalNumOfBlocks    int
-	TotalSize           uint64
-	ThreadTarget        int
-	SyncWaitGroups      *WaitGroups
-	ControlChannels     *Channels
-	Stats               *StatsInfo
-	readPartsBufferSize int
-	blockSize           uint64
+	SourcePipeline       *pipeline.SourcePipeline
+	TargetPipeline       *pipeline.TargetPipeline
+	NumOfReaders         int
+	NumOfWorkers         int
+	TotalNumOfBlocks     int
+	TotalSize            uint64
+	ThreadTarget         int
+	SyncWaitGroups       *WaitGroups
+	ControlChannels      *Channels
+	TimeStats            *TimeStatsInfo
+	readPartsBufferSize  int
+	blockSize            uint64
+	totalNumberOfRetries int32
 }
 
-//StatsInfo contains transfer statistics, used at the end of the transfer
-type StatsInfo struct {
+//TimeStatsInfo contains transfer statistics, used at the end of the transfer
+type TimeStatsInfo struct {
 	StartTime        time.Time
 	Duration         time.Duration
 	CumWriteDuration time.Duration
@@ -246,7 +247,6 @@ type Channels struct {
 }
 
 const workerDelayStarTime = 300 * time.Millisecond
-const extraWorkerBufferSlots = 5
 const maxMemReadPartsBufferSize = 500 * util.MB
 const extraThreadTarget = 4
 
@@ -260,7 +260,7 @@ func NewTransfer(source *pipeline.SourcePipeline, target *pipeline.TargetPipelin
 	channels := Channels{}
 	t := Transfer{ThreadTarget: threadTarget, NumOfReaders: readers, NumOfWorkers: workers, SourcePipeline: source,
 		TargetPipeline: target, SyncWaitGroups: &wg, ControlChannels: &channels,
-		Stats:     &StatsInfo{},
+		TimeStats: &TimeStatsInfo{},
 		blockSize: blockSize}
 
 	//validate that all sourceURIs are unique
@@ -312,27 +312,32 @@ func (t *Transfer) getReadPartsBufferSize() int {
 //StartTransfer starts the readers and readers. Process and commits the results of the write operations.
 //The duration timer is started.
 func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate ProgressUpdate) {
-
-	t.Stats.StartTime = time.Now()
-
 	t.preprocessSources()
+
+	t.TimeStats.StartTime = time.Now()
 
 	t.startReaders(t.ControlChannels.Partitions, t.ControlChannels.Parts, t.ControlChannels.ReadParts, t.NumOfReaders, &t.SyncWaitGroups.Readers, t.SourcePipeline)
 
 	t.startWorkers(t.ControlChannels.ReadParts, t.ControlChannels.Results, t.NumOfWorkers, &t.SyncWaitGroups.Workers, dupeLevel, t.TargetPipeline)
 
 	go t.processAndCommitResults(t.ControlChannels.Results, progressBarDelegate, t.TargetPipeline, &t.SyncWaitGroups.Commits)
-
 }
 
 //Sequentially calls the PreProcessSourceInfo implementation of the target pipeline for each source in the transfer.
 func (t *Transfer) preprocessSources() {
 	sourcesInfo := (*t.SourcePipeline).GetSourcesInfo()
+	var wg sync.WaitGroup
+	wg.Add(len(sourcesInfo))
 	for i := 0; i < len(sourcesInfo); i++ {
-		if err := (*t.TargetPipeline).PreProcessSourceInfo(&sourcesInfo[i]); err != nil {
-			log.Fatal(err)
-		}
+		go func(s *pipeline.SourceInfo) {
+			defer wg.Done()
+			if err := (*t.TargetPipeline).PreProcessSourceInfo(s); err != nil {
+				log.Fatal(err)
+			}
+		}(&sourcesInfo[i])
 	}
+
+	wg.Wait()
 }
 
 //WaitForCompletion blocks until the readers, writers and commit operations complete.
@@ -344,9 +349,20 @@ func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
 	t.SyncWaitGroups.Workers.Wait() // Ensure all upload workers complete
 	close(t.ControlChannels.Results)
 	t.SyncWaitGroups.Commits.Wait() // Ensure all commits complete
-	t.Stats.Duration = time.Now().Sub(t.Stats.StartTime)
+	t.TimeStats.Duration = time.Now().Sub(t.TimeStats.StartTime)
 
-	return t.Stats.Duration, t.Stats.CumWriteDuration
+	return t.TimeStats.Duration, t.TimeStats.CumWriteDuration
+}
+
+//GetStats TODO
+func (t *Transfer) GetStats() *StatInfo {
+	return &StatInfo{
+		NumberOfFiles:       len((*t.SourcePipeline).GetSourcesInfo()),
+		Duration:            t.TimeStats.Duration,
+		CumWriteDuration:    t.TimeStats.CumWriteDuration,
+		TotalNumberOfBlocks: t.TotalNumOfBlocks,
+		TargetRetries:       t.totalNumberOfRetries,
+		TotalSize:           t.TotalSize}
 }
 
 // StartWorkers creates and starts the set of Workers to send data blocks
@@ -388,7 +404,8 @@ func (t *Transfer) processAndCommitResults(resultQ chan pipeline.WorkerResult, u
 				resultQ <- result
 			} else {
 				numOfBlocks++
-				t.Stats.CumWriteDuration = t.Stats.CumWriteDuration + result.Stats.Duration
+				t.TimeStats.CumWriteDuration = t.TimeStats.CumWriteDuration + result.Stats.Duration
+				t.totalNumberOfRetries = t.totalNumberOfRetries + int32(result.Stats.Retries)
 				blocksProcessed[result.SourceURI] = numOfBlocks
 			}
 		} else {
@@ -403,7 +420,6 @@ func (t *Transfer) processAndCommitResults(resultQ chan pipeline.WorkerResult, u
 		}
 
 		workerBufferLevel = int(float64(len(t.ControlChannels.ReadParts)) / float64(t.getReadPartsBufferSize()) * 100)
-
 		// call update delegate
 		update(result, committedCount, workerBufferLevel)
 	}

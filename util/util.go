@@ -392,6 +392,8 @@ func getSuggestion(err error) string {
 		return "Try using a different container or upload and then delete a small blob with the same name."
 	case strings.Contains(err.Error(), "Client.Timeout"):
 		return "Try increasing the timeout using the -s option or reducing the number of workers and readers, options: -r and -g"
+	case strings.Contains(err.Error(),"too many open files"):
+		return "Try increasing the number of open files allowed. For debian systems you can try: ulimit -Sn 2048 "
 	default:
 		return ""
 	}

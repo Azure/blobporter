@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.04/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.10/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.04/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.10/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -83,6 +83,7 @@ You can also specify a list of files or patterns explicitly:
 If you want to rename multiple files, you can use the -n option:
 
 `./blobporter -f /datadrive/f1.tar -f /datadrive/f2.md -n b1 -n b2 -c mycontainer`
+
 
 ### Upload to Azure Page Blob Storage
 
@@ -126,6 +127,11 @@ The following will download all blobs in the container that start with `f`
 Without the -n option all files in the container will be downloaded.
 
 `./blobporter  -c mycontainer -t blob-file`
+
+By default files are downloaded to the same directory where you are running blobporter. If you want to keep the same directory structure of the storage account use the -p option.
+
+`./blobporter -p -c mycontainer -t blob-file`
+
 
 ### Download a file via HTTP to a local file
 
@@ -171,15 +177,23 @@ Without the -n option all files in the container will be downloaded.
 
 ## Performance Considerations
 
-By default, BlobPorter creates 6 readers and 9 workers for each core on the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
+By default, BlobPorter creates 5 readers and 8 workers for each core on the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:
 
 - If during the transfer the buffer level is constant at 000%, workers could be waiting for data. Consider increasing the number of readers. If the level is 100% the opposite applies; increasing the number of workers could help.
 
 - In BlobPorter, each reader or worker correlates to one goroutine. Goroutines are lightweight and a Go program can create a high number of goroutines, however, there's a point where the overhead of context switching impacts overall performance. Increase these values in small increments, e.g. 5.
 
-- For transfers from fast disks (SSD) or HTTP sources a lesser number readers or workers could provide the same performance than the default values. You could reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
+- For transfers from fast disks (SSD) or HTTP sources reducing the number readers or workers could provide better performance than the default values. Reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
-- In Linux, BlobPorter reduces the number of readers if the number of open files during the transfer is greater than 1024. Linux restricts the number of files open by a process and since each reader holds a handle to the file to transfer, you can reach this limit if you want transfer multiple files even with a relatively low number of readers. For example, if you have 10 readers and want to transfer more than 102 files you will reach this limit. In this case BlobPorter will issue a warning displaying the new number of readers. If the resulting number of readers impacts performance, consider running multiple instances of BlobPorter with a smaller source list.
+- Starting with version 0.5.10:
+
+- - Transfers are batched. Each batch transfer will concurrently read and transfer up to 200 files (default value) from the source. The batch size can be modified using the -x option, the maximum value is 500.
+
+- - Blobs smaller than the block size are transferred in a single operation. With relatively small files (<32MB) performance may be higher if you set a block size equal to the size of the files. Setting the number of workers and readers to the number of files could also, yeild performance gains.
+
+## Issues and Feedback
+
+If you have a question or find a bug, open a new issue in this repository. BlobPorter is an OSS project maintained by the contributors.
 
 ## Contribute
 
