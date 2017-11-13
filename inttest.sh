@@ -6,7 +6,8 @@ FILE_SIZE=5242880 #5MiB
 EXIT_CODE=0
 
 #create a temp file
-dd if=/dev/zero of=$REF_FILE bs=$FILE_SIZE count=1
+dd if=/dev/urandom of=$REF_FILE bs=64M count=1 iflag=fullblock
+
 
 #Set permissions
 sudo chmod +x ./linux_amd64/blobporter
