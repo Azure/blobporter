@@ -12,7 +12,8 @@ _build/windows_amd64
 # Architecture specific extensions/prefixes
 *.[568vq]
 [568vq].out
-
+debug
+.vscode
 *.cgo1.go
 *.cgo2.c
 _cgo_defun.c

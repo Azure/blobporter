@@ -22,23 +22,25 @@ const sasTokenNumberOfHours = 4
 
 // HTTPPipeline  constructs parts  channel and implements data readers for file exposed via HTTP
 type HTTPPipeline struct {
-	Sources    []SourceInfo
+	Sources    []pipeline.SourceInfo
 	HTTPClient *http.Client
 	includeMD5 bool
 }
 
+/*
 //SourceInfo TODO
 type SourceInfo struct {
 	SourceURI   string
 	SourceSize  uint64
 	TargetAlias string
 }
+*/
 
 //NewHTTP creates a new instance of an HTTP source
 //To get the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
 func NewHTTP(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
 	setTargetAlias := len(sourceURIs) == len(targetAliases)
-	sources := make([]SourceInfo, len(sourceURIs))
+	sources := make([]pipeline.SourceInfo, len(sourceURIs))
 	for i := 0; i < len(sourceURIs); i++ {
 		targetAlias := sourceURIs[i]
 		if setTargetAlias {
@@ -52,12 +54,12 @@ func NewHTTP(sourceURIs []string, targetAliases []string, md5 bool) pipeline.Sou
 			}
 		}
 
-		sources[i] = SourceInfo{
-			SourceSize:  uint64(getSourceSize(sourceURIs[i])),
+		sources[i] = pipeline.SourceInfo{
+			Size:        uint64(getSourceSize(sourceURIs[i])),
 			TargetAlias: targetAlias,
-			SourceURI:   sourceURIs[i]}
+			SourceName:  sourceURIs[i]}
 	}
-	return HTTPPipeline{Sources: sources, HTTPClient: util.NewHTTPClient(), includeMD5: md5}
+	return &HTTPPipeline{Sources: sources, HTTPClient: util.NewHTTPClient(), includeMD5: md5}
 }
 
 func getSourceSize(sourceURI string) (size int) {
@@ -120,20 +122,14 @@ func getSourceSizeFromByteRangeHeader(sourceURI string) (size int) {
 
 //GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
 //Returns an array of pipeline.SourceInfo[] with the files URL, alias and size.
-func (f HTTPPipeline) GetSourcesInfo() []pipeline.SourceInfo {
-	sources := make([]pipeline.SourceInfo, len(f.Sources))
-
-	for i := 0; i < len(f.Sources); i++ {
-		sources[i] = pipeline.SourceInfo{SourceName: f.Sources[i].SourceURI, TargetAlias: f.Sources[i].TargetAlias, Size: f.Sources[i].SourceSize}
-	}
-
-	return sources
+func (f *HTTPPipeline) GetSourcesInfo() []pipeline.SourceInfo {
+	return f.Sources
 }
 
 //ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
 //For each part the reader makes a byte range request to the source
 // starting from the part's Offset to BytesToRead - 1 (zero based).
-func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
+func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	var blocksHandled = 0
 	var err error
 	var req *http.Request
@@ -190,14 +186,14 @@ func (f HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, pa
 
 //ConstructBlockInfoQueue implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
 //Constructs the Part's channel arithmetically from the size of the sources.
-func (f HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
+func (f *HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
 	allParts := make([][]pipeline.Part, len(f.Sources))
 	//disable memory buffer for parts (bufferQ == nil)
 	var bufferQ chan []byte
 	largestNumOfParts := 0
 	for i, source := range f.Sources {
-		size = size + source.SourceSize
-		parts, sourceNumOfBlocks := pipeline.ConstructPartsQueue(source.SourceSize, blockSize, source.SourceURI, source.TargetAlias, bufferQ)
+		size = size + source.Size
+		parts, sourceNumOfBlocks := pipeline.ConstructPartsQueue(source.Size, blockSize, source.SourceName, source.TargetAlias, bufferQ)
 		allParts[i] = parts
 		numOfBlocks = numOfBlocks + sourceNumOfBlocks
 		if largestNumOfParts < len(parts) {
