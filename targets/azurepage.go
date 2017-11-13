@@ -25,7 +25,7 @@ func NewAzurePage(accountName string, accountKey string, container string) pipel
 	util.CreateContainerIfNotExists(container, accountName, accountKey)
 	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 	client := util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)
-	return AzurePage{Creds: &creds, Container: container, StorageClient: &client}
+	return &AzurePage{Creds: &creds, Container: container, StorageClient: &client}
 }
 
 //PageSize size of page in Azure Page Blob storage
@@ -33,7 +33,7 @@ const PageSize int64 = 512
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //initializes the page blob.
-func (t AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
 	size := int64(source.Size)
 
 	if size%PageSize != 0 {
@@ -57,7 +57,7 @@ func (t AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error)
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //Passthrough no need to a commit for page blob.
-func (t AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, NumberOfBlocks int, targetName string) (msg string, err error) {
+func (t *AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, NumberOfBlocks int, targetName string) (msg string, err error) {
 
 	msg = "Page blob committed"
 	err = nil
@@ -66,7 +66,7 @@ func (t AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, Number
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Passthrough no need to process a written part when transferring to a page blob.
-func (t AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
+func (t *AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	err = nil
 	return
@@ -75,7 +75,7 @@ func (t AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *p
 //WritePart implements WritePart from the pipeline.TargetPipeline interface.
 //Performs a PUT page operation with the data contained in the part.
 //This assumes the part.BytesToRead is a multiple of the PageSize
-func (t AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+func (t *AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 
 	offset := int64(part.Offset)
 	endByte := int64(part.Offset + uint64(part.BytesToRead) - 1)

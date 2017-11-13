@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/Azure/blobporter/pipeline"
@@ -19,18 +21,32 @@ type MultiFile struct {
 	FileHandles     map[string]chan *os.File
 	NumberOfHandles int
 	OverWrite       bool
+	sync.Mutex
 }
 
 //NewMultiFile creates a new multi file target and 'n' number of handles for concurrent writes to a file.
 func NewMultiFile(overwrite bool, numberOfHandles int) pipeline.TargetPipeline {
 
-	return MultiFile{FileHandles: make(map[string]chan *os.File), NumberOfHandles: numberOfHandles, OverWrite: overwrite}
+	return &MultiFile{FileHandles: make(map[string]chan *os.File), NumberOfHandles: numberOfHandles, OverWrite: overwrite}
 }
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //Passthrough no need to pre-process for a file target.
-func (t MultiFile) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+func (t *MultiFile) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+	t.Lock()
+	defer t.Unlock()
+
 	var fh *os.File
+
+	path := filepath.Dir(source.TargetAlias)
+
+	if path != "" {
+		err = os.MkdirAll(path, 0777)
+
+		if err != nil {
+			return
+		}
+	}
 
 	if fh, err = os.Create(source.TargetAlias); os.IsExist(err) {
 		if !t.OverWrite {
@@ -60,7 +76,7 @@ func (t MultiFile) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error)
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //For a file download a final commit is not required and this implementation closes all the filehandles.
-func (t MultiFile) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
+func (t *MultiFile) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
 
 	close(t.FileHandles[targetName])
 	for {
@@ -82,13 +98,13 @@ func (t MultiFile) CommitList(listInfo *pipeline.TargetCommittedListInfo, number
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Passthrough implementation as no post-written-processing is required (e.g. maintain a list) when files are downloaded.
-func (t MultiFile) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
+func (t *MultiFile) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	return false, nil
 }
 
 //WritePart implements WritePart from the pipeline.TargetPipeline interface.
 //Writes to a local file using a filehandle received from a channel.
-func (t MultiFile) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+func (t *MultiFile) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	startTime = time.Now()
 
 	fh := <-t.FileHandles[part.TargetAlias]

@@ -1,6 +1,7 @@
 package targets
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -28,12 +29,20 @@ func NewAzureBlock(accountName string, accountKey string, container string) pipe
 	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 	bc := util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)
 
-	return AzureBlock{Creds: &creds, Container: container, StorageClient: bc}
+	return &AzureBlock{Creds: &creds, Container: container, StorageClient: bc}
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //Commits the list of blocks to Azure Storage to finalize the transfer.
-func (t AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
+func (t *AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
+
+	//Only commit if the number blocks is greater than one.
+	if numberOfBlocks == 1 {
+		msg = fmt.Sprintf("\rFile:%v, The blob is already comitted.",
+			targetName)
+		err = nil
+		return
+	}
 
 	lInfo := (*listInfo)
 
@@ -71,14 +80,14 @@ func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Bloc
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //Checks if uncommitted blocks are present and cleans them by creating an empty blob.
-func (t AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
 	return util.CleanUncommittedBlocks(&t.StorageClient, t.Container, source.TargetAlias)
 }
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Appends the written part to a list. If the part is duplicated the list is updated with a reference, to the first occurrence of the block.
 //If the first occurrence has not yet being processed, the part is requested to be placed back in the results channel (requeue == true).
-func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
+func (t *AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	blockList := convertToStorageBlockList((*listInfo).List, result.NumberOfBlocks)
 
@@ -101,7 +110,7 @@ func (t AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 
 //WritePart implements WritePart from the pipeline.TargetPipeline interface.
 //Performs a PUT block operation with the data contained in the part.
-func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 
 	headers := make(map[string]string)
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
@@ -110,6 +119,21 @@ func (t AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, star
 		if part.IsMD5Computed() {
 			headers["Content-MD5"] = part.MD5()
 		}
+
+		if part.NumberOfBlocks == 1 {
+			if err := t.StorageClient.CreateBlockBlobFromReader(t.Container,
+				part.TargetAlias,
+				uint64(len(part.Data)),
+				bytes.NewReader(part.Data),
+				headers); err != nil {
+				if util.Verbose {
+					fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
+				}
+				return err
+			}
+			return nil
+		}
+
 		if err := t.StorageClient.PutBlockWithLength(t.Container,
 			part.TargetAlias,
 			part.BlockID,

@@ -37,26 +37,67 @@ type FileInfo struct {
 	NumOfBlocks int
 }
 
+//MultiFileParams TODO
+type MultiFileParams struct {
+	SourcePatterns   []string
+	BlockSize        uint64
+	TargetAliases    []string
+	NumOfPartitions  int
+	MD5              bool
+	FilesPerPipeline int
+}
+
 // NewMultiFile creates a new MultiFilePipeline.
 // If the sourcePattern results in a single file, the targetAlias, if set, will be used as the target name.
 // Otherwise the full original file name will be used instead.
-func NewMultiFile(sourcePatterns []string, blockSize uint64, targetAliases []string, numOfPartitions int, md5 bool) pipeline.SourcePipeline {
+//sourcePatterns []string, blockSize uint64, targetAliases []string, numOfPartitions int, md5 bool
+func NewMultiFile(params *MultiFileParams) []pipeline.SourcePipeline {
 	var files []string
 	var err error
 	//get files from patterns
-	for i := 0; i < len(sourcePatterns); i++ {
+	for i := 0; i < len(params.SourcePatterns); i++ {
 		var sourceFiles []string
-		if sourceFiles, err = filepath.Glob(sourcePatterns[i]); err != nil {
+		if sourceFiles, err = filepath.Glob(params.SourcePatterns[i]); err != nil {
 			log.Fatal(err)
 		}
 		files = append(files, sourceFiles...)
 	}
 
-	if len(files) == 0 {
-		log.Fatal(fmt.Errorf("The pattern(s) %v did not match any files", fmt.Sprint(sourcePatterns)))
+	if params.FilesPerPipeline <= 0 {
+		log.Fatal(fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero"))
 	}
+
+	if len(files) == 0 {
+		log.Fatal(fmt.Errorf("The pattern(s) %v did not match any files", fmt.Sprint(params.SourcePatterns)))
+	}
+
+	numOfBatches := (len(files) + params.FilesPerPipeline - 1) / params.FilesPerPipeline
+	pipelines := make([]pipeline.SourcePipeline, numOfBatches)
+	numOfFilesInBatch := params.FilesPerPipeline
+	filesSent := len(files)
+	start := 0
+	for b := 0; b < numOfBatches; b++ {
+		var targetAlias []string
+
+		if filesSent < numOfFilesInBatch {
+			numOfFilesInBatch = filesSent
+		}
+		start = b * numOfFilesInBatch
+
+		if len(params.TargetAliases) == len(files) {
+			targetAlias = params.TargetAliases[start : start+numOfFilesInBatch]
+		}
+		pipelines[b] = newMultiFilePipeline(files[start:start+numOfFilesInBatch], targetAlias, params.BlockSize, params.NumOfPartitions, params.MD5)
+		filesSent = filesSent - numOfFilesInBatch
+	}
+
+	return pipelines
+}
+
+func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint64, numOfPartitions int, md5 bool) pipeline.SourcePipeline {
 	totalNumberOfBlocks := 0
 	var totalSize uint64
+	var err error
 	fileInfos := make(map[string]FileInfo, len(files))
 	useTargetAlias := len(targetAliases) == len(files)
 	for f := 0; f < len(files); f++ {
@@ -87,7 +128,7 @@ func NewMultiFile(sourcePatterns []string, blockSize uint64, targetAliases []str
 		fileInfos[files[f]] = fileInfo
 	}
 
-	return MultiFilePipeline{FilesInfo: fileInfos,
+	return &MultiFilePipeline{FilesInfo: fileInfos,
 		TotalNumberOfBlocks: totalNumberOfBlocks,
 		BlockSize:           blockSize,
 		TotalSize:           totalSize,
@@ -98,7 +139,7 @@ func NewMultiFile(sourcePatterns []string, blockSize uint64, targetAliases []str
 //ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
 //For each file the reader will maintain a open handle from which data will be read.
 // This implementation uses partitions (group of parts that can be read sequentially).
-func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
+func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	fileHandles := make(map[string]*os.File, len(f.FilesInfo))
 	var err error
 	var partition pipeline.PartsPartition
@@ -127,7 +168,7 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 
 			if fileHandle == nil {
 				if fileHandle, err = os.Open(fileURI); err != nil {
-					fmt.Printf("Error while opening the file %v /n", err)
+					fmt.Printf("Error while opening the file %v \n", err)
 					log.Fatal(err)
 				}
 				fileHandles[fileURI] = fileHandle
@@ -140,7 +181,7 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 			part.GetBuffer()
 
 			if _, err = fileHandle.Read(part.Data); err != nil && err != io.EOF {
-				fmt.Printf("Error while reading the file %v /n", err)
+				fmt.Printf("Error while reading the file %v \n", err)
 				log.Fatal(err)
 			}
 
@@ -159,7 +200,7 @@ func (f MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartitio
 
 //GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
 //Returns an an array of SourceInfo with the name, alias and size of the files to be transferred.
-func (f MultiFilePipeline) GetSourcesInfo() []pipeline.SourceInfo {
+func (f *MultiFilePipeline) GetSourcesInfo() []pipeline.SourceInfo {
 
 	sources := make([]pipeline.SourceInfo, len(f.FilesInfo))
 	var i = 0
@@ -201,7 +242,7 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 //ConstructBlockInfoQueue implements ConstructBlockInfoQueue from the pipeline.SourcePipeline Interface.
 // this implementation uses partitions to group parts into a set that can be read sequentially.
 // This is to avoid Window's memory pressure when calling SetFilePointer numerous times on the same handle
-func (f MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
+func (f *MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
 	numOfBlocks = f.TotalNumberOfBlocks
 	size = f.TotalSize
 	allPartitions := make([][]pipeline.PartsPartition, len(f.FilesInfo))
