@@ -58,6 +58,7 @@ func (t *AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numb
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, _, _ := util.RetriableOperation(func(r int) error {
 		if err := t.StorageClient.PutBlockList(t.Container, targetName, blockList); err != nil {
+			t.resetClient()
 			return err
 		}
 		return nil
@@ -126,9 +127,8 @@ func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, sta
 				uint64(len(part.Data)),
 				bytes.NewReader(part.Data),
 				headers); err != nil {
-				if util.Verbose {
-					fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
-				}
+				util.PrintfIfDebug("Error|S|%v|%v|%v|%v", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
+				t.resetClient()
 				return err
 			}
 			return nil
@@ -140,16 +140,17 @@ func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, sta
 			uint64(len(part.Data)),
 			part.NewBuffer(),
 			headers); err != nil {
-			if util.Verbose {
-				fmt.Printf("EH|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
-			}
+			util.PrintfIfDebug("Error|S|%v|%v|%v|%v", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
+			t.resetClient()
 			return err
 		}
 
-		if util.Verbose {
-			fmt.Printf("OKA|S|%v|%v|%v|%v\n", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
-		}
+		util.PrintfIfDebug("OK|S|%v|%v|%v|%v", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
 		return nil
 	})
 	return
+}
+
+func (t *AzureBlock) resetClient() {
+	t.StorageClient = util.GetBlobStorageClientWithNewHTTPClient(t.Creds.AccountName, t.Creds.AccountKey)
 }
