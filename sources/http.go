@@ -142,14 +142,15 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 			return // no more blocks of file data to be read
 		}
 
-		if req, err = http.NewRequest("GET", p.SourceURI, nil); err != nil {
-			log.Fatal(err)
-		}
-
-		header := fmt.Sprintf("bytes=%v-%v", p.Offset, p.Offset-1+uint64(p.BytesToRead))
-		req.Header.Set("Range", header)
-
 		util.RetriableOperation(func(r int) error {
+			if req, err = http.NewRequest("GET", p.SourceURI, nil); err != nil {
+				log.Fatal(err)
+			}
+
+			header := fmt.Sprintf("bytes=%v-%v", p.Offset, p.Offset-1+uint64(p.BytesToRead))
+			req.Header.Set("Range", header)
+			req.Close = true
+
 			if res, err = f.HTTPClient.Do(req); err != nil || res.StatusCode != 206 {
 				var status int
 				if res != nil {
@@ -162,7 +163,6 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 				}
 				return err
 			}
-
 			p.Data, err = ioutil.ReadAll(res.Body)
 			res.Body.Close()
 			if err != nil {
