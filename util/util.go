@@ -290,6 +290,27 @@ func GetBlobStorageClient(accountName string, accountKey string) storage.BlobSto
 	return bc
 }
 
+//GetBlobStorageClientWithNewHTTPClient gets a storage client with a new instace of the HTTP client.
+func GetBlobStorageClientWithNewHTTPClient(accountName string, accountKey string) storage.BlobStorageClient {
+	var bc storage.BlobStorageClient
+	var client storage.Client
+	var err error
+
+	if accountName == "" || accountKey == "" {
+		log.Fatal("Storage account and/or key not specified via options or in environment variables ACCOUNT_NAME and ACCOUNT_KEY")
+	}
+
+	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
+		log.Fatal(err)
+	}
+
+	client.HTTPClient = NewHTTPClient()
+
+	bc = client.GetBlobService()
+
+	return bc
+}
+
 //GetBlobStorageClientWithSASToken gets a storage client with support for large block blobs
 func GetBlobStorageClientWithSASToken(accountName string, sasToken string) storage.BlobStorageClient {
 	var bc storage.BlobStorageClient
@@ -357,8 +378,8 @@ var storageHTTPClient *http.Client
 var HTTPClientTimeout = 600
 
 const (
-	maxIdleConns        = 100
-	maxIdleConnsPerHost = 100
+	maxIdleConns        = 50
+	maxIdleConnsPerHost = 50
 )
 
 func getStorageHTTPClient() *http.Client {
@@ -392,10 +413,18 @@ func getSuggestion(err error) string {
 		return "Try using a different container or upload and then delete a small blob with the same name."
 	case strings.Contains(err.Error(), "Client.Timeout"):
 		return "Try increasing the timeout using the -s option or reducing the number of workers and readers, options: -r and -g"
-	case strings.Contains(err.Error(),"too many open files"):
+	case strings.Contains(err.Error(), "too many open files"):
 		return "Try increasing the number of open files allowed. For debian systems you can try: ulimit -Sn 2048 "
 	default:
 		return ""
+	}
+}
+
+//PrintfIfDebug TODO
+func PrintfIfDebug(format string, values ...interface{}) {
+	if Verbose {
+		msg := fmt.Sprintf(format, values...)
+		fmt.Printf("%v\t%s\n", time.Now(), msg)
 	}
 }
 

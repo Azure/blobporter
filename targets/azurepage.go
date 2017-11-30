@@ -47,6 +47,7 @@ func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	util.RetriableOperation(func(r int) error {
 		if err := (*t.StorageClient).PutPageBlob(t.Container, (*source).TargetAlias, size, nil); err != nil {
+			t.resetClient()
 			return err
 		}
 		return nil
@@ -90,6 +91,7 @@ func (t *AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, star
 			if util.Verbose {
 				fmt.Printf("EH|S|%v|%v|%v|%v\n", part.Offset, len(part.Data), part.TargetAlias, err)
 			}
+			t.resetClient()
 			return err
 		}
 
@@ -100,4 +102,9 @@ func (t *AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, star
 	})
 
 	return
+}
+
+func (t *AzurePage) resetClient() {
+	client := util.GetBlobStorageClientWithNewHTTPClient(t.Creds.AccountName, t.Creds.AccountKey)
+	t.StorageClient = &client
 }
