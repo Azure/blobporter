@@ -12,10 +12,10 @@
             "host": "127.0.0.1",
             "program": "${fileDirname}",
             "env": {
-                "ACCOUNT_NAME":"storagejaa",
-                "ACCOUNT_KEY":"/mXWG4aXMWvftzR+Ed5URccwrDSvvv5cUsKCqq5gbyPXvtlyfQ9gjq462kuH/2dErjwR8QcAS74vLaNXynd74g=="
+                "ACCOUNT_NAME":"bprelease",
+                "ACCOUNT_KEY":"bGgXq0WvdkGRKe38Icww4i+3NUsb4E0ngm9tImN/liiB9uix/Wwgua45x+uP6A6EQCv9QIAyk73mlcn2bJ+vkQ=="
             },
-            "args": ["-c", "many", "-t","blob-file","-p"] ,
+            "args": ["-c","100k","-t","blob-file","-p","-x","300"] ,
             "showLog": true
         }
     ]
