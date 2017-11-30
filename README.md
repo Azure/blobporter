@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.10/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.12/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.10/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.12/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -175,9 +175,11 @@ By default files are downloaded to the same directory where you are running blob
 
 - `q`, `--quiet_mode` *bool* if present or true, the progress indicator is not displayed. The files to transfer, errors, warnings and transfer completion summary is still displayed.
 
-- `x`, `---files_per_transfer` *int* number of files in a batch transfer. Default is 200.
+- `x`, `--files_per_transfer` *int* number of files in a batch transfer. Default is 200.
 
-- `h`, `----handles_per_file` *int* number of open handles for concurrent reads and writes per file. Default is 2.
+- `h`, `--handles_per_file` *int* number of open handles for concurrent reads and writes per file. Default is 2.
+
+- `p`, `--keep_directories` *bool* if set blobs are downloaded or uploaded keeping the directory structure from the source. Not applicable when the source is a HTTP endpoint.
 
 ## Performance Considerations
 
@@ -189,11 +191,9 @@ By default, BlobPorter creates 5 readers and 8 workers for each core on the comp
 
 - For transfers from fast disks (SSD) or HTTP sources reducing the number readers or workers could provide better performance than the default values. Reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
-- Starting with version 0.5.10:
+- Transfers can be batched. Each batch transfer will concurrently read and transfer up to 200 files (default value) from the source. The batch size can be modified using the -x option, the maximum value is 500.
 
-- - Transfers are batched. Each batch transfer will concurrently read and transfer up to 200 files (default value) from the source. The batch size can be modified using the -x option, the maximum value is 500.
-
-- - Blobs smaller than the block size are transferred in a single operation. With relatively small files (<32MB) performance may be better if you set a block size equal to the size of the files. Setting the number of workers and readers to the number of files could yield performance gains.
+- Blobs smaller than the block size are transferred in a single operation. With relatively small files (<32MB) performance may be better if you set a block size equal to the size of the files. Setting the number of workers and readers to the number of files could yield performance gains.
 
 ## Issues and Feedback
 

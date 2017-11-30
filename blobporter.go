@@ -49,7 +49,7 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.10" // version number to show in help
+	programVersion           = "0.5.12" // version number to show in help
 )
 
 const numOfWorkersFactor = 8
@@ -87,7 +87,7 @@ func init() {
 		dupcheckLevelMsg           = "Desired level of effort to detect duplicate data to minimize upload size.\n\tMust be one of " + transfer.DupeCheckLevelStr
 		transferDefMsg             = "Defines the type of source and target in the transfer.\n\tMust be one of:\n\tfile-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file,\n\tpageblock-file (alias of blob-file), blockblob-file (alias of blob-file)\n\tor http-file."
 		exactNameMatchMsg          = "If set or true only blobs that match the name exactly will be downloaded."
-		keepDirStructureMsg        = "If set blobs are downloaded to the same directory structure as in the storage account.\n\tIf the directory structure does not exists it will be created."
+		keepDirStructureMsg        = "If set blobs are downloaded or uploaded keeping the directory structure from the source.\n\tNot applicable when the source is a HTTP endpoint."
 		numberOfHandlersPerFileMsg = "Number of open handles for concurrent reads and writes per file."
 		numberOfFilesInBatchMsg    = "Maximum number of files in a transfer.\n\tIf the number is exceeded new transfers are created"
 	)
@@ -257,6 +257,7 @@ func getFileToPagePipelines() (source []pipeline.SourcePipeline, target pipeline
 		TargetAliases:    blobNames,
 		NumOfPartitions:  numberOfReaders,
 		MD5:              calculateMD5,
+		KeepDirStructure: keepDirStructure,
 		FilesPerPipeline: numberOfFilesInBatch}
 
 	source = sources.NewMultiFile(params)
@@ -275,6 +276,7 @@ func getFileToBlockPipelines() (source []pipeline.SourcePipeline, target pipelin
 			TargetAliases:    blobNames,
 			NumOfPartitions:  numberOfReaders,
 			MD5:              calculateMD5,
+			KeepDirStructure: keepDirStructure,
 			FilesPerPipeline: numberOfFilesInBatch}
 
 		source = sources.NewMultiFile(params)

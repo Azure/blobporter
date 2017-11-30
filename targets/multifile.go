@@ -108,7 +108,6 @@ func (t *MultiFile) WritePart(part *pipeline.Part) (duration time.Duration, star
 	startTime = time.Now()
 
 	fh := <-t.FileHandles[part.TargetAlias]
-
 	if _, err := fh.WriteAt((*part).Data, int64((*part).Offset)); err != nil {
 		log.Fatal(err)
 	}

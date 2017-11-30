@@ -45,6 +45,7 @@ type MultiFileParams struct {
 	NumOfPartitions  int
 	MD5              bool
 	FilesPerPipeline int
+	KeepDirStructure bool
 }
 
 // NewMultiFile creates a new MultiFilePipeline.
@@ -87,14 +88,19 @@ func NewMultiFile(params *MultiFileParams) []pipeline.SourcePipeline {
 		if len(params.TargetAliases) == len(files) {
 			targetAlias = params.TargetAliases[start : start+numOfFilesInBatch]
 		}
-		pipelines[b] = newMultiFilePipeline(files[start:start+numOfFilesInBatch], targetAlias, params.BlockSize, params.NumOfPartitions, params.MD5)
+		pipelines[b] = newMultiFilePipeline(files[start:start+numOfFilesInBatch],
+			targetAlias,
+			params.BlockSize,
+			params.NumOfPartitions,
+			params.MD5,
+			params.KeepDirStructure)
 		filesSent = filesSent - numOfFilesInBatch
 	}
 
 	return pipelines
 }
 
-func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint64, numOfPartitions int, md5 bool) pipeline.SourcePipeline {
+func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint64, numOfPartitions int, md5 bool, keepDirStructure bool) pipeline.SourcePipeline {
 	totalNumberOfBlocks := 0
 	var totalSize uint64
 	var err error
@@ -116,12 +122,16 @@ func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint
 		totalSize = totalSize + uint64(fileStat.Size())
 		totalNumberOfBlocks = totalNumberOfBlocks + numOfBlocks
 
-		//use the param instead of the original filename only when  single file
-		//transfer occurs.
+		//use the param instead of the original filename only when
+		//the number of targets matches the number files to transfer
 		if useTargetAlias {
 			sName = targetAliases[f]
 		} else {
 			sName = fileStat.Name()
+			if keepDirStructure {
+				sName = files[f]
+			}
+
 		}
 
 		fileInfo := FileInfo{FileStats: &fileStat, SourceURI: files[f], TargetAlias: sName, NumOfBlocks: numOfBlocks}
