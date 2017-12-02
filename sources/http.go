@@ -149,7 +149,12 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 
 			header := fmt.Sprintf("bytes=%v-%v", p.Offset, p.Offset-1+uint64(p.BytesToRead))
 			req.Header.Set("Range", header)
-			req.Close = true
+
+			//set the close header only when the block is larger than the blob
+			//to minimize the number of open when transfering small files.
+			if p.BytesToRead < p.BlockSize {
+				req.Close = true
+			}
 
 			if res, err = f.HTTPClient.Do(req); err != nil || res.StatusCode != 206 {
 				var status int
@@ -158,9 +163,8 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 					err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
 				}
 
-				if util.Verbose {
-					fmt.Printf("EH|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, status, err, header)
-				}
+				util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, status, err, header)
+
 				return err
 			}
 			p.Data, err = ioutil.ReadAll(res.Body)
@@ -172,9 +176,9 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 			if f.includeMD5 {
 				p.MD5()
 			}
-			if util.Verbose {
-				fmt.Printf("OK|R|%v|%v|%v|%v|%v\n", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
-			}
+
+			util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
+
 			return nil
 		})
 

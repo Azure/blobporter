@@ -88,16 +88,13 @@ func (t *AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, star
 			headers["Content-MD5"] = part.MD5()
 		}
 		if err := (*t.StorageClient).PutPage(t.Container, part.TargetAlias, offset, endByte, "update", part.Data, headers); err != nil {
-			if util.Verbose {
-				fmt.Printf("EH|S|%v|%v|%v|%v\n", part.Offset, len(part.Data), part.TargetAlias, err)
-			}
+			util.PrintfIfDebug("WritePart -> |%v|%v|%v|%v", part.Offset, len(part.Data), part.TargetAlias, err)
 			t.resetClient()
 			return err
 		}
 
-		if util.Verbose {
-			fmt.Printf("OKA|S|%v|%v|%v|%v\n", part.Offset, len(part.Data), part.TargetAlias, err)
-		}
+		util.PrintfIfDebug("WritePart -> |%v|%v|%v", part.Offset, len(part.Data), part.TargetAlias)
+
 		return nil
 	})
 
