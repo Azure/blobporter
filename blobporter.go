@@ -49,7 +49,7 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.12" // version number to show in help
+	programVersion           = "0.5.13" // version number to show in help
 )
 
 const numOfWorkersFactor = 8

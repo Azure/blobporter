@@ -195,9 +195,7 @@ func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartiti
 				log.Fatal(err)
 			}
 
-			if util.Verbose {
-				fmt.Printf("OKR|R|%v|%v|%v|%v/n", part.BlockID, bytesRead, part.TargetAlias, part.BytesToRead)
-			}
+			util.PrintfIfDebug("ExecuteReader -> %v|%v|%v|%v", part.BlockID, bytesRead, part.TargetAlias, part.BytesToRead)
 
 			if f.includeMD5 {
 				part.MD5()

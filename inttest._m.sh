@@ -25,8 +25,8 @@ fi
 echo "Creating working files..."
 mkdir -p $WORKING_DIR
 
-dd if=/dev/urandom of=$F1 bs=64M count=1 iflag=fullblock
-dd if=/dev/urandom of=$P1 bs=64M count=1 iflag=fullblock
+dd if=/dev/urandom of=$F1 bs=64M count=8 iflag=fullblock
+dd if=/dev/urandom of=$P1 bs=64M count=2 iflag=fullblock
 
 
 #Scenario 1 - Simple upload/download with default values
@@ -47,14 +47,14 @@ calculateMD5 $P1 $DOWN_P1
 
 #Scenario 3 - Silent page upload/download with default values
 #Upload vhd
-./blobporter -f $P1 -c $CONT -n $DOWN_p1  -t file-pageblob -q
+./blobporter -f $P1 -c $CONT -n $DOWN_P1 -t file-pageblob -q
 #Download vhd
 ./blobporter -n $DOWN_P1 -c $CONT -t pageblob-file -q
 calculateMD5 $P1 $DOWN_P1
 
 #Scenario 4 - Silent page upload/download with default values and md5
 #Upload vhd
-./blobporter -f $P1 -c $CONT -t -n $DOWN_p1  file-pageblob -q -m
+./blobporter -f $P1 -c $CONT -n $DOWN_P1 -t file-pageblob -q -m
 #Download vhd
 ./blobporter -n $DOWN_P1 -c $CONT -t pageblob-file -q -m
 calculateMD5 $P1 $DOWN_P1
@@ -79,4 +79,25 @@ calculateMD5 vd1.mp4 vd1f.mp4
 
 #Download file
 ./blobporter -n $DOWN_F1 -c $CONT -t blob-file -b 16MB
+calculateMD5 $F1 $DOWN_F1
+
+
+#Scenario 7 - Simple upload/download with file smaller than the block size
+dd if=/dev/urandom of=$F1 bs=16M count=1 iflag=fullblock
+
+#Upload file
+./blobporter -f $F1 -c $CONT -n $DOWN_F1 -b 32MB
+
+#Download file
+./blobporter -n $DOWN_F1 -c $CONT -t blob-file -b 32MB
+calculateMD5 $F1 $DOWN_F1
+
+#Scenario 8 - Simple upload/download with file equal than the block size
+dd if=/dev/urandom of=$F1 bs=36M count=1 iflag=fullblock
+
+#Upload file
+./blobporter -f $F1 -c $CONT -n $DOWN_F1 -b 32MB
+
+#Download file
+./blobporter -n $DOWN_F1 -c $CONT -t blob-file -b 32MB
 calculateMD5 $F1 $DOWN_F1
