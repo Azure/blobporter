@@ -51,7 +51,7 @@ func (t *AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numb
 	if util.Verbose {
 		fmt.Printf("Final BlockList:\n")
 		for j := 0; j < numberOfBlocks; j++ {
-			fmt.Printf("   [%2d]: ID=%s, Status=%s", j, blockList[j].ID, blockList[j].Status)
+			fmt.Printf("   [%2d]: ID=%s, Status=%s\n", j, blockList[j].ID, blockList[j].Status)
 		}
 	}
 
