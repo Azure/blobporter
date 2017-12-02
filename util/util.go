@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
@@ -199,10 +200,8 @@ func RetriableOperation(operation func(r int) error) (duration time.Duration, st
 		}
 		retries++
 
-		if Verbose {
-			fmt.Printf(" R %v ", retries)
-			fmt.Println(err.Error())
-		}
+		PrintfIfDebug("RetriableOperation -> |%v|%v", retries, err)
+
 		time.Sleep(retrySleepDuration)
 	}
 }
@@ -391,12 +390,17 @@ func getStorageHTTPClient() *http.Client {
 
 }
 
-//NewHTTPClient  creates a new HTTP client with the configured timeout and MaxIdleConnsPerHost = 100
+//NewHTTPClient  creates a new HTTP client with the configured timeout and MaxIdleConnsPerHost = 50, keep alive dialer.
+
 func NewHTTPClient() *http.Client {
 
 	c := http.Client{
 		Timeout: time.Duration(HTTPClientTimeout) * time.Second,
 		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout:   30 * time.Second, // dial timeout
+				KeepAlive: 30 * time.Second,
+			}).Dial,
 			MaxIdleConns:        maxIdleConns,
 			MaxIdleConnsPerHost: maxIdleConnsPerHost}}
 
