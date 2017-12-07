@@ -80,6 +80,8 @@ const (
 	FileToPage             = "file-pageblob"
 	HTTPToPage             = "http-pageblob"
 	HTTPToFile             = "http-file"
+	BlobToBlock            = "blob-blockblob"
+	BlobToPage             = "blob-pageblob"
 	none                   = "none"
 )
 
@@ -107,6 +109,12 @@ func ParseTransferDefinition(str string) (Definition, error) {
 		return FileToPage, nil
 	case "http-pageblob":
 		return HTTPToPage, nil
+	case "blob-blockblob":
+		return BlobToBlock, nil
+	case "blob-pageblob":
+		return BlobToPage, nil
+	case "blob-blob":
+		return BlobToBlock, nil
 	default:
 		return none, fmt.Errorf("%v is not a valid transfer definition value.\n Valid values: file-blockblob, http-blockblob,file-pageblob, http-pageblob, pageblob-file, blockblob-file, http-file", str)
 	}

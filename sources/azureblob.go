@@ -2,9 +2,7 @@ package sources
 
 import (
 	"log"
-	"path"
 	"sync"
-	"time"
 
 	"fmt"
 
@@ -27,6 +25,7 @@ type AzureBlob struct {
 	storageClient  storage.BlobStorageClient
 }
 
+/*
 //AzureBlobParams TODO
 type AzureBlobParams struct {
 	Container         string
@@ -38,13 +37,17 @@ type AzureBlobParams struct {
 	KeepDirStructure  bool
 	FilesPerPipeline  int
 }
+*/
 
 //NewAzureBlob creates a new instance of HTTPPipeline for Azure Blobs
 func NewAzureBlob(params *AzureBlobParams) []pipeline.SourcePipeline {
 
 	var err error
 	var sourceInfos []pipeline.SourceInfo
-	if sourceInfos, err = getSourcesInfoForBlobs(params); err != nil {
+	var azObjStorage ObjectsListManager
+	azObjStorage, err = NewAzureBlobListManager(params)
+
+	if sourceInfos, err = azObjStorage.GetSourceInfo(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -95,6 +98,7 @@ func (f *AzureBlob) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan 
 	return f.HTTPSource.ConstructBlockInfoQueue(blockSize)
 }
 
+/*
 func getSourcesInfoForBlobs(params *AzureBlobParams) ([]pipeline.SourceInfo, error) {
 	var err error
 	storageClient := util.GetBlobStorageClient(params.AccountName, params.AccountKey)
@@ -187,3 +191,4 @@ func getBlobLists(params *AzureBlobParams, client *storage.BlobStorageClient) ([
 	return listOfLists, nil
 
 }
+*/

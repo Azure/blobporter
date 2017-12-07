@@ -127,6 +127,40 @@ func TestFileToBlob(t *testing.T) {
 	os.Remove(sourceFile)
 
 }
+func TestFileToBlobToBlock(t *testing.T) {
+	container, _ := getContainers()
+	var sourceFile = createFile("tb", 1)
+
+	sourceParams := &sources.MultiFileParams{
+		SourcePatterns:   []string{sourceFile},
+		BlockSize:        blockSize,
+		FilesPerPipeline: filesPerPipeline,
+		NumOfPartitions:  numOfReaders,
+		MD5:              true}
+
+	fp := sources.NewMultiFile(sourceParams)[0]
+	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
+	tfer.StartTransfer(None, delegate)
+	tfer.WaitForCompletion()
+
+	sourceParams = &sources.AzureBlobParams{
+		Container:         container,
+		BlobNames:         []string{sourceFile},
+		AccountName:       accountName,
+		AccountKey:        accountKey,
+		CalculateMD5:      true,
+		UseExactNameMatch: true,
+		FilesPerPipeline:  10,
+		//default to always true so blob names are kept
+		KeepDirStructure: true}
+
+	source := sources.NewAzureBlob(sourceParams)
+	target := targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+
+	os.Remove(sourceFile)
+
+}
 func TestFileToBlobWithLargeBlocks(t *testing.T) {
 	container, _ := getContainers()
 	var sourceFile = createFile("tb", 1)

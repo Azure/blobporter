@@ -49,7 +49,7 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.13" // version number to show in help
+	programVersion           = "0.5.14" // version number to show in help
 )
 
 const numOfWorkersFactor = 8
@@ -243,6 +243,10 @@ func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline) {
 		return getBlobToFilePipelines()
 	case transfer.HTTPToFile:
 		return getHTTPToFilePipelines()
+	case transfer.BlobToBlock:
+		return getBlobToBlockPipelines()
+	case transfer.BlobToPage:
+		return getBlobToPagePipelines()
 	}
 
 	log.Fatal(fmt.Errorf("Invalid transfer type: %v ", transferType))
@@ -265,7 +269,7 @@ func getFileToPagePipelines() (source []pipeline.SourcePipeline, target pipeline
 	return
 }
 func getFileToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
-	//Since this is default value detect if the source is http
+	//Since this is default value detect if the source is http and change th transfer type
 	if isSourceHTTP() {
 		source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
 		transferDefStr = transfer.HTTPToBlock
@@ -291,6 +295,50 @@ func getHTTPToPagePipelines() (source []pipeline.SourcePipeline, target pipeline
 }
 func getHTTPToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
 	source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
+	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
+	return
+}
+func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
+
+	if len(blobNames) == 0 {
+		//use empty prefix to get the bloblist
+		blobNames = []string{""}
+	}
+
+	params := &sources.AzureBlobParams{
+		Container:         containerName,
+		BlobNames:         blobNames,
+		AccountName:       storageAccountName,
+		AccountKey:        storageAccountKey,
+		CalculateMD5:      calculateMD5,
+		UseExactNameMatch: exactNameMatch,
+		FilesPerPipeline:  numberOfFilesInBatch,
+		//default to always true so blob names are kept
+		KeepDirStructure: true}
+
+	source = sources.NewAzureBlob(params)
+	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+	return
+}
+func getBlobToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
+
+	if len(blobNames) == 0 {
+		//use empty prefix to get the bloblist
+		blobNames = []string{""}
+	}
+
+	params := &sources.AzureBlobParams{
+		Container:         containerName,
+		BlobNames:         blobNames,
+		AccountName:       storageAccountName,
+		AccountKey:        storageAccountKey,
+		CalculateMD5:      calculateMD5,
+		UseExactNameMatch: exactNameMatch,
+		FilesPerPipeline:  numberOfFilesInBatch,
+		//default to always true so blob names are kept
+		KeepDirStructure: true}
+
+	source = sources.NewAzureBlob(params)
 	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 	return
 }
