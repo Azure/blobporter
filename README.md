@@ -84,7 +84,6 @@ If you want to rename multiple files, you can use the -n option:
 
 `./blobporter -f /datadrive/f1.tar -f /datadrive/f2.md -n b1 -n b2 -c mycontainer`
 
-
 ### Upload to Azure Page Blob Storage
 
 Same as uploading to block blob storage, but with the transfer definiton (-t option) set to file-pageblob.
@@ -131,7 +130,6 @@ Without the -n option all files in the container will be downloaded.
 By default files are downloaded to the same directory where you are running blobporter. If you want to keep the same directory structure of the storage account use the -p option.
 
 `./blobporter -p -c mycontainer -t blob-file`
-
 
 ### Download a file via HTTP to a local file
 
