@@ -81,7 +81,14 @@ func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Bloc
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //Checks if uncommitted blocks are present and cleans them by creating an empty blob.
-func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
+	numOfBlocks := int(source.Size+(blockSize-1)) / int(blockSize)
+
+	if numOfBlocks > util.MaxBlockCount { // more than 50,000 blocks needed, so can't work
+		var minBlkSize = (source.Size + util.MaxBlockCount - 1) / util.MaxBlockCount
+		return fmt.Errorf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
+	}
+
 	return util.CleanUncommittedBlocks(&t.StorageClient, t.Container, source.TargetAlias)
 }
 

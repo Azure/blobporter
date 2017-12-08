@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -48,7 +47,7 @@ type SourceInfo struct {
 
 //TargetPipeline operations that abstract how parts a written and processed to a given target
 type TargetPipeline interface {
-	PreProcessSourceInfo(source *SourceInfo) (err error)
+	PreProcessSourceInfo(source *SourceInfo, blockSize uint64) (err error)
 	CommitList(listInfo *TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error)
 	WritePart(part *Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error)
 	ProcessWrittenPart(result *WorkerResult, listInfo *TargetCommittedListInfo) (requeue bool, err error)
@@ -154,11 +153,6 @@ func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64
 	//bsib := uint64(blockSize)
 	numOfBlocks := int((size + blockSize - 1) / blockSize)
 
-	if numOfBlocks > util.MaxBlockCount { // more than 50,000 blocks needed, so can't work
-		var minBlkSize = (size + util.MaxBlockCount - 1) / util.MaxBlockCount
-		log.Fatalf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
-	}
-
 	Partitions := make([]PartsPartition, numberOfPartitions)
 	//the size of the partition needs to be a multiple (blockSize * int) to make sure all but the last part/block
 	//are the same size
@@ -190,11 +184,6 @@ func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64
 func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, targetAlias string, bufferQ chan []byte) (parts []Part, numOfBlocks int) {
 	var bsib = blockSize
 	numOfBlocks = int((size + (bsib - 1)) / bsib)
-
-	if numOfBlocks > util.MaxBlockCount { // more than 50,000 blocks needed, so can't work
-		var minBlkSize = (size + util.MaxBlockCount - 1) / util.MaxBlockCount
-		log.Fatalf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
-	}
 
 	parts = make([]Part, numOfBlocks)
 

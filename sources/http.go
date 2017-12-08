@@ -67,7 +67,13 @@ func getSourceSize(sourceURI string) (size int) {
 	resp, err := client.Head(sourceURI)
 
 	if err != nil || resp.StatusCode != 200 {
-		err = fmt.Errorf("HEAD request failed. Please check the URL. Status:%d Error: %v", resp.StatusCode, err)
+		statusCode := ""
+		if resp != nil {
+			statusCode = fmt.Sprintf(" Status:%d ", resp.StatusCode)
+		}
+		err = fmt.Errorf("HEAD request failed. Please check the URL.%s Error: %v", statusCode, err)
+
+		util.PrintfIfDebug("getSourceSize -> %v", err)
 
 		size = getSourceSizeFromByteRangeHeader(sourceURI)
 		return

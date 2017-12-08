@@ -323,18 +323,18 @@ func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate P
 	go t.processAndCommitResults(t.ControlChannels.Results, progressBarDelegate, t.TargetPipeline, &t.SyncWaitGroups.Commits)
 }
 
-//Sequentially calls the PreProcessSourceInfo implementation of the target pipeline for each source in the transfer.
+//Concurrely calls the PreProcessSourceInfo implementation of the target pipeline for each source in the transfer.
 func (t *Transfer) preprocessSources() {
 	sourcesInfo := (*t.SourcePipeline).GetSourcesInfo()
 	var wg sync.WaitGroup
 	wg.Add(len(sourcesInfo))
 	for i := 0; i < len(sourcesInfo); i++ {
-		go func(s *pipeline.SourceInfo) {
+		go func(s *pipeline.SourceInfo, b uint64) {
 			defer wg.Done()
-			if err := (*t.TargetPipeline).PreProcessSourceInfo(s); err != nil {
+			if err := (*t.TargetPipeline).PreProcessSourceInfo(s, b); err != nil {
 				log.Fatal(err)
 			}
-		}(&sourcesInfo[i])
+		}(&sourcesInfo[i], t.blockSize)
 	}
 
 	wg.Wait()
