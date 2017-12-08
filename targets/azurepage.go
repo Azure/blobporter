@@ -28,20 +28,28 @@ func NewAzurePage(accountName string, accountKey string, container string) pipel
 	return &AzurePage{Creds: &creds, Container: container, StorageClient: &client}
 }
 
-//PageSize size of page in Azure Page Blob storage
-const PageSize int64 = 512
+//Page blobs limits and units
+
+//PageSize page size for page blobs
+const PageSize uint64 = 512
+const maxPageSize uint64 = 4 * util.MB
+const maxPageBlobSize uint64 = 8 * util.TB
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //initializes the page blob.
-func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
 	size := int64(source.Size)
 
-	if size%PageSize != 0 {
-		return fmt.Errorf("Invalid size for a page blob. The size of the file %v (%v) is not a multiple of %v", source.SourceName, source.Size, PageSize)
+	if size%int64(PageSize) != 0 {
+		return fmt.Errorf(" invalid size for a page blob. The size of the file %v (%v) is not a multiple of %v ", source.SourceName, source.Size, PageSize)
 	}
 
-	if size > int64(util.TB) {
-		return fmt.Errorf("The file %v is too big (%v). Tha maximum size of a page blob is %v ", source.SourceName, source.Size, util.TB)
+	if size > int64(maxPageBlobSize) {
+		return fmt.Errorf(" the file %v is too big (%v). Tha maximum size of a page blob is %v ", source.SourceName, source.Size, maxPageBlobSize)
+	}
+
+	if blockSize > maxPageSize || blockSize < PageSize {
+		return fmt.Errorf(" invalid block size for page blob: %v. The value must be greater than %v and less than %v", PageSize, maxPageSize)
 	}
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.

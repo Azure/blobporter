@@ -8,12 +8,13 @@ _obj
 _test
 _build/linux_amd64
 _build/windows_amd64
+.vscode
 
 # Architecture specific extensions/prefixes
 *.[568vq]
 [568vq].out
 debug
-.vscode
+launch.json
 *.cgo1.go
 *.cgo2.c
 _cgo_defun.c
@@ -31,3 +32,4 @@ _testmain.go
 
 # external packages folder
 #vendor/
+.vscode/launch.json
