@@ -206,20 +206,6 @@ func RetriableOperation(operation func(r int) error) (duration time.Duration, st
 	}
 }
 
-///////////////////////////////////////////////////////////////////
-
-//GetNumberOfBlocks calculates the number of blocks from filesize and checks if the number is greater than what's allowed (MaxBlockCount).
-func GetNumberOfBlocks(size uint64, blockSize uint64) int {
-	numOfBlocks := int(size+(blockSize-1)) / int(blockSize)
-
-	if numOfBlocks > MaxBlockCount { // more than 50,000 blocks needed, so can't work
-		var minBlkSize = (size + MaxBlockCount - 1) / MaxBlockCount
-		log.Fatalf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
-	}
-
-	return numOfBlocks
-}
-
 //CreateContainerIfNotExists Creates a new container if doesn't exists. Validates the name of the container.
 func CreateContainerIfNotExists(container string, accountName string, accountKey string) {
 
