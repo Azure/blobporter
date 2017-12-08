@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.13/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.14/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.13/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.14/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -141,7 +141,7 @@ By default files are downloaded to the same directory where you are running blob
 
 ## Command Options
 
-- `-f`, `--file` *string* URL, file or files (e.g. /data/*.gz) to upload.
+- `-f`, `--source_file` *string* URL, file or files (e.g. /data/*.gz) to upload.
 
 - `-c`, `--container_name` *string* container name (e.g. `mycontainer`).
 
