@@ -49,7 +49,7 @@ const (
 	storageAccountNameEnvVar  = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar   = "ACCOUNT_KEY"
 	sourceAuthorizationEnvVar = "SOURCE_AUTH"
-	programVersion            = "0.5.20" // version number to show in help
+	programVersion            = "0.5.21" // version number to show in help
 )
 
 const numOfWorkersFactor = 8

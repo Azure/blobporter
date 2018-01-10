@@ -38,6 +38,7 @@ type SourcePipeline interface {
 	GetSourcesInfo() []SourceInfo
 }
 
+
 //SourceInfo TODO
 type SourceInfo struct {
 	SourceName  string

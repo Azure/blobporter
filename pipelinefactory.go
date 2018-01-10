@@ -28,14 +28,14 @@ func isSourceHTTP() bool {
 
 func getTransferPipelines(pipelinesFactory transferPipelinesFactory, validationRules ...parseAndValidationRule) ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) {
 
-	if err := runValidationRules(validationRules...); err != nil {
+	if err := runParseAndValidationRules(validationRules...); err != nil {
 		return nil, nil, err
 	}
 
 	return pipelinesFactory()
 }
 
-func runValidationRules(rules ...parseAndValidationRule) error {
+func runParseAndValidationRules(rules ...parseAndValidationRule) error {
 	for i := 0; i < len(rules); i++ {
 		val := rules[i]
 		if err := val(); err != nil {
@@ -48,10 +48,12 @@ func runValidationRules(rules ...parseAndValidationRule) error {
 func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) {
 
 	//run global rules...
-	err := runValidationRules(
+	err := runParseAndValidationRules(
+		pvgTransferType,
 		pvgBatchLimits,
 		pvgHTTPTimeOut,
-		pvgDupCheck)
+		pvgDupCheck,
+		pvgParseBlockSize)
 
 	if err != nil {
 		return nil, nil, err
@@ -169,15 +171,16 @@ func getHTTPToBlockPipelines() (source []pipeline.SourcePipeline, target pipelin
 func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
 
 	params := &sources.AzureBlobParams{
-		Container:         sourceKeyInfo["CONTAINER"],
-		BlobNames:         blobNames,
-		AccountName:       sourceKeyInfo["ACCOUNT_NAME"],
-		AccountKey:        sourceAuthorization,
-		CalculateMD5:      calculateMD5,
-		UseExactNameMatch: exactNameMatch,
-		FilesPerPipeline:  numberOfFilesInBatch,
-		//default to always true so blob names are kept
-		KeepDirStructure: true}
+		Container:   sourceKeyInfo["CONTAINER"],
+		BlobNames:   blobNames,
+		AccountName: sourceKeyInfo["ACCOUNT_NAME"],
+		AccountKey:  sourceAuthorization,
+		SourceParams: sources.SourceParams{
+			CalculateMD5:      calculateMD5,
+			UseExactNameMatch: exactNameMatch,
+			FilesPerPipeline:  numberOfFilesInBatch,
+			//default to always true so blob names are kept
+			KeepDirStructure: true}}
 
 	source = sources.NewAzureBlob(params)
 	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
@@ -188,15 +191,16 @@ func getBlobToBlockPipelines() (source []pipeline.SourcePipeline, target pipelin
 	blobNames = []string{sourceKeyInfo["PREFIX"]}
 
 	params := &sources.AzureBlobParams{
-		Container:         sourceKeyInfo["CONTAINER"],
-		BlobNames:         blobNames,
-		AccountName:       sourceKeyInfo["ACCOUNT_NAME"],
-		AccountKey:        sourceAuthorization,
-		CalculateMD5:      calculateMD5,
-		UseExactNameMatch: exactNameMatch,
-		FilesPerPipeline:  numberOfFilesInBatch,
-		//default to always true so blob names are kept
-		KeepDirStructure: true}
+		Container:   sourceKeyInfo["CONTAINER"],
+		BlobNames:   blobNames,
+		AccountName: sourceKeyInfo["ACCOUNT_NAME"],
+		AccountKey:  sourceAuthorization,
+		SourceParams: sources.SourceParams{
+			CalculateMD5:      calculateMD5,
+			UseExactNameMatch: exactNameMatch,
+			FilesPerPipeline:  numberOfFilesInBatch,
+			//default to always true so blob names are kept
+			KeepDirStructure: true}}
 
 	source = sources.NewAzureBlob(params)
 	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
@@ -210,14 +214,15 @@ func getBlobToFilePipelines() (source []pipeline.SourcePipeline, target pipeline
 	}
 
 	params := &sources.AzureBlobParams{
-		Container:         containerName,
-		BlobNames:         blobNames,
-		AccountName:       storageAccountName,
-		AccountKey:        storageAccountKey,
-		CalculateMD5:      calculateMD5,
-		UseExactNameMatch: exactNameMatch,
-		FilesPerPipeline:  numberOfFilesInBatch,
-		KeepDirStructure:  keepDirStructure}
+		Container:   containerName,
+		BlobNames:   blobNames,
+		AccountName: storageAccountName,
+		AccountKey:  storageAccountKey,
+		SourceParams: sources.SourceParams{
+			CalculateMD5:      calculateMD5,
+			UseExactNameMatch: exactNameMatch,
+			FilesPerPipeline:  numberOfFilesInBatch,
+			KeepDirStructure:  keepDirStructure}}
 
 	source = sources.NewAzureBlob(params)
 	target = targets.NewMultiFile(true, numberOfHandlesPerFile)
@@ -273,6 +278,14 @@ func adjustReaders(numOfSources int) error {
 //**************************
 
 //Global rules....
+func pvgParseBlockSize() error {
+	var err error
+	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
+	if err != nil {
+		return fmt.Errorf("Invalid block size specified: %v. Parse Error: %v ", blockSizeStr, err)
+	}
+	return nil
+}
 func pvgBatchLimits() error {
 	if numberOfFilesInBatch < 1 {
 		log.Fatal("Invalid value for option -x, the value must be greater than 1")
@@ -295,6 +308,13 @@ func pvgDupCheck() error {
 
 	return nil
 }
+func pvgTransferType() error {
+	var err error
+	if transferType, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
+		return err
+	}
+	return nil
+}
 
 //Transfer specific rules...
 func pvNumOfHandlesPerFile() error {
@@ -305,19 +325,7 @@ func pvNumOfHandlesPerFile() error {
 	return nil
 }
 
-func pvTransferType() error {
-	var err error
-	if transferType, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
-		return err
-	}
-	return nil
-}
 func pvBlockSizeCheckForBlockBlobs() error {
-	var err error
-	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
-	if err != nil {
-		return fmt.Errorf("Invalid block size specified: %v. Parse Error: %v ", blockSizeStr, err)
-	}
 
 	blockSizeMax := util.LargeBlockSizeMax
 	if blockSize > blockSizeMax {

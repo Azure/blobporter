@@ -12,14 +12,11 @@ import (
 
 //AzureBlobParams TODO
 type AzureBlobParams struct {
+	SourceParams
 	Container           string
 	BlobNames           []string
 	AccountName         string
 	AccountKey          string
-	CalculateMD5        bool
-	UseExactNameMatch   bool
-	KeepDirStructure    bool
-	FilesPerPipeline    int
 	SasExpNumberOfHours int
 }
 
@@ -36,8 +33,8 @@ func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
 	return &azBlobInfoProvider{params: params, storageClient: &client}
 }
 
-//GetSourceInfo TODO
-func (b *azBlobInfoProvider) GetSourceInfo() ([]pipeline.SourceInfo, error) {
+//getSourceInfo TODO
+func (b *azBlobInfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
 	var err error
 	exp := b.params.SasExpNumberOfHours
 	if exp == 0 {
@@ -99,7 +96,7 @@ func (b *azBlobInfoProvider) getBlobLists() ([]storage.BlobListResponse, error) 
 	if len(b.params.BlobNames) > 1 {
 		listLength = len(b.params.BlobNames)
 	}
-
+	
 	listOfLists := make([]storage.BlobListResponse, listLength)
 
 	for i, blobname := range b.params.BlobNames {
