@@ -32,7 +32,7 @@ func NewMultiFile(overwrite bool, numberOfHandles int) pipeline.TargetPipeline {
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //Passthrough no need to pre-process for a file target.
-func (t *MultiFile) PreProcessSourceInfo(source *pipeline.SourceInfo) (err error) {
+func (t *MultiFile) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
 	t.Lock()
 	defer t.Unlock()
 

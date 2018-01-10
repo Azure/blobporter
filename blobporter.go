@@ -72,7 +72,7 @@ func init() {
 	)
 
 	const (
-		fileMsg                    = "URL, file or files (e.g. /data/*.gz) to upload."
+		fileMsg                    = "Source URL, file or files (e.g. /data/*.gz) to upload."
 		nameMsg                    = "Blob name (e.g. myblob.txt) or prefix for download scenarios."
 		containerNameMsg           = "Container name (e.g. mycontainer).\n\tIf the container does not exist, it will be created."
 		concurrentWorkersMsg       = "Number of workers for parallel upload."
@@ -93,7 +93,7 @@ func init() {
 	)
 
 	flag.Usage = func() {
-		util.PrintUsageDefaults("f", "file", "", fileMsg)
+		util.PrintUsageDefaults("f", "source_file", "", fileMsg)
 		util.PrintUsageDefaults("n", "name", "", nameMsg)
 		util.PrintUsageDefaults("c", "container_name", "", containerNameMsg)
 		util.PrintUsageDefaults("g", "concurrent_workers", strconv.Itoa(defaultNumberOfWorkers), concurrentWorkersMsg)
@@ -114,7 +114,7 @@ func init() {
 
 	}
 
-	util.StringListVarAlias(&sourceURIs, "f", "file", "", fileMsg)
+	util.StringListVarAlias(&sourceURIs, "f", "source_file", "", fileMsg)
 	util.StringListVarAlias(&blobNames, "n", "name", "", nameMsg)
 	util.StringVarAlias(&containerName, "c", "container_name", "", containerNameMsg)
 	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, concurrentWorkersMsg)
