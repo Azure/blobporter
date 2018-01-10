@@ -38,6 +38,10 @@ var defaultTransferDef = transfer.FileToBlock
 var storageAccountName string
 var storageAccountKey string
 var storageClientHTTPTimeout int
+
+var sourceKeyInfo map[string]string
+var sourceAuthorization string
+
 var quietMode bool
 var calculateMD5 bool
 var exactNameMatch bool
@@ -47,9 +51,10 @@ var numberOfFilesInBatch = defaultNumberOfFilesInBatch
 
 const (
 	// User can use environment variables to specify storage account information
-	storageAccountNameEnvVar = "ACCOUNT_NAME"
-	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.14" // version number to show in help
+	storageAccountNameEnvVar  = "ACCOUNT_NAME"
+	storageAccountKeyEnvVar   = "ACCOUNT_KEY"
+	sourceAuthorizationEnvVar = "SOURCE_AUTH"
+	programVersion            = "0.5.20" // version number to show in help
 )
 
 const numOfWorkersFactor = 8
@@ -221,32 +226,72 @@ func isSourceHTTP() bool {
 
 	return err == nil && (strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https")
 }
-func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline) {
 
-	//container is required but when is a http to file transfer.
-	if transferType != transfer.HTTPToFile {
-		if containerName == "" {
-			log.Fatal("container name not specified ")
+func getTransferPipelines(pipelinesFactory transferPipelinesFactory, validationRules ...parseAndvalidationRule) ([]pipeline.SourcePipeline, pipeline.TargetPipeline) {
+	for i := 0; i < len(validationRules); i++ {
+		val := validationRules[i]
+		if err := val(); err != nil {
+			log.Fatal(err)
 		}
 	}
 
+	return pipelinesFactory()
+}
+
+type transferPipelinesFactory func() ([]pipeline.SourcePipeline, pipeline.TargetPipeline)
+
+func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline) {
+
 	switch transferType {
 	case transfer.FileToPage:
-		return getFileToPagePipelines()
+		return getTransferPipelines(getFileToPagePipelines,
+			pvBlobAuthInfoIsReq,
+			pvSourceURIISReq,
+			pvBlockSizeCheckForPageBlobs,
+			pvContainerIsReq)
 	case transfer.FileToBlock:
-		return getFileToBlockPipelines()
+		return getTransferPipelines(getFileToBlockPipelines,
+			pvBlobAuthInfoIsReq,
+			pvSourceURIISReq,
+			pvBlockSizeCheckForBlockBlobs,
+			pvContainerIsReq)
 	case transfer.HTTPToPage:
-		return getHTTPToPagePipelines()
+		return getTransferPipelines(getHTTPToPagePipelines,
+			pvBlobAuthInfoIsReq,
+			pvSourceURIISReq,
+			pvIsSourceHTTP,
+			pvBlockSizeCheckForPageBlobs,
+			pvContainerIsReq)
 	case transfer.HTTPToBlock:
-		return getHTTPToBlockPipelines()
+		return getTransferPipelines(getHTTPToBlockPipelines,
+			pvBlobAuthInfoIsReq,
+			pvSourceURIISReq,
+			pvIsSourceHTTP,
+			pvContainerIsReq,
+			pvBlockSizeCheckForBlockBlobs)
 	case transfer.BlobToFile:
-		return getBlobToFilePipelines()
+		return getTransferPipelines(getBlobToFilePipelines,
+			pvBlobAuthInfoIsReq,
+			pvContainerIsReq,
+			pvBlockSizeCheckForBlockBlobs)
 	case transfer.HTTPToFile:
-		return getHTTPToFilePipelines()
+		return getTransferPipelines(getHTTPToFilePipelines,
+			pvSourceURIISReq,
+			pvIsSourceHTTP)
 	case transfer.BlobToBlock:
-		return getBlobToBlockPipelines()
+		return getTransferPipelines(getBlobToBlockPipelines,
+			pvBlobAuthInfoIsReq,
+			pvContainerIsReq,
+			pvSourceURIISReq,
+			pvSourceInfoForBlobIsReq,
+			pvBlockSizeCheckForBlockBlobs)
 	case transfer.BlobToPage:
-		return getBlobToPagePipelines()
+		return getTransferPipelines(getBlobToPagePipelines,
+			pvBlobAuthInfoIsReq,
+			pvContainerIsReq,
+			pvSourceURIISReq,
+			pvSourceInfoForBlobIsReq,
+			pvBlockSizeCheckForPageBlobs)
 	}
 
 	log.Fatal(fmt.Errorf("Invalid transfer type: %v ", transferType))
@@ -300,16 +345,11 @@ func getHTTPToBlockPipelines() (source []pipeline.SourcePipeline, target pipelin
 }
 func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
 
-	if len(blobNames) == 0 {
-		//use empty prefix to get the bloblist
-		blobNames = []string{""}
-	}
-
 	params := &sources.AzureBlobParams{
-		Container:         containerName,
+		Container:         sourceKeyInfo["CONTAINER"],
 		BlobNames:         blobNames,
-		AccountName:       storageAccountName,
-		AccountKey:        storageAccountKey,
+		AccountName:       sourceKeyInfo["ACCOUNT_NAME"],
+		AccountKey:        sourceAuthorization,
 		CalculateMD5:      calculateMD5,
 		UseExactNameMatch: exactNameMatch,
 		FilesPerPipeline:  numberOfFilesInBatch,
@@ -322,16 +362,13 @@ func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline
 }
 func getBlobToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
 
-	if len(blobNames) == 0 {
-		//use empty prefix to get the bloblist
-		blobNames = []string{""}
-	}
+	blobNames = []string{sourceKeyInfo["PREFIX"]}
 
 	params := &sources.AzureBlobParams{
-		Container:         containerName,
+		Container:         sourceKeyInfo["CONTAINER"],
 		BlobNames:         blobNames,
-		AccountName:       storageAccountName,
-		AccountKey:        storageAccountKey,
+		AccountName:       sourceKeyInfo["ACCOUNT_NAME"],
+		AccountKey:        sourceAuthorization,
 		CalculateMD5:      calculateMD5,
 		UseExactNameMatch: exactNameMatch,
 		FilesPerPipeline:  numberOfFilesInBatch,
@@ -389,33 +426,7 @@ func getHTTPToFilePipelines() (source []pipeline.SourcePipeline, target pipeline
 func parseAndValidate() {
 
 	flag.Parse()
-
 	var err error
-	if util.HTTPClientTimeout < 30 {
-		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 600s \n")
-		util.HTTPClientTimeout = 600
-	}
-
-	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
-	if err != nil {
-		log.Fatal("Invalid block size specified: " + blockSizeStr)
-	}
-
-	blockSizeMax := util.LargeBlockSizeMax
-	if blockSize > blockSizeMax {
-		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blockSizeMax))
-	}
-
-	dedupeLevel, err = transfer.ParseDupeCheckLevel(dedupeLevelOptStr)
-	if err != nil {
-		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, transfer.DupeCheckLevelStr)
-	}
-
-	err = validateTransferTypesParams()
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	if transferType, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
 		log.Fatal(err)
 	}
@@ -428,6 +439,138 @@ func parseAndValidate() {
 		log.Fatal("Invalid value for option -h, the value must be greater than 1")
 	}
 
+	if util.HTTPClientTimeout < 30 {
+		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 600s \n")
+		util.HTTPClientTimeout = 600
+	}
+
+	
+	dedupeLevel, err = transfer.ParseDupeCheckLevel(dedupeLevelOptStr)
+	if err != nil {
+		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, transfer.DupeCheckLevelStr)
+	}
+
+}
+
+//Validation rules...
+type parseAndvalidationRule func() error
+
+func pvBlockSizeCheckForBlockBlobs() error {
+	var err error
+	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
+	if err != nil {
+		return fmt.Errorf("Invalid block size specified: %v. Parse Error: %v ", blockSizeStr, err)
+	}
+
+	blockSizeMax := util.LargeBlockSizeMax
+	if blockSize > blockSizeMax {
+		return fmt.Errorf("Block size specified (%v) exceeds maximum of %v", blockSizeStr, util.PrintSize(blockSizeMax))
+	}
+
+	return nil
+
+}
+
+func pvIsSourceHTTP() error {
+	if !isSourceHTTP() {
+		return fmt.Errorf("The source is an invalid HTTP endpoint")
+	}
+	return nil
+}
+
+func pvBlockSizeCheckForPageBlobs() error {
+	if blockSize%uint64(targets.PageSize) != 0 {
+		return fmt.Errorf("Invalid block size (%v) for a page blob. The size must be a multiple of %v (bytes) and less or equal to %v (4MB)", blockSize, targets.PageSize, 4*util.MB)
+	}
+
+	if blockSize > 4*util.MB {
+		//adjust the block size to 4 MB
+		blockSize = 4 * util.MB
+
+	}
+
+	return nil
+}
+
+func pvSourceURIISReq() error {
+	if len(sourceURIs) == 0 || sourceURIs == nil {
+		return fmt.Errorf("The source parameter is missing (-f).\nMust be a file, URL, Azure Blob URL or file pattern (e.g. /data/*.fastq) ")
+	}
+	return nil
+}
+
+func pvSourceInfoForBlobIsReq() error {
+	burl, err := url.Parse(sourceURIs[0])
+
+	if err != nil {
+		return fmt.Errorf("Invalid Blob URL. Parsing error: %v", err)
+	}
+
+	host := strings.Split(burl.Hostname(), ".")
+
+	sourceAccountName := host[0]
+
+	if sourceAccountName == "" {
+		return fmt.Errorf("Invalid source Azure Blob URL. Account name could be parsed from the domain")
+	}
+
+	segments := strings.Split(burl.Path, "/")
+
+	sourceContName := segments[1]
+
+	if sourceContName == "" {
+		return fmt.Errorf("Invalid source Azure Blob URL. A container is required")
+	}
+	sourceBlobName := ""
+	if len(segments) > 1 {
+		sourceBlobName = strings.Join(segments[2:len(segments)], "/")
+	}
+
+	sourceKeyInfo = make(map[string]string)
+
+	sourceKeyInfo["ACCOUNT_NAME"] = sourceAccountName
+	sourceKeyInfo["CONTAINER"] = sourceContName
+	sourceKeyInfo["PREFIX"] = sourceBlobName
+
+	if sourceAuthorization == "" {
+		envVal := os.Getenv(sourceAuthorizationEnvVar)
+		if envVal == "" {
+			return fmt.Errorf("The source storage acccount key is required for this transfer type")
+		}
+		sourceAuthorization = envVal
+	}
+
+	return nil
+}
+
+func pvContainerIsReq() error {
+	if containerName == "" {
+		return fmt.Errorf("container name not specified ")
+	}
+	return nil
+}
+
+func pvBlobAuthInfoIsReq() error {
+
+	// wasn't specified, try the environment variable
+	if storageAccountName == "" {
+		envVal := os.Getenv(storageAccountNameEnvVar)
+		if envVal == "" {
+			return errors.New("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
+		}
+		storageAccountName = envVal
+	}
+
+	// wasn't specified, try the environment variable
+	if storageAccountKey == "" {
+		envVal := os.Getenv(storageAccountKeyEnvVar)
+		if envVal == "" {
+			return errors.New("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
+		}
+		storageAccountKey = envVal
+	}
+
+	return nil
 }
 
 //validates command line params considering the type of transfer

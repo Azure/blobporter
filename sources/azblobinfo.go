@@ -23,6 +23,8 @@ type AzureBlobParams struct {
 	SasExpNumberOfHours int
 }
 
+const defaultSasExpHours = 4
+
 type azBlobInfoProvider struct {
 	params        *AzureBlobParams
 	storageClient *storage.BlobStorageClient
@@ -34,11 +36,14 @@ func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
 	return &azBlobInfoProvider{params: params, storageClient: &client}
 }
 
-//GetSourcesInfoForBlobs TODO
+//GetSourceInfo TODO
 func (b *azBlobInfoProvider) GetSourceInfo() ([]pipeline.SourceInfo, error) {
 	var err error
-
-	date := time.Now().UTC().Add(time.Duration(b.params.SasExpNumberOfHours) * time.Hour)
+	exp := b.params.SasExpNumberOfHours
+	if exp == 0 {
+		exp = defaultSasExpHours
+	}
+	date := time.Now().Add(time.Duration(exp) * time.Hour).UTC()
 
 	var blobLists []storage.BlobListResponse
 	blobLists, err = b.getBlobLists()
