@@ -508,6 +508,8 @@ func pvSourceInfoForS3IsReq() error {
 	sourceParameters["PREFIX"] = prefix
 	sourceParameters["BUCKET"] = bucket
 	sourceParameters["ENDPOINT"] = endpoint
+	sourceParameters[s3AccessKeyEnvVar] = os.Getenv(s3AccessKeyEnvVar)
+	sourceParameters[s3SecretKeyEnvVar] = os.Getenv(s3SecretKeyEnvVar)
 
 	return nil
 }
