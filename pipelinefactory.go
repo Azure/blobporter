@@ -111,6 +111,21 @@ func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) 
 			pvSourceURIISReq,
 			pvSourceInfoForBlobIsReq,
 			pvBlockSizeCheckForPageBlobs)
+	case transfer.S3ToPage:
+		return getTransferPipelines(getS3ToPagePipelines,
+			pvBlobAuthInfoIsReq,
+			pvSourceURIISReq,
+			pvSourceInfoForS3IsReq,
+			pvBlockSizeCheckForPageBlobs,
+			pvContainerIsReq)
+	case transfer.S3ToBlock:
+		return getTransferPipelines(getS3ToBlockPipelines,
+			pvBlobAuthInfoIsReq,
+			pvSourceURIISReq,
+			pvSourceInfoForS3IsReq,
+			pvContainerIsReq,
+			pvBlockSizeCheckForBlockBlobs)
+
 	}
 
 	return nil, nil, fmt.Errorf("Invalid transfer type: %v ", transferType)
@@ -168,12 +183,48 @@ func getHTTPToBlockPipelines() (source []pipeline.SourcePipeline, target pipelin
 	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 	return
 }
+func getS3ToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
+
+	params := &sources.S3Params{
+		Bucket:   sourceParameters["BUCKET"],
+		Prefixes: []string{sourceParameters["PREFIX"]},
+		Endpoint: sourceParameters["ENDPOINT"],
+		Region:   sourceParameters[s3RegionEnvVar],
+		SourceParams: sources.SourceParams{
+			CalculateMD5:      calculateMD5,
+			UseExactNameMatch: exactNameMatch,
+			FilesPerPipeline:  numberOfFilesInBatch,
+			//default to always true so blob names are kept
+			KeepDirStructure: true}}
+
+	source = sources.NewS3Pipeline(params)
+	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+	return
+}
+func getS3ToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
+
+	params := &sources.S3Params{
+		Bucket:   sourceParameters["BUCKET"],
+		Prefixes: []string{sourceParameters["PREFIX"]},
+		Endpoint: sourceParameters["ENDPOINT"],
+		Region:   sourceParameters[s3RegionEnvVar],
+		SourceParams: sources.SourceParams{
+			CalculateMD5:      calculateMD5,
+			UseExactNameMatch: exactNameMatch,
+			FilesPerPipeline:  numberOfFilesInBatch,
+			//default to always true so blob names are kept
+			KeepDirStructure: true}}
+
+	source = sources.NewS3Pipeline(params)
+	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
+	return
+}
 func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
 
 	params := &sources.AzureBlobParams{
-		Container:   sourceKeyInfo["CONTAINER"],
+		Container:   sourceParameters["CONTAINER"],
 		BlobNames:   blobNames,
-		AccountName: sourceKeyInfo["ACCOUNT_NAME"],
+		AccountName: sourceParameters["ACCOUNT_NAME"],
 		AccountKey:  sourceAuthorization,
 		SourceParams: sources.SourceParams{
 			CalculateMD5:      calculateMD5,
@@ -188,12 +239,12 @@ func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline
 }
 func getBlobToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
 
-	blobNames = []string{sourceKeyInfo["PREFIX"]}
+	blobNames = []string{sourceParameters["PREFIX"]}
 
 	params := &sources.AzureBlobParams{
-		Container:   sourceKeyInfo["CONTAINER"],
+		Container:   sourceParameters["CONTAINER"],
 		BlobNames:   blobNames,
-		AccountName: sourceKeyInfo["ACCOUNT_NAME"],
+		AccountName: sourceParameters["ACCOUNT_NAME"],
 		AccountKey:  sourceAuthorization,
 		SourceParams: sources.SourceParams{
 			CalculateMD5:      calculateMD5,
@@ -391,11 +442,11 @@ func pvSourceInfoForBlobIsReq() error {
 		sourceBlobName = strings.Join(segments[2:len(segments)], "/")
 	}
 
-	sourceKeyInfo = make(map[string]string)
+	sourceParameters = make(map[string]string)
 
-	sourceKeyInfo["ACCOUNT_NAME"] = sourceAccountName
-	sourceKeyInfo["CONTAINER"] = sourceContName
-	sourceKeyInfo["PREFIX"] = sourceBlobName
+	sourceParameters["ACCOUNT_NAME"] = sourceAccountName
+	sourceParameters["CONTAINER"] = sourceContName
+	sourceParameters["PREFIX"] = sourceBlobName
 
 	if sourceAuthorization == "" {
 		envVal := os.Getenv(sourceAuthorizationEnvVar)
@@ -404,6 +455,59 @@ func pvSourceInfoForBlobIsReq() error {
 		}
 		sourceAuthorization = envVal
 	}
+
+	return nil
+}
+
+func pvSourceInfoForS3IsReq() error {
+	burl, err := url.Parse(sourceURIs[0])
+
+	if err != nil {
+		return fmt.Errorf("Invalid S3 endpoint URL. Parsing error: %v.\nThe format is s3://[END_POINT]/[BUCKET]/[OBJECT]", err)
+	}
+
+	endpoint := burl.Hostname()
+
+	if endpoint == "" {
+		return fmt.Errorf("Invalid source S3 URI. The endpoint is required")
+	}
+
+	segments := strings.Split(burl.Path, "/")
+
+	bucket := segments[1]
+
+	if bucket == "" {
+		return fmt.Errorf("Invalid source S3 URI. Bucket name could be parsed")
+	}
+
+	prefix := ""
+	if len(segments) > 1 {
+		prefix = strings.Join(segments[2:len(segments)], "/")
+	}
+
+	region := os.Getenv(s3RegionEnvVar)
+	/*
+	if region == "" {
+		return fmt.Errorf("The S3 region is required for this transfer type. Environment variable name:%v", s3RegionEnvVar)
+	}
+	*/
+
+	//The S3 Source uses the environment variables cred provider. So here we are just checking they are set.
+
+	if os.Getenv(s3KeyEnvVar) == "" {
+		return fmt.Errorf("The S3 access key is required for this transfer type. Environment variable name:%v", s3KeyEnvVar)
+	}
+
+	if os.Getenv(s3SecretKeyEnvVar) == "" {
+		return fmt.Errorf("The S3 secret key is required for this transfer type. Environment variable name:%v", s3SecretKeyEnvVar)
+	}
+
+	sourceParameters = make(map[string]string)
+
+	sourceParameters[s3RegionEnvVar] = region
+	sourceParameters["PREFIX"] = prefix
+	sourceParameters["BUCKET"] = bucket
+	sourceParameters["ENDPOINT"] = endpoint
 
 	return nil
 }

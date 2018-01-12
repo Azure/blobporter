@@ -82,6 +82,8 @@ const (
 	HTTPToFile             = "http-file"
 	BlobToBlock            = "blob-blockblob"
 	BlobToPage             = "blob-pageblob"
+	S3ToBlock              = "s3-blockblob"
+	S3ToPage               = "s3-pageblob"
 	none                   = "none"
 )
 
@@ -115,6 +117,10 @@ func ParseTransferDefinition(str string) (Definition, error) {
 		return BlobToPage, nil
 	case "blob-blob":
 		return BlobToBlock, nil
+	case "s3-blockblob":
+		return S3ToBlock, nil
+	case "s3-pageblob":
+		return S3ToPage, nil
 	default:
 		return none, fmt.Errorf("%v is not a valid transfer definition value.\n Valid values: file-blockblob, http-blockblob,file-pageblob, http-pageblob, pageblob-file, blockblob-file, http-file", str)
 	}
@@ -362,7 +368,7 @@ func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
 	return t.TimeStats.Duration, t.TimeStats.CumWriteDuration
 }
 
-//GetStats TODO
+//GetStats returns the statistics of the transfer.
 func (t *Transfer) GetStats() *StatInfo {
 	return &StatInfo{
 		NumberOfFiles:       len((*t.SourcePipeline).GetSourcesInfo()),

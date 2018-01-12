@@ -10,7 +10,7 @@ import (
 	"github.com/Azure/blobporter/util"
 )
 
-//AzureBlobParams TODO
+//AzureBlobParams parameters for the creation of Azure Blob source pipeline
 type AzureBlobParams struct {
 	SourceParams
 	Container           string
@@ -33,7 +33,9 @@ func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
 	return &azBlobInfoProvider{params: params, storageClient: &client}
 }
 
-//getSourceInfo TODO
+//getSourceInfo gets a list of SourceInfo that represent the list of azure blobs returned by the service
+// based on the provided criteria (container/prefix). If the exact match flag is set, then a specific match is
+// performed instead of the prefix. Marker semantics are also honored so a complete list is expected
 func (b *azBlobInfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
 	var err error
 	exp := b.params.SasExpNumberOfHours
@@ -96,7 +98,7 @@ func (b *azBlobInfoProvider) getBlobLists() ([]storage.BlobListResponse, error) 
 	if len(b.params.BlobNames) > 1 {
 		listLength = len(b.params.BlobNames)
 	}
-	
+
 	listOfLists := make([]storage.BlobListResponse, listLength)
 
 	for i, blobname := range b.params.BlobNames {

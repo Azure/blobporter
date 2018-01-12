@@ -130,15 +130,15 @@ func PrintUsageDefaults(shortflag string, longflag string, defaultVal string, de
 	fmt.Fprintln(os.Stderr, fmt.Sprintf("-%v, --%v :\n\t%v%v", shortflag, longflag, description, defaultMsg))
 }
 
-//ListFlag TODO
+//ListFlag represents a multivalue flag
 type ListFlag []string
 
-//String TODO
+//String joints all values of the flag
 func (lst *ListFlag) String() string {
 	return strings.Join(*lst, " ")
 }
 
-//Set TODO
+//Set adds a new value to the values list
 func (lst *ListFlag) Set(value string) error {
 	*lst = append(*lst, value)
 	return nil

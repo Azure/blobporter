@@ -34,7 +34,7 @@ var storageAccountName string
 var storageAccountKey string
 var storageClientHTTPTimeout int
 
-var sourceKeyInfo map[string]string
+var sourceParameters map[string]string
 var sourceAuthorization string
 
 var quietMode bool
@@ -49,7 +49,13 @@ const (
 	storageAccountNameEnvVar  = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar   = "ACCOUNT_KEY"
 	sourceAuthorizationEnvVar = "SOURCE_AUTH"
-	programVersion            = "0.5.21" // version number to show in help
+	//S3 creds information
+	s3KeyEnvVar       = "AWS_ACCESS_KEY"
+	s3SecretKeyEnvVar = "AWS_SECRET_KEY"
+	s3RegionEnvVar    = "S3_REGION"
+	s3EndpointEnvVar  = "S3_ENDPOINT"
+
+	programVersion = "0.5.21" // version number to show in help
 )
 
 const numOfWorkersFactor = 8
