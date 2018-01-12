@@ -183,13 +183,19 @@ func getHTTPToBlockPipelines() (source []pipeline.SourcePipeline, target pipelin
 	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
 	return
 }
+
+//S3...
+const defaulPreSignedExpMins = 90
+
 func getS3ToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
 
 	params := &sources.S3Params{
-		Bucket:   sourceParameters["BUCKET"],
-		Prefixes: []string{sourceParameters["PREFIX"]},
-		Endpoint: sourceParameters["ENDPOINT"],
-		Region:   sourceParameters[s3RegionEnvVar],
+		Bucket:          sourceParameters["BUCKET"],
+		Prefixes:        []string{sourceParameters["PREFIX"]},
+		Endpoint:        sourceParameters["ENDPOINT"],
+		PreSignedExpMin: defaulPreSignedExpMins,
+		AccessKey:       sourceParameters[s3AccessKeyEnvVar],
+		SecretKey:       sourceParameters[s3SecretKeyEnvVar],
 		SourceParams: sources.SourceParams{
 			CalculateMD5:      calculateMD5,
 			UseExactNameMatch: exactNameMatch,
@@ -204,10 +210,12 @@ func getS3ToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.T
 func getS3ToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
 
 	params := &sources.S3Params{
-		Bucket:   sourceParameters["BUCKET"],
-		Prefixes: []string{sourceParameters["PREFIX"]},
-		Endpoint: sourceParameters["ENDPOINT"],
-		Region:   sourceParameters[s3RegionEnvVar],
+		Bucket:          sourceParameters["BUCKET"],
+		Prefixes:        []string{sourceParameters["PREFIX"]},
+		Endpoint:        sourceParameters["ENDPOINT"],
+		PreSignedExpMin: defaulPreSignedExpMins,
+		AccessKey:       sourceParameters[s3AccessKeyEnvVar],
+		SecretKey:       sourceParameters[s3SecretKeyEnvVar],
 		SourceParams: sources.SourceParams{
 			CalculateMD5:      calculateMD5,
 			UseExactNameMatch: exactNameMatch,
@@ -485,17 +493,10 @@ func pvSourceInfoForS3IsReq() error {
 		prefix = strings.Join(segments[2:len(segments)], "/")
 	}
 
-	region := os.Getenv(s3RegionEnvVar)
-	/*
-	if region == "" {
-		return fmt.Errorf("The S3 region is required for this transfer type. Environment variable name:%v", s3RegionEnvVar)
-	}
-	*/
-
 	//The S3 Source uses the environment variables cred provider. So here we are just checking they are set.
 
-	if os.Getenv(s3KeyEnvVar) == "" {
-		return fmt.Errorf("The S3 access key is required for this transfer type. Environment variable name:%v", s3KeyEnvVar)
+	if os.Getenv(s3AccessKeyEnvVar) == "" {
+		return fmt.Errorf("The S3 access key is required for this transfer type. Environment variable name:%v", s3AccessKeyEnvVar)
 	}
 
 	if os.Getenv(s3SecretKeyEnvVar) == "" {
@@ -504,7 +505,6 @@ func pvSourceInfoForS3IsReq() error {
 
 	sourceParameters = make(map[string]string)
 
-	sourceParameters[s3RegionEnvVar] = region
 	sourceParameters["PREFIX"] = prefix
 	sourceParameters["BUCKET"] = bucket
 	sourceParameters["ENDPOINT"] = endpoint

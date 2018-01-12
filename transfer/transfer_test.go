@@ -18,6 +18,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//********
+//IMPORTANT:
+// -- Tests require a valid storage account and env variables set up accordingly.
+// -- Tests create a working directory named _wd and temp files under it. Plase make sure the working directory is in .gitignore
+//********
 var sourceFiles = make([]string, 1)
 var accountName = os.Getenv("ACCOUNT_NAME")
 var accountKey = os.Getenv("ACCOUNT_KEY")
@@ -30,6 +35,7 @@ var filesPerPipeline = 10
 const (
 	containerName1 = "bptest"
 	containerName2 = "bphttptest"
+	tempDir        = "_wd"
 )
 
 func TestFileToPageHTTPToPage(t *testing.T) {
@@ -42,6 +48,7 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -71,6 +78,7 @@ func TestFileToPage(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -85,7 +93,7 @@ func TestFileToPage(t *testing.T) {
 
 func TestFileToFile(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
-	var destFile = "d" + sourceFile
+	var destFile = sourceFile + "d"
 
 	sourceParams := &sources.MultiFileParams{
 		SourcePatterns:   []string{sourceFile},
@@ -93,6 +101,7 @@ func TestFileToFile(t *testing.T) {
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
 		TargetAliases:    []string{destFile},
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -116,6 +125,7 @@ func TestFileToBlob(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -136,6 +146,7 @@ func TestFileToBlobToBlock(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -143,20 +154,6 @@ func TestFileToBlobToBlock(t *testing.T) {
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
-
-	sourceParams = &sources.AzureBlobParams{
-		Container:         container,
-		BlobNames:         []string{sourceFile},
-		AccountName:       accountName,
-		AccountKey:        accountKey,
-		CalculateMD5:      true,
-		UseExactNameMatch: true,
-		FilesPerPipeline:  10,
-		//default to always true so blob names are kept
-		KeepDirStructure: true}
-
-	source := sources.NewAzureBlob(sourceParams)
-	target := targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
 
 	os.Remove(sourceFile)
 
@@ -171,6 +168,7 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -190,10 +188,11 @@ func TestFilesToBlob(t *testing.T) {
 	var sf4 = createFile("tbm", 1)
 
 	sourceParams := &sources.MultiFileParams{
-		SourcePatterns:   []string{"tbm*"},
+		SourcePatterns:   []string{tempDir + "/tbm*"},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -218,6 +217,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -246,6 +246,7 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -257,14 +258,14 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	sourceFiles[0] = "d" + sourceFile
+	sourceFiles[0] = sourceFile + "d"
 	ap = targets.NewMultiFile(true, numOfWorkers)
 	fp = sources.NewHTTP([]string{sourceURI}, sourceFiles, true)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
-	os.Remove("d" + sourceFile)
+	os.Remove(sourceFile + "d")
 	os.Remove(sourceFile)
 
 }
@@ -277,6 +278,7 @@ func TestFileToBlobToFile(t *testing.T) {
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -287,13 +289,15 @@ func TestFileToBlobToFile(t *testing.T) {
 
 	ap = targets.NewMultiFile(true, numOfWorkers)
 	azureBlobParams := &sources.AzureBlobParams{
-		Container:         container,
-		BlobNames:         []string{sourceFile},
-		AccountName:       accountName,
-		AccountKey:        accountKey,
-		FilesPerPipeline:  filesPerPipeline,
-		CalculateMD5:      true,
-		UseExactNameMatch: false}
+		Container:   container,
+		BlobNames:   []string{sourceFile},
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		SourceParams: sources.SourceParams{
+			FilesPerPipeline:  filesPerPipeline,
+			CalculateMD5:      true,
+			KeepDirStructure:  true,
+			UseExactNameMatch: false}}
 	fp = sources.NewAzureBlob(azureBlobParams)[0]
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -305,7 +309,7 @@ func TestFileToBlobToFile(t *testing.T) {
 func TestFileToBlobToFileWithAlias(t *testing.T) {
 	container, _ := getContainers()
 	var sourceFile = createFile("tb", 1)
-	var alias = "x" + sourceFile
+	var alias = sourceFile + "alias"
 
 	sourceParams := &sources.MultiFileParams{
 		SourcePatterns:   []string{sourceFile},
@@ -313,6 +317,7 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 		TargetAliases:    []string{alias},
 		FilesPerPipeline: filesPerPipeline,
 		NumOfPartitions:  numOfReaders,
+		KeepDirStructure: true,
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
@@ -323,20 +328,22 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 
 	ap = targets.NewMultiFile(true, numOfWorkers)
 	azureBlobParams := &sources.AzureBlobParams{
-		Container:         container,
-		BlobNames:         []string{alias},
-		AccountName:       accountName,
-		AccountKey:        accountKey,
-		CalculateMD5:      true,
-		FilesPerPipeline:  filesPerPipeline,
-		UseExactNameMatch: false}
+		Container:   container,
+		BlobNames:   []string{alias},
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		SourceParams: sources.SourceParams{
+			FilesPerPipeline:  filesPerPipeline,
+			CalculateMD5:      true,
+			KeepDirStructure:  true,
+			UseExactNameMatch: true}}
 	fp = sources.NewAzureBlob(azureBlobParams)[0]
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
-	os.Remove(alias)
 	os.Remove(sourceFile)
+	os.Remove(alias)
 
 }
 func deleteContainer(containerName string) {
@@ -375,9 +382,17 @@ func getStorageAccountCreds() *pipeline.StorageAccountCredentials {
 	return &pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
 }
 func createPageFile(prefix string, sizeInMB int) string {
-	fileName := fmt.Sprintf("%v%v", prefix, time.Now().Nanosecond())
-	var file *os.File
 	var err error
+
+	fileName := fmt.Sprintf("%s/%v%v", tempDir, prefix, time.Now().Nanosecond())
+
+	err = os.MkdirAll(tempDir, 0777)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var file *os.File
 
 	defer func() {
 		if file != nil {
@@ -406,10 +421,18 @@ func createPageFile(prefix string, sizeInMB int) string {
 
 	return fileName
 }
+
 func createFile(prefix string, approxSizeInMB int) string {
-	fileName := fmt.Sprintf("%v%v", prefix, time.Now().Nanosecond())
+
+	fileName := fmt.Sprintf("%s/%v%v", tempDir, prefix, time.Now().Nanosecond())
+
+	err := os.MkdirAll(tempDir, 0777)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var file *os.File
-	var err error
 
 	defer func() {
 		if file != nil {

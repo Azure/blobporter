@@ -20,7 +20,7 @@ type AzureBlobParams struct {
 	SasExpNumberOfHours int
 }
 
-const defaultSasExpHours = 4
+const defaultSasExpHours = 2
 
 type azBlobInfoProvider struct {
 	params        *AzureBlobParams

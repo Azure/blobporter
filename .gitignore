@@ -8,6 +8,7 @@ _obj
 _test
 _build/linux_amd64
 _build/windows_amd64
+_wd
 .vscode
 
 # Architecture specific extensions/prefixes

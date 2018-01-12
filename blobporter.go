@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -48,12 +49,10 @@ const (
 	// User can use environment variables to specify storage account information
 	storageAccountNameEnvVar  = "ACCOUNT_NAME"
 	storageAccountKeyEnvVar   = "ACCOUNT_KEY"
-	sourceAuthorizationEnvVar = "SOURCE_AUTH"
+	sourceAuthorizationEnvVar = "SRC_ACCOUNT_KEY"
 	//S3 creds information
-	s3KeyEnvVar       = "AWS_ACCESS_KEY"
-	s3SecretKeyEnvVar = "AWS_SECRET_KEY"
-	s3RegionEnvVar    = "S3_REGION"
-	s3EndpointEnvVar  = "S3_ENDPOINT"
+	s3AccessKeyEnvVar = "S3_ACCESS_KEY"
+	s3SecretKeyEnvVar = "S3_SECRET_KEY"
 
 	programVersion = "0.5.21" // version number to show in help
 )
@@ -147,8 +146,14 @@ var transferType transfer.Definition
 func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int, batchNumber int) {
 	if numOfBatches == 1 {
 		fmt.Printf("Files to Transfer (%v) :\n ", transferDefStr)
+
 		for _, source := range sourcesInfo {
-			fmt.Printf("Source: %v Size:%v \n", source.SourceName, source.Size)
+			//if the source is URL, remove the QS
+			display := source.SourceName
+			if u, err := url.Parse(source.SourceName); err == nil {
+				display = fmt.Sprintf("%v%v", u.Hostname(), u.Path)
+			}
+			fmt.Printf("Source: %v Size:%v \n", display, source.Size)
 		}
 
 		return

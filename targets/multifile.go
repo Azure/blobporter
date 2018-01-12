@@ -64,9 +64,11 @@ func (t *MultiFile) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize 
 	fhQ := make(chan *os.File, t.NumberOfHandles)
 
 	for i := 0; i < t.NumberOfHandles; i++ {
+
 		if fh, err = os.OpenFile(source.TargetAlias, os.O_WRONLY, os.ModeAppend); err != nil {
 			log.Fatal(err)
 		}
+
 		fhQ <- fh
 	}
 	t.FileHandles[source.TargetAlias] = fhQ
@@ -86,8 +88,11 @@ func (t *MultiFile) CommitList(listInfo *pipeline.TargetCommittedListInfo, numbe
 		if !ok {
 			break
 		}
+		err = fh.Close()
 
-		fh.Close()
+		if err != nil {
+			return fmt.Sprintf("Closing handle for target:%v failed.", targetName), err
+		}
 	}
 
 	msg = fmt.Sprintf("\rFile Saved:%v, Parts: %d",
