@@ -1,7 +1,7 @@
 package sources
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"strconv"
 	"strings"
@@ -38,7 +38,7 @@ func newHTTPSource(sourceListManager objectListManager, pipelineFactory sourceHT
 	}
 
 	if numOfFilePerPipeline <= 0 {
-		return nil , fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero")
+		return nil, fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero")
 	}
 
 	numOfBatches := (len(sourceInfos) + numOfFilePerPipeline - 1) / numOfFilePerPipeline
@@ -205,7 +205,9 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 
 				return err
 			}
-			p.Data, err = ioutil.ReadAll(res.Body)
+			//p.Data, err = ioutil.ReadAll(res.Body)
+			_, err = io.ReadFull(res.Body, p.Data[:p.BytesToRead])
+
 			res.Body.Close()
 			if err != nil {
 				return err
