@@ -111,7 +111,7 @@ For example:
 
 `./blobporter -f s3://s3.amazonaws.com/bpperftest/mydata -c froms3 -t s3-blockblob -p`
 
-Note: It is recommended to perform this operation from a VM running on the cloud. This is a network bound operation where is uploaded as it is received from the source.
+Note: It is recommended to perform this operation from a VM running on the cloud. This is a network bound operation where data from the source is uploaded as it is received.
 
 ### Upload from an HTTP/HTTPS source to Azure Blob Storage
 

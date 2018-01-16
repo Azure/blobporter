@@ -176,17 +176,15 @@ func (t *MultiFile) WritePart(part *pipeline.Part) (duration time.Duration, star
 	var fh *os.File
 
 	if fh, err = t.loadHandle(part); err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Errorf("Failed to load the handle: %v", err))
 	}
 
 	if _, err = fh.WriteAt((*part).Data, int64((*part).Offset)); err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Errorf("Failed to write data: %v", err))
 	}
 
-	//fmt.Printf("Part Written:%+v\n", part.Ordinal)
-
 	if err = t.closeOrKeepHandle(part, fh); err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Errorf("Failed to close or keep the handle: %v", err))
 	}
 	duration = time.Now().Sub(startTime)
 
