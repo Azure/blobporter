@@ -101,3 +101,12 @@ dd if=/dev/urandom of=$F1 bs=36M count=1 iflag=fullblock
 #Download file
 ./blobporter -n $DOWN_F1 -c $CONT -t blob-file -b 32MB
 calculateMD5 $F1 $DOWN_F1
+
+
+#Scenario 9 - Synchronous copy from one container to another in the same storage account.
+CONT2="syncopy"
+SRC_URL="https://"$ACCOUNT_NAME".blob.core.windows.net/"$CONT
+SRC_ACCOUNT_KEY=$ACCOUNT_KEY
+
+./blobporter -f $SRC_URL -c $CONT2 -t blob-blockblob
+

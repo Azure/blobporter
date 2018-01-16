@@ -54,12 +54,12 @@ const (
 	s3AccessKeyEnvVar = "S3_ACCESS_KEY"
 	s3SecretKeyEnvVar = "S3_SECRET_KEY"
 
-	programVersion = "0.5.21" // version number to show in help
+	programVersion = "0.5.22" // version number to show in help
 )
 
 const numOfWorkersFactor = 8
 const numOfReadersFactor = 5
-const defaultNumberOfFilesInBatch = 200
+const defaultNumberOfFilesInBatch = 500
 const defaultNumberOfHandlesPerFile = 2
 
 func init() {

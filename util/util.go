@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"net/http"
@@ -376,21 +377,26 @@ func getStorageHTTPClient() *http.Client {
 
 }
 
+var c *http.Client
+var mtx sync.Mutex
+
 //NewHTTPClient  creates a new HTTP client with the configured timeout and MaxIdleConnsPerHost = 50, keep alive dialer.
-
 func NewHTTPClient() *http.Client {
+	mtx.Lock()
+	defer mtx.Unlock()
 
-	c := http.Client{
-		Timeout: time.Duration(HTTPClientTimeout) * time.Second,
-		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout:   30 * time.Second, // dial timeout
-				KeepAlive: 30 * time.Second,
-			}).Dial,
-			MaxIdleConns:        maxIdleConns,
-			MaxIdleConnsPerHost: maxIdleConnsPerHost}}
-
-	return &c
+	if c == nil {
+		c = &http.Client{
+			Timeout: time.Duration(HTTPClientTimeout) * time.Second,
+			Transport: &http.Transport{
+				Dial: (&net.Dialer{
+					Timeout:   30 * time.Second, // dial timeout
+					KeepAlive: 30 * time.Second,
+				}).Dial,
+				MaxIdleConns:        maxIdleConns,
+				MaxIdleConnsPerHost: maxIdleConnsPerHost}}
+	}
+	return c
 }
 
 func handleExceededRetries(err error) {

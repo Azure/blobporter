@@ -15,12 +15,12 @@ Sources and targets are decoupled, this design enables the composition of variou
 | ---------------  | -----------------| -----------------|-----------------|
 | File (Upload)    | Yes              | Yes              | NA              |
 | HTTP/HTTPS*      | Yes              | Yes              | Yes             |
-| Azure Block Blob | Yes**            | Yes**            | Yes             |
-| Azure Page Blob  | Yes**            | Yes**            | Yes             |
+| Azure Block Blob | Yes              | Yes              | Yes             |
+| Azure Page Blob  | Yes              | Yes              | Yes             |
+| S3 Endpoint      | Yes              | Yes              | No              |
 
 *\*   The HTTP/HTTPS source must support HTTP byte ranges and return the file size as a response to a HTTP HEAD request.*
 
-*\*\* Using the Blob URL with a valid SAS Token with read access .*
 
 ## Getting Started
 
@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.14/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.5.22/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.14/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.5.22/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -94,6 +94,25 @@ For example, a single file upload to page blob:
 
 >Note: The file size and block size must be a multiple of 512 (bytes). The maximum block size is 4MB.
 
+### Upload from an S3 compatible endpoint to Azure Blob Storage
+
+You can upload data directly from a S3 compatible endpoint. First you must specify the access and secret keys via environment variables.
+
+```bash
+export S3_ACCESS_KEY=<YOUR ACCESS KEY>
+export S3_SECRET_KEY=<YOUR_SECRET_KEY>
+```
+
+Then you can specify a S3 URI, with the following format:
+
+[URL]/[BUCKET][PREFIX]
+
+For example:
+
+`./blobporter -f s3://s3.amazonaws.com/bpperftest/mydata -c froms3 -t s3-blockblob -p`
+
+Note: It is recommended to perform this operation from a VM running on the cloud. This is a network bound operation where is uploaded as it is received from the source.
+
 ### Upload from an HTTP/HTTPS source to Azure Blob Storage
 
 To block blob storage:
@@ -104,13 +123,22 @@ To page blob storage:
 
 `./blobporter -f "http://mysource/my.vhd"  -c mycontainer -n my.vhd -t http-pageblob`
 
-You can use this approach to transfer data between Azure Storage accounts and blob types - e.g. transfer a blob from one account to another or from a page blob to block blob.
 
-The source is a page blob with a SAS token and the target is block blob:
+### Synchronously Copy data in Azure Blob Storage
 
-`./blobporter -f "https://myaccount.blob.core.windows.net/vhds/my.vhd?st=2015-03-23T03%3A59%3A00Z&se=2015-03-24T03%3A59%3A00Z&sp=rl&sv=2015-12-11&sr=b&sig=123rfdAsYyqOxxOGe28%3Fp4H6r5reR8pdSBdlchi64wgs3D"  -c mycontainer -n my.vhd -t http-blockblob`
+You can synchronously transfer data between Azure Storage accounts, containers and blob types.
 
->Note: In HTTP/HTTPS to blob transfers, data is downloaded and uploaded as it is received without disk IO.
+First, you must set the account key of the source storage account.
+
+```bash
+export SOURCE_ACCOUNT_KEY=<YOUR  KEY>
+```
+
+Then you can specify the URI of the source. Prefixes supported.
+
+`./blobporter -f "https://mysourceaccount.blob.core.windows.net/container/myblob"  -c mycontainer -t blob-blockblob`
+
+>Note: It is recommended to perform this operation from a VM running in the same region as source or the target. As with all HTTP based transfers, data is uploaded as it is downloaded from the source, therefore the transfer is primarily network bound.
 
 ### Download from Azure Blob Storage
 
@@ -139,7 +167,7 @@ By default files are downloaded to the same directory where you are running blob
 
 ## Command Options
 
-- `-f`, `--source_file` *string* URL, file or files (e.g. /data/*.gz) to upload.
+- `-f`, `--source_file` *string* URL, Azure Blob or S3 Endpoint, file or files (e.g. /data/*.gz) to upload.
 
 - `-c`, `--container_name` *string* container name (e.g. `mycontainer`).
 
@@ -167,7 +195,7 @@ By default files are downloaded to the same directory where you are running blob
 
 - `-d`, `--dup_check_level` *string* desired level of effort to detect duplicate data blocks to minimize upload size. Must be one of None, ZeroOnly, Full (default "None")
 
-- `-t`, `--transfer_type` *string*  defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file) or http-file
+- `-t`, `--transfer_type` *string*  defines the source and target of the transfer. Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file), http-file, blob-pageblob, blob-blockblob, s3-pageblob and s3-blockblob.
 
 - `m`, `--compute_blockmd5` *bool* if present or true, block level MD5 has will be computed and included as a header when the block is sent to blob storage. Default is false.
 
@@ -189,7 +217,7 @@ By default, BlobPorter creates 5 readers and 8 workers for each core on the comp
 
 - For transfers from fast disks (SSD) or HTTP sources reducing the number readers or workers could provide better performance than the default values. Reduce these values if you want to minimize resource utilization. Lowering these numbers reduces contention and the likelihood of experiencing throttling conditions.
 
-- Transfers can be batched. Each batch transfer will concurrently read and transfer up to 200 files (default value) from the source. The batch size can be modified using the -x option, the maximum value is 500.
+- Transfers can be batched. Each batch transfer will concurrently read and transfer up to 500 files (default value) from the source. The batch size can be modified using the -x option.
 
 - Blobs smaller than the block size are transferred in a single operation. With relatively small files (<32MB) performance may be better if you set a block size equal to the size of the files. Setting the number of workers and readers to the number of files could yield performance gains.
 

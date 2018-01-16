@@ -1,7 +1,7 @@
 package sources
 
 import (
-	"io"
+	"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
@@ -201,12 +201,17 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 					err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
 				}
 
+				if res != nil && res.Body != nil {
+					res.Body.Close()
+				}
+				f.HTTPClient = util.NewHTTPClient()
+
 				util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, status, err, header)
 
 				return err
 			}
-			//p.Data, err = ioutil.ReadAll(res.Body)
-			_, err = io.ReadFull(res.Body, p.Data[:p.BytesToRead])
+			p.Data, err = ioutil.ReadAll(res.Body)
+			//_, err = io.ReadFull(res.Body, p.Data[:p.BytesToRead])
 
 			res.Body.Close()
 			if err != nil {
