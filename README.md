@@ -96,14 +96,14 @@ For example, a single file upload to page blob:
 
 ### Upload from an S3 compatible endpoint to Azure Blob Storage
 
-You can upload data directly from a S3 compatible endpoint. First you must specify the access and secret keys via environment variables.
+You can upload data directly from an S3 compatible endpoint. First you must specify the access and secret keys via environment variables.
 
 ```bash
 export S3_ACCESS_KEY=<YOUR ACCESS KEY>
 export S3_SECRET_KEY=<YOUR_SECRET_KEY>
 ```
 
-Then you can specify a S3 URI, with the following format:
+Then you can specify an S3 URI, with the following format:
 
 [URL]/[BUCKET][PREFIX]
 
@@ -111,7 +111,23 @@ For example:
 
 `./blobporter -f s3://s3.amazonaws.com/bpperftest/mydata -c froms3 -t s3-blockblob -p`
 
-Note: It is recommended to perform this operation from a VM running on the cloud. This is a network bound operation where data from the source is uploaded as it is received.
+Note: This is a network bound operation where data from the source is uploaded as it is received. Running this tranfer from a cloud VM is strongly recommended.
+
+### Synchronously Copy data between Azure Blob Storage targets and sources
+
+You can synchronously transfer data between Azure Storage accounts, containers and blob types.
+
+First, you must set the account key of the source storage account.
+
+```bash
+export SOURCE_ACCOUNT_KEY=<YOUR  KEY>
+```
+
+Then you can specify the URI of the source. Prefixes are supported.
+
+`./blobporter -f "https://mysourceaccount.blob.core.windows.net/container/myblob"  -c mycontainer -t blob-blockblob`
+
+>Note: It is recommended to perform this operation from a VM running in the same region as source or the target. As with all HTTP based transfers, data is uploaded as it is downloaded from the source, therefore the transfer is considered network bound in terms of performance.
 
 ### Upload from an HTTP/HTTPS source to Azure Blob Storage
 
@@ -122,23 +138,6 @@ To block blob storage:
 To page blob storage:
 
 `./blobporter -f "http://mysource/my.vhd"  -c mycontainer -n my.vhd -t http-pageblob`
-
-
-### Synchronously Copy data in Azure Blob Storage
-
-You can synchronously transfer data between Azure Storage accounts, containers and blob types.
-
-First, you must set the account key of the source storage account.
-
-```bash
-export SOURCE_ACCOUNT_KEY=<YOUR  KEY>
-```
-
-Then you can specify the URI of the source. Prefixes supported.
-
-`./blobporter -f "https://mysourceaccount.blob.core.windows.net/container/myblob"  -c mycontainer -t blob-blockblob`
-
->Note: It is recommended to perform this operation from a VM running in the same region as source or the target. As with all HTTP based transfers, data is uploaded as it is downloaded from the source, therefore the transfer is primarily network bound.
 
 ### Download from Azure Blob Storage
 
