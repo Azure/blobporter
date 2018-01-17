@@ -37,7 +37,7 @@ type FileInfo struct {
 	NumOfBlocks int
 }
 
-//MultiFileParams TODO
+//MultiFileParams parameters used to create a new instance of multi-file source pipeline
 type MultiFileParams struct {
 	SourcePatterns   []string
 	BlockSize        uint64

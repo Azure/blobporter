@@ -1,12 +1,80 @@
 {
 	"ImportPath": "github.com/Azure/blobporter",
-	"GoVersion": "go1.7",
+	"GoVersion": "go1.9",
 	"GodepVersion": "v79",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Azure/azure-sdk-for-go/storage",
 			"Comment": "v7.0.1-beta-14-gd05c22d",
 			"Rev": "d05c22dc3f9fdd2ec6e3593839fdd44df17f2de5"
+		},
+		{
+			"ImportPath": "github.com/go-ini/ini",
+			"Comment": "v1.32.0",
+			"Rev": "32e4c1e6bc4e7d0d8451aa6b75200d19e37a536a"
+		},
+		{
+			"ImportPath": "github.com/minio/minio-go",
+			"Comment": "4.0.6",
+			"Rev": "14f1d472d115bac5ca4804094aa87484a72ced61"
+		},
+		{
+			"ImportPath": "github.com/minio/minio-go/pkg/credentials",
+			"Comment": "4.0.6",
+			"Rev": "14f1d472d115bac5ca4804094aa87484a72ced61"
+		},
+		{
+			"ImportPath": "github.com/minio/minio-go/pkg/encrypt",
+			"Comment": "4.0.6",
+			"Rev": "14f1d472d115bac5ca4804094aa87484a72ced61"
+		},
+		{
+			"ImportPath": "github.com/minio/minio-go/pkg/policy",
+			"Comment": "4.0.6",
+			"Rev": "14f1d472d115bac5ca4804094aa87484a72ced61"
+		},
+		{
+			"ImportPath": "github.com/minio/minio-go/pkg/s3signer",
+			"Comment": "4.0.6",
+			"Rev": "14f1d472d115bac5ca4804094aa87484a72ced61"
+		},
+		{
+			"ImportPath": "github.com/minio/minio-go/pkg/s3utils",
+			"Comment": "4.0.6",
+			"Rev": "14f1d472d115bac5ca4804094aa87484a72ced61"
+		},
+		{
+			"ImportPath": "github.com/minio/minio-go/pkg/set",
+			"Comment": "4.0.6",
+			"Rev": "14f1d472d115bac5ca4804094aa87484a72ced61"
+		},
+		{
+			"ImportPath": "github.com/mitchellh/go-homedir",
+			"Rev": "b8bc1bf767474819792c23f32d8286a45736f1c6"
+		},
+		{
+			"ImportPath": "golang.org/x/net/idna",
+			"Rev": "5ccada7d0a7ba9aeb5d3aca8d3501b4c2a509fec"
+		},
+		{
+			"ImportPath": "golang.org/x/net/lex/httplex",
+			"Rev": "5ccada7d0a7ba9aeb5d3aca8d3501b4c2a509fec"
+		},
+		{
+			"ImportPath": "golang.org/x/text/secure/bidirule",
+			"Rev": "e19ae1496984b1c655b8044a65c0300a3c878dd3"
+		},
+		{
+			"ImportPath": "golang.org/x/text/transform",
+			"Rev": "e19ae1496984b1c655b8044a65c0300a3c878dd3"
+		},
+		{
+			"ImportPath": "golang.org/x/text/unicode/bidi",
+			"Rev": "e19ae1496984b1c655b8044a65c0300a3c878dd3"
+		},
+		{
+			"ImportPath": "golang.org/x/text/unicode/norm",
+			"Rev": "e19ae1496984b1c655b8044a65c0300a3c878dd3"
 		}
 	]
 }

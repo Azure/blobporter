@@ -38,7 +38,7 @@ type SourcePipeline interface {
 	GetSourcesInfo() []SourceInfo
 }
 
-//SourceInfo TODO
+//SourceInfo basic information about a source item.
 type SourceInfo struct {
 	SourceName  string
 	Size        uint64
@@ -225,7 +225,7 @@ func NewPart(offset uint64, bytesCount uint32, ordinal int, sourceURI string, ta
 		DuplicateOfBlockOrdinal: -1}
 }
 
-//NewBuffer TODO
+//NewBuffer creates a new buffer from the underlying data
 func (p *Part) NewBuffer() *bytes.Buffer {
 	return bytes.NewBuffer(p.Data)
 }
@@ -272,7 +272,7 @@ func (p *Part) ReturnBuffer() {
 	p.Data = nil
 }
 
-//IsMD5Computed TODO
+//IsMD5Computed true if the MD5 value was computed
 func (p *Part) IsMD5Computed() bool {
 	return p.md5Value != ""
 }

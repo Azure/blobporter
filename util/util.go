@@ -7,8 +7,10 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"net/http"
@@ -130,15 +132,15 @@ func PrintUsageDefaults(shortflag string, longflag string, defaultVal string, de
 	fmt.Fprintln(os.Stderr, fmt.Sprintf("-%v, --%v :\n\t%v%v", shortflag, longflag, description, defaultMsg))
 }
 
-//ListFlag TODO
+//ListFlag represents a multivalue flag
 type ListFlag []string
 
-//String TODO
+//String joints all values of the flag
 func (lst *ListFlag) String() string {
 	return strings.Join(*lst, " ")
 }
 
-//Set TODO
+//Set adds a new value to the values list
 func (lst *ListFlag) Set(value string) error {
 	*lst = append(*lst, value)
 	return nil
@@ -376,21 +378,26 @@ func getStorageHTTPClient() *http.Client {
 
 }
 
-//NewHTTPClient  creates a new HTTP client with the configured timeout and MaxIdleConnsPerHost = 50, keep alive dialer.
+var c *http.Client
+var mtx sync.Mutex
 
+//NewHTTPClient  creates a shared HTTP client with the configured timeout and MaxIdleConnsPerHost = 50, keep alive dialer.
 func NewHTTPClient() *http.Client {
+	mtx.Lock()
+	defer mtx.Unlock()
 
-	c := http.Client{
-		Timeout: time.Duration(HTTPClientTimeout) * time.Second,
-		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout:   30 * time.Second, // dial timeout
-				KeepAlive: 30 * time.Second,
-			}).Dial,
-			MaxIdleConns:        maxIdleConns,
-			MaxIdleConnsPerHost: maxIdleConnsPerHost}}
-
-	return &c
+	if c == nil {
+		c = &http.Client{
+			Timeout: time.Duration(HTTPClientTimeout) * time.Second,
+			Transport: &http.Transport{
+				Dial: (&net.Dialer{
+					Timeout:   30 * time.Second, // dial timeout
+					KeepAlive: 30 * time.Second,
+				}).Dial,
+				MaxIdleConns:        maxIdleConns,
+				MaxIdleConnsPerHost: maxIdleConnsPerHost}}
+	}
+	return c
 }
 
 func handleExceededRetries(err error) {
@@ -404,7 +411,7 @@ func getSuggestion(err error) string {
 	case strings.Contains(err.Error(), "Client.Timeout"):
 		return "Try increasing the timeout using the -s option or reducing the number of workers and readers, options: -r and -g"
 	case strings.Contains(err.Error(), "too many open files"):
-		return "Try increasing the number of open files allowed. For debian systems you can try: ulimit -Sn 2048 "
+		return "Try reducing the number of sources or batch size"
 	default:
 		return ""
 	}
@@ -434,4 +441,22 @@ func GetFileNameFromURL(sourceURI string) (string, error) {
 	}
 
 	return parts[len(parts)-1], nil
+}
+
+//UserAgent TODO
+var userAgent string
+
+//GetUserAgentInfo TODO
+func GetUserAgentInfo() (string, error) {
+	if userAgent == "" {
+		return "", fmt.Errorf("User agent is not set")
+	}
+
+	return userAgent, nil
+
+}
+
+//SetUserAgentInfo TODO
+func SetUserAgentInfo(programVersion string) {
+	userAgent = fmt.Sprintf("%s/%s/(%s %s)/", "BlobPorter", programVersion, runtime.GOOS, runtime.GOARCH)
 }

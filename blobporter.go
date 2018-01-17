@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -10,13 +9,10 @@ import (
 	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/blobporter/pipeline"
-	"github.com/Azure/blobporter/sources"
-	"github.com/Azure/blobporter/targets"
 	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
 )
@@ -38,6 +34,10 @@ var defaultTransferDef = transfer.FileToBlock
 var storageAccountName string
 var storageAccountKey string
 var storageClientHTTPTimeout int
+
+var sourceParameters map[string]string
+var sourceAuthorization string
+
 var quietMode bool
 var calculateMD5 bool
 var exactNameMatch bool
@@ -47,14 +47,19 @@ var numberOfFilesInBatch = defaultNumberOfFilesInBatch
 
 const (
 	// User can use environment variables to specify storage account information
-	storageAccountNameEnvVar = "ACCOUNT_NAME"
-	storageAccountKeyEnvVar  = "ACCOUNT_KEY"
-	programVersion           = "0.5.14" // version number to show in help
+	storageAccountNameEnvVar  = "ACCOUNT_NAME"
+	storageAccountKeyEnvVar   = "ACCOUNT_KEY"
+	sourceAuthorizationEnvVar = "SRC_ACCOUNT_KEY"
+	//S3 creds information
+	s3AccessKeyEnvVar = "S3_ACCESS_KEY"
+	s3SecretKeyEnvVar = "S3_SECRET_KEY"
+
+	programVersion = "0.5.22" // version number to show in help
 )
 
 const numOfWorkersFactor = 8
 const numOfReadersFactor = 5
-const defaultNumberOfFilesInBatch = 200
+const defaultNumberOfFilesInBatch = 500
 const defaultNumberOfHandlesPerFile = 2
 
 func init() {
@@ -65,6 +70,9 @@ func init() {
 	// shape the default parallelism based on number of CPUs
 	var defaultNumberOfWorkers = runtime.NumCPU() * numOfWorkersFactor
 	var defaultNumberOfReaders = runtime.NumCPU() * numOfReadersFactor
+
+	// set user agent info
+	util.SetUserAgentInfo(programVersion)
 
 	blockSizeStr = "8MB" // default size for blob blocks
 	const (
@@ -141,8 +149,14 @@ var transferType transfer.Definition
 func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int, batchNumber int) {
 	if numOfBatches == 1 {
 		fmt.Printf("Files to Transfer (%v) :\n ", transferDefStr)
+
 		for _, source := range sourcesInfo {
-			fmt.Printf("Source: %v Size:%v \n", source.SourceName, source.Size)
+			//if the source is URL, remove the QS
+			display := source.SourceName
+			if u, err := url.Parse(source.SourceName); err == nil {
+				display = fmt.Sprintf("%v%v", u.Hostname(), u.Path)
+			}
+			fmt.Printf("Source: %v Size:%v \n", display, source.Size)
 		}
 
 		return
@@ -165,16 +179,20 @@ func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, thre
 
 func main() {
 
-	parseAndValidate()
+	flag.Parse()
 
 	// Create pipelines
-	sourcePipelines, targetPipeline := getPipelines()
+	sourcePipelines, targetPipeline, err := getPipelines()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	stats := transfer.NewStats(numberOfWorkers, numberOfReaders)
 
 	for b, sourcePipeline := range sourcePipelines {
 		sourcesInfo := sourcePipeline.GetSourcesInfo()
 
-		adjustReaders(len(sourcesInfo))
 		tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, numberOfReaders, numberOfWorkers, blockSize)
 
 		displayFilesToTransfer(sourcesInfo, len(sourcePipelines), b)
@@ -189,246 +207,6 @@ func main() {
 
 	stats.DisplaySummary()
 
-}
-
-const openFileLimitForLinux = 1024
-
-//validates if the number of readers needs to be adjusted to accommodate max filehandle limits in Debian systems
-func adjustReaders(numOfSources int) {
-	//var source []pipeline.SourcePipeline
-	//var target pipeline.TargetPipeline
-	if runtime.GOOS != "linux" {
-		return
-	}
-
-	if transferType == transfer.FileToBlock || transferType == transfer.FileToPage {
-		if (numOfSources * numberOfHandlesPerFile) > openFileLimitForLinux {
-			numberOfHandlesPerFile = openFileLimitForLinux / (numOfSources * numberOfHandlesPerFile)
-
-			if numberOfHandlesPerFile == 0 {
-				log.Fatal("The number of files will cause the process to exceed the limit of open files allowed by the OS. Reduce the number of files to be transferred")
-			}
-
-			fmt.Printf("Warning! Adjusting the number of handles per file (-h) to %v\n", numberOfHandlesPerFile)
-
-		}
-	}
-}
-
-func isSourceHTTP() bool {
-
-	url, err := url.Parse(sourceURIs[0])
-
-	return err == nil && (strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https")
-}
-func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline) {
-
-	//container is required but when is a http to file transfer.
-	if transferType != transfer.HTTPToFile {
-		if containerName == "" {
-			log.Fatal("container name not specified ")
-		}
-	}
-
-	switch transferType {
-	case transfer.FileToPage:
-		return getFileToPagePipelines()
-	case transfer.FileToBlock:
-		return getFileToBlockPipelines()
-	case transfer.HTTPToPage:
-		return getHTTPToPagePipelines()
-	case transfer.HTTPToBlock:
-		return getHTTPToBlockPipelines()
-	case transfer.BlobToFile:
-		return getBlobToFilePipelines()
-	case transfer.HTTPToFile:
-		return getHTTPToFilePipelines()
-	}
-
-	log.Fatal(fmt.Errorf("Invalid transfer type: %v ", transferType))
-
-	return nil, nil
-}
-func getFileToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
-
-	params := &sources.MultiFileParams{
-		SourcePatterns:   sourceURIs,
-		BlockSize:        blockSize,
-		TargetAliases:    blobNames,
-		NumOfPartitions:  numberOfReaders,
-		MD5:              calculateMD5,
-		KeepDirStructure: keepDirStructure,
-		FilesPerPipeline: numberOfFilesInBatch}
-
-	source = sources.NewMultiFile(params)
-	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getFileToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
-	//Since this is default value detect if the source is http
-	if isSourceHTTP() {
-		source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-		transferDefStr = transfer.HTTPToBlock
-	} else {
-		params := &sources.MultiFileParams{
-			SourcePatterns:   sourceURIs,
-			BlockSize:        blockSize,
-			TargetAliases:    blobNames,
-			NumOfPartitions:  numberOfReaders,
-			MD5:              calculateMD5,
-			KeepDirStructure: keepDirStructure,
-			FilesPerPipeline: numberOfFilesInBatch}
-
-		source = sources.NewMultiFile(params)
-	}
-	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getHTTPToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
-	source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getHTTPToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
-	source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getBlobToFilePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
-
-	if len(blobNames) == 0 {
-		//use empty prefix to get the bloblist
-		blobNames = []string{""}
-	}
-
-	params := &sources.AzureBlobParams{
-		Container:         containerName,
-		BlobNames:         blobNames,
-		AccountName:       storageAccountName,
-		AccountKey:        storageAccountKey,
-		CalculateMD5:      calculateMD5,
-		UseExactNameMatch: exactNameMatch,
-		FilesPerPipeline:  numberOfFilesInBatch,
-		KeepDirStructure:  keepDirStructure}
-
-	source = sources.NewAzureBlob(params)
-	target = targets.NewMultiFile(true, numberOfHandlesPerFile)
-	return
-}
-func getHTTPToFilePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline) {
-	source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-
-	var targetAliases []string
-	var err error
-
-	if len(blobNames) > 0 {
-		targetAliases = blobNames
-	} else {
-		targetAliases = make([]string, len(sourceURIs))
-		for i, src := range sourceURIs {
-			targetAliases[i], err = util.GetFileNameFromURL(src)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
-
-	target = targets.NewMultiFile(true, numberOfHandlesPerFile)
-	return
-}
-
-// parseAndValidate - extra checks on command line arguments
-func parseAndValidate() {
-
-	flag.Parse()
-
-	var err error
-	if util.HTTPClientTimeout < 30 {
-		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 600s \n")
-		util.HTTPClientTimeout = 600
-	}
-
-	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
-	if err != nil {
-		log.Fatal("Invalid block size specified: " + blockSizeStr)
-	}
-
-	blockSizeMax := util.LargeBlockSizeMax
-	if blockSize > blockSizeMax {
-		log.Fatal("Block size specified (" + blockSizeStr + ") exceeds maximum of " + util.PrintSize(blockSizeMax))
-	}
-
-	dedupeLevel, err = transfer.ParseDupeCheckLevel(dedupeLevelOptStr)
-	if err != nil {
-		log.Fatalf("Duplicate detection level is invalid.  Found '%s', must be one of %s", dedupeLevelOptStr, transfer.DupeCheckLevelStr)
-	}
-
-	err = validateTransferTypesParams()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if transferType, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
-		log.Fatal(err)
-	}
-
-	if numberOfFilesInBatch < 1 {
-		log.Fatal("Invalid value for option -x, the value must be greater than 1")
-	}
-
-	if numberOfHandlesPerFile < 1 {
-		log.Fatal("Invalid value for option -h, the value must be greater than 1")
-	}
-
-}
-
-//validates command line params considering the type of transfer
-func validateTransferTypesParams() error {
-	var transt transfer.Definition
-	var err error
-	if transt, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
-		return err
-	}
-
-	if transt == transfer.HTTPToPage || transt == transfer.FileToPage {
-		if blockSize%uint64(targets.PageSize) != 0 {
-			return fmt.Errorf("Invalid block size (%v) for a page blob. The size must be a multiple of %v (bytes) and less or equal to %v (4MB)", blockSize, targets.PageSize, 4*util.MB)
-		}
-
-		if blockSize > 4*util.MB {
-			//adjust the block size to 4 MB
-			blockSize = 4 * util.MB
-
-		}
-	}
-
-	isUpload := transt != transfer.BlobToFile && transt != transfer.HTTPToFile
-
-	if (len(sourceURIs) == 0 || sourceURIs == nil) && isUpload {
-		log.Fatal("The file parameter is missing. Must be a file, URL or file pattern (e.g. /data/*.fastq) ")
-	}
-
-	if transt != transfer.HTTPToFile {
-		// wasn't specified, try the environment variable
-		if storageAccountName == "" {
-			envVal := os.Getenv(storageAccountNameEnvVar)
-			if envVal == "" {
-				return errors.New("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
-			}
-			storageAccountName = envVal
-		}
-
-		// wasn't specified, try the environment variable
-		if storageAccountKey == "" {
-			envVal := os.Getenv(storageAccountKeyEnvVar)
-			if envVal == "" {
-				return errors.New("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
-			}
-			storageAccountKey = envVal
-		}
-	}
-
-	return nil
 }
 
 func getProgressBarDelegate(totalSize uint64, quietMode bool) func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {

@@ -7,14 +7,14 @@ import (
 	"github.com/Azure/blobporter/util"
 )
 
-//Stats TODO
+//Stats statistics from the transfer
 type Stats struct {
 	workers int
 	readers int
 	values  []StatInfo
 }
 
-//StatInfo TODO
+//StatInfo holds calculated statistics from a transfer
 type StatInfo struct {
 	NumberOfFiles       int
 	Duration            time.Duration
@@ -24,12 +24,12 @@ type StatInfo struct {
 	CumWriteDuration    time.Duration
 }
 
-//NewStats  TODO
+//NewStats creates a new instance of the
 func NewStats(numberOfWorkers int, numberOfReaders int) *Stats {
 	return &Stats{workers: numberOfWorkers, readers: numberOfReaders, values: make([]StatInfo, 0)}
 }
 
-//AddTransferInfo TODO
+//AddTransferInfo adds final stastistics info the list
 func (t *Stats) AddTransferInfo(info *StatInfo) {
 	t.values = append(t.values, (*info))
 }
@@ -49,7 +49,7 @@ func (t *Stats) calcAggretagedValues() *StatInfo {
 	return &agg
 }
 
-//DisplaySummary TODO
+//DisplaySummary displays the final statistics for the transfer
 func (t *Stats) DisplaySummary() {
 
 	agg := t.calcAggretagedValues()
