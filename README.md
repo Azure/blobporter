@@ -111,7 +111,7 @@ For example:
 
 `./blobporter -f s3://s3.amazonaws.com/bpperftest/mydata -c froms3 -t s3-blockblob -p`
 
-Note: This is a network bound operation where data from the source is uploaded as it is received. Running this tranfer from a cloud VM is strongly recommended.
+>Note: For better performance, consider running this tranfer from a VM running in the same region as source or the target. Data is uploaded as it is downloaded from the source, therefore the transfer is bound to the bandwidth of the VM for performance.
 
 ### Synchronously Copy data between Azure Blob Storage targets and sources
 
@@ -127,7 +127,7 @@ Then you can specify the URI of the source. Prefixes are supported.
 
 `./blobporter -f "https://mysourceaccount.blob.core.windows.net/container/myblob"  -c mycontainer -t blob-blockblob`
 
->Note: For better performance, consider running this tranfer from a VM running in the same region as source or the target. As with all HTTP based transfers, data is uploaded as it is downloaded from the source, therefore the transfer is considered network bound.
+>Note: For better performance, consider running this tranfer from a VM running in the same region as source or the target. Data is uploaded as it is downloaded from the source, therefore the transfer is bound to the bandwidth of the VM for performance.
 
 ### Upload from an HTTP/HTTPS source to Azure Blob Storage
 
@@ -138,6 +138,8 @@ To block blob storage:
 To page blob storage:
 
 `./blobporter -f "http://mysource/my.vhd"  -c mycontainer -n my.vhd -t http-pageblob`
+
+>Note: For better performance, consider running this tranfer from a VM running in the same region as source or the target. Data is uploaded as it is downloaded from the source, therefore the transfer is bound to the bandwidth of the VM for performance.
 
 ### Download from Azure Blob Storage
 
