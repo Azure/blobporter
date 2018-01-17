@@ -127,7 +127,7 @@ Then you can specify the URI of the source. Prefixes are supported.
 
 `./blobporter -f "https://mysourceaccount.blob.core.windows.net/container/myblob"  -c mycontainer -t blob-blockblob`
 
->Note: It is recommended to perform this operation from a VM running in the same region as source or the target. As with all HTTP based transfers, data is uploaded as it is downloaded from the source, therefore the transfer is considered network bound in terms of performance.
+>Note: For better performance, consider running this tranfer from a VM running in the same region as source or the target. As with all HTTP based transfers, data is uploaded as it is downloaded from the source, therefore the transfer is considered network bound in terms of performance.
 
 ### Upload from an HTTP/HTTPS source to Azure Blob Storage
 
