@@ -121,12 +121,16 @@ func (t *AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo 
 func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 
 	headers := make(map[string]string)
+	userAgent, _ := util.GetUserAgentInfo()
+	headers["User-Agent"] = userAgent
+	
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
 		//computation of the MD5 happens is done by the readers.
 		if part.IsMD5Computed() {
 			headers["Content-MD5"] = part.MD5()
 		}
+
 
 		if part.NumberOfBlocks == 1 {
 			if err := t.StorageClient.CreateBlockBlobFromReader(t.Container,

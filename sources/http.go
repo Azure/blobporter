@@ -187,6 +187,8 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 
 			header := fmt.Sprintf("bytes=%v-%v", p.Offset, p.Offset-1+uint64(p.BytesToRead))
 			req.Header.Set("Range", header)
+			userAgent, _ := util.GetUserAgentInfo()
+			req.Header.Set("User-Agent", userAgent)
 
 			//set the close header only when the block is larger than the blob
 			//to minimize the number of open when transfering small files.

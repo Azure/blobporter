@@ -53,8 +53,11 @@ func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize 
 	}
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
+	headers := make(map[string]string)
+	userAgent, _ := util.GetUserAgentInfo()
+	headers["User-Agent"] = userAgent
 	util.RetriableOperation(func(r int) error {
-		if err := (*t.StorageClient).PutPageBlob(t.Container, (*source).TargetAlias, size, nil); err != nil {
+		if err := (*t.StorageClient).PutPageBlob(t.Container, (*source).TargetAlias, size, headers); err != nil {
 			t.resetClient()
 			return err
 		}
@@ -95,6 +98,9 @@ func (t *AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, star
 		if part.IsMD5Computed() {
 			headers["Content-MD5"] = part.MD5()
 		}
+		userAgent, _ := util.GetUserAgentInfo()
+		headers["User-Agent"] = userAgent
+
 		if err := (*t.StorageClient).PutPage(t.Container, part.TargetAlias, offset, endByte, "update", part.Data, headers); err != nil {
 			util.PrintfIfDebug("WritePart -> |%v|%v|%v|%v", part.Offset, len(part.Data), part.TargetAlias, err)
 			t.resetClient()

@@ -71,6 +71,9 @@ func init() {
 	var defaultNumberOfWorkers = runtime.NumCPU() * numOfWorkersFactor
 	var defaultNumberOfReaders = runtime.NumCPU() * numOfReadersFactor
 
+	// set user agent info
+	util.SetUserAgentInfo(programVersion)
+
 	blockSizeStr = "8MB" // default size for blob blocks
 	const (
 		dblockSize = 8 * util.MB
