@@ -48,18 +48,13 @@ func (t *AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numb
 
 	blockList := convertToStorageBlockList(lInfo.List, numberOfBlocks)
 
-	if util.Verbose {
-		fmt.Printf("Final BlockList:\n")
-		for j := 0; j < numberOfBlocks; j++ {
-			fmt.Printf("   [%2d]: ID=%s, Status=%s\n", j, blockList[j].ID, blockList[j].Status)
-		}
-	}
+	util.PrintfIfDebug("Blocklist -> blob: %s\n list:%+v", targetName, blockList)
 
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, _, _ := util.RetriableOperation(func(r int) error {
 		if err := t.StorageClient.PutBlockList(t.Container, targetName, blockList); err != nil {
 			t.resetClient()
-			return err
+			return fmt.Errorf(" PUT Blocklist Failed: err:%s file:%s\n list:%+v\n --", err, targetName, blockList)
 		}
 		return nil
 	})
@@ -123,14 +118,13 @@ func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, sta
 	headers := make(map[string]string)
 	userAgent, _ := util.GetUserAgentInfo()
 	headers["User-Agent"] = userAgent
-	
+
 	//if the max retries is exceeded, panic will happen, hence no error is returned.
 	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
 		//computation of the MD5 happens is done by the readers.
 		if part.IsMD5Computed() {
 			headers["Content-MD5"] = part.MD5()
 		}
-
 
 		if part.NumberOfBlocks == 1 {
 			if err := t.StorageClient.CreateBlockBlobFromReader(t.Container,
