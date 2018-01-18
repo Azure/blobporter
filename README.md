@@ -105,11 +105,11 @@ export S3_SECRET_KEY=<YOUR_SECRET_KEY>
 
 Then you can specify an S3 URI, with the following format:
 
-[URL]/[BUCKET][PREFIX]
+[HOST]/[BUCKET]/[PREFIX]
 
 For example:
 
-`./blobporter -f s3://s3.amazonaws.com/bpperftest/mydata -c froms3 -t s3-blockblob -p`
+`./blobporter -f s3://mys3api.com/mybucket/mydata -c froms3 -t s3-blockblob -p`
 
 >Note: For better performance, consider running this tranfer from a VM running in the same region as source or the target. Data is uploaded as it is downloaded from the source, therefore the transfer is bound to the bandwidth of the VM for performance.
 
