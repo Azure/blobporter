@@ -152,6 +152,8 @@ var transferType transfer.Definition
 func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int, batchNumber int) {
 	if numOfBatches == 1 {
 		fmt.Printf("Files to Transfer (%v) :\n ", transferDefStr)
+		var totalSize uint64
+		summary := ""
 
 		for _, source := range sourcesInfo {
 			//if the source is URL, remove the QS
@@ -159,8 +161,16 @@ func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int,
 			if u, err := url.Parse(source.SourceName); err == nil {
 				display = fmt.Sprintf("%v%v", u.Hostname(), u.Path)
 			}
-			fmt.Printf("Source: %v Size:%v \n", display, source.Size)
+			summary = summary + fmt.Sprintf("Source: %v Size:%v \n", display, source.Size)
+			totalSize = totalSize + source.Size
 		}
+
+		if len(sourcesInfo) < 50 {
+			fmt.Printf(summary)
+			return
+		}
+
+		fmt.Printf("%v files. Total size:%v\n", len(sourcesInfo), totalSize)
 
 		return
 	}
