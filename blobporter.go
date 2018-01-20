@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/blobporter/sources"
+
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
@@ -37,6 +39,7 @@ var storageClientHTTPTimeout int
 
 var sourceParameters map[string]string
 var sourceAuthorization string
+var perfSourceDefinitions []sources.SourceDefinition
 
 var quietMode bool
 var calculateMD5 bool
@@ -54,7 +57,7 @@ const (
 	s3AccessKeyEnvVar = "S3_ACCESS_KEY"
 	s3SecretKeyEnvVar = "S3_SECRET_KEY"
 
-	programVersion = "0.5.23" // version number to show in help
+	programVersion = "0.5.24" // version number to show in help
 )
 
 const numOfWorkersFactor = 8

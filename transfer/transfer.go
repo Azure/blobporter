@@ -84,6 +84,9 @@ const (
 	BlobToPage             = "blob-pageblob"
 	S3ToBlock              = "s3-blockblob"
 	S3ToPage               = "s3-pageblob"
+	PerfToBlock            = "perf-block"
+	PerfToPage             = "perf-page"
+	BlobToPerf             = "blob-perf"
 	none                   = "none"
 )
 
@@ -121,6 +124,12 @@ func ParseTransferDefinition(str string) (Definition, error) {
 		return S3ToBlock, nil
 	case "s3-pageblob":
 		return S3ToPage, nil
+	case "perf-block":
+		return PerfToBlock, nil
+	case "perf-page":
+		return PerfToPage, nil
+	case "blob-perf":
+		return BlobToPerf, nil
 	default:
 		return none, fmt.Errorf("%v is not a valid transfer definition value.\n Valid values: file-blockblob, http-blockblob,file-pageblob, http-pageblob, pageblob-file, blockblob-file, http-file", str)
 	}

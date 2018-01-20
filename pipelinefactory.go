@@ -125,6 +125,24 @@ func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) 
 			pvSourceInfoForS3IsReq,
 			pvContainerIsReq,
 			pvBlockSizeCheckForBlockBlobs)
+	case transfer.PerfToBlock:
+		return getTransferPipelines(getPerfSourceToBlockPipelines,
+			pvBlobAuthInfoIsReq,
+			pvContainerIsReq,
+			pvSourceURIISReq,
+			pvBlockSizeCheckForBlockBlobs,
+			pvPerfSourceIsReq)
+	case transfer.PerfToPage:
+		return getTransferPipelines(getPerfSourceToPagePipelines,
+			pvBlobAuthInfoIsReq,
+			pvContainerIsReq,
+			pvSourceURIISReq,
+			pvBlockSizeCheckForPageBlobs,
+			pvPerfSourceIsReq)
+	case transfer.BlobToPerf:
+		return getTransferPipelines(getBlobToPerfPipelines,
+			pvSourceURIISReq,
+			pvSourceInfoForBlobIsReq)
 
 	}
 
@@ -243,6 +261,53 @@ func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline
 
 	source = sources.NewAzureBlob(params)
 	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+	return
+}
+func getPerfSourceToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
+
+	defs := perfSourceDefinitions
+
+	params := sources.PerfSourceParams{
+		Definitions: defs,
+		SourceParams: sources.SourceParams{
+			CalculateMD5: calculateMD5}}
+
+	source = sources.NewPerfSourcePipeline(params, blockSize)
+	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
+	return
+}
+
+func getPerfSourceToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
+
+	defs := perfSourceDefinitions
+
+	params := sources.PerfSourceParams{
+		Definitions: defs,
+		SourceParams: sources.SourceParams{
+			CalculateMD5: calculateMD5}}
+
+	source = sources.NewPerfSourcePipeline(params, blockSize)
+	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
+	return
+}
+func getBlobToPerfPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
+
+	blobNames = []string{sourceParameters["PREFIX"]}
+
+	params := &sources.AzureBlobParams{
+		Container:   sourceParameters["CONTAINER"],
+		BlobNames:   blobNames,
+		AccountName: sourceParameters["ACCOUNT_NAME"],
+		AccountKey:  sourceAuthorization,
+		SourceParams: sources.SourceParams{
+			CalculateMD5:      calculateMD5,
+			UseExactNameMatch: exactNameMatch,
+			FilesPerPipeline:  numberOfFilesInBatch,
+			//default to always true so blob names are kept
+			KeepDirStructure: true}}
+
+	source = sources.NewAzureBlob(params)
+	target = targets.NewPerfTargetPipeline()
 	return
 }
 func getBlobToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
@@ -518,6 +583,17 @@ func pvContainerIsReq() error {
 	if containerName == "" {
 		return fmt.Errorf("container name not specified ")
 	}
+	return nil
+}
+
+func pvPerfSourceIsReq() error {
+	var err error
+	perfSourceDefinitions, err = sources.ParseSourceDefinitions(sourceURIs[0])
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
