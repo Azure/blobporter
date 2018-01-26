@@ -2,14 +2,14 @@ package transfer
 
 import (
 	"errors"
+	"fmt"
 	"log"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"fmt"
 
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
@@ -89,6 +89,40 @@ const (
 	BlobToPerf             = "blob-perf"
 	none                   = "none"
 )
+
+//TransferSegment source and target types
+type TransferSegment string
+
+//valid transfer segments
+const (
+	File      TransferSegment = "file"
+	HTTP                      = "http"
+	BlockBlob                 = "blockblob"
+	PageBlob                  = "pageblob"
+	S3                        = "s3"
+	Perf                      = "perf"
+	Blob                      = "blob"
+	NA                        = "na"
+)
+
+//ParseTransferSegment
+func ParseTransferSegment(def Definition) (TransferSegment, TransferSegment) {
+	//defstr := string(def)
+
+	if def == none || def == "" {
+		return NA, NA
+	}
+
+	ref := reflect.ValueOf(def)
+
+	defstr := ref.String()
+	segments := strings.Split(defstr, "-")
+
+	source := TransferSegment(segments[0])
+	target := TransferSegment(segments[1])
+
+	return source, target
+}
 
 //ParseTransferDefinition parses a Definition from a string.
 func ParseTransferDefinition(str string) (Definition, error) {

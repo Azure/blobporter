@@ -31,6 +31,7 @@ var delegate = func(r pipeline.WorkerResult, committedCount int, bufferLevel int
 var numOfReaders = 10
 var numOfWorkers = 10
 var filesPerPipeline = 10
+var targetBaseBlobURL = ""
 
 const (
 	containerName1 = "bptest"
@@ -52,15 +53,26 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzurePage(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container,
+		BaseBlobURL: targetBaseBlobURL}
+
+	ap := targets.NewAzurePagePipeline(tparams)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 	sourceURI, err := createSasTokenURL(sourceFile, container)
 
 	assert.NoError(t, err)
+	tparams = targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   containerHTTP,
+		BaseBlobURL: targetBaseBlobURL}
 
-	ap = targets.NewAzurePage(accountName, accountKey, containerHTTP)
+	ap = targets.NewAzurePagePipeline(tparams)
 	fp = sources.NewHTTP([]string{sourceURI}, []string{sourceFile}, true)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -82,7 +94,13 @@ func TestFileToPage(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	pt := targets.NewAzurePage(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container,
+		BaseBlobURL: targetBaseBlobURL}
+
+	pt := targets.NewAzurePagePipeline(tparams)
 
 	tfer := NewTransfer(&fp, &pt, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -129,7 +147,13 @@ func TestFileToBlob(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
+
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -150,7 +174,12 @@ func TestFileToBlobToBlock(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -172,7 +201,13 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
+
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, bsize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -196,7 +231,14 @@ func TestFilesToBlob(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container,
+		BaseBlobURL: ""}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
+
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -221,7 +263,15 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container,
+		BaseBlobURL: ""}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
+
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -229,7 +279,14 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	ap = targets.NewAzureBlock(accountName, accountKey, containerHTTP)
+	tparams = targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   containerHTTP,
+		BaseBlobURL: ""}
+
+	ap = targets.NewAzureBlockPipeline(tparams)
+
 	fp = sources.NewHTTP([]string{sourceURI}, []string{sourceFile}, true)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -250,7 +307,14 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container,
+		BaseBlobURL: ""}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
+
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -282,7 +346,13 @@ func TestFileToBlobToFile(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container,
+		BaseBlobURL: ""}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -321,7 +391,14 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 		MD5:              true}
 
 	fp := sources.NewMultiFile(sourceParams)[0]
-	ap := targets.NewAzureBlock(accountName, accountKey, container)
+	tparams := targets.AzureTargetParams{
+		AccountName: accountName,
+		AccountKey:  accountKey,
+		Container:   container,
+		BaseBlobURL: ""}
+
+	ap := targets.NewAzureBlockPipeline(tparams)
+
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()

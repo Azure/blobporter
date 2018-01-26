@@ -1,378 +1,39 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"log"
-	"net/url"
-	"os"
-	"runtime"
-	"strings"
 
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/sources"
 	"github.com/Azure/blobporter/targets"
 	"github.com/Azure/blobporter/transfer"
-	"github.com/Azure/blobporter/util"
 )
 
-type parseAndValidationRule func() error
-type transferPipelinesFactory func() ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error)
+func newTransferPipelines(params *validatedParameters) ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) {
 
-func isSourceHTTP() bool {
+	fact := newPipelinesFactory(params)
 
-	url, err := url.Parse(sourceURIs[0])
+	var sourcesp []pipeline.SourcePipeline
+	var targetp pipeline.TargetPipeline
+	var err error
 
-	return err == nil && (strings.ToLower(url.Scheme) == "http" || strings.ToLower(url.Scheme) == "https")
-}
-
-func getTransferPipelines(pipelinesFactory transferPipelinesFactory, validationRules ...parseAndValidationRule) ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) {
-
-	if err := runParseAndValidationRules(validationRules...); err != nil {
-		return nil, nil, err
-	}
-
-	return pipelinesFactory()
-}
-
-func runParseAndValidationRules(rules ...parseAndValidationRule) error {
-	for i := 0; i < len(rules); i++ {
-		val := rules[i]
-		if err := val(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func getPipelines() ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) {
-
-	//run global rules...
-	err := runParseAndValidationRules(
-		pvgTransferType,
-		pvgBatchLimits,
-		pvgHTTPTimeOut,
-		pvgDupCheck,
-		pvgParseBlockSize)
+	targetp, err = fact.newTargetPipeline()
 
 	if err != nil {
 		return nil, nil, err
 	}
 
-	switch transferType {
-	case transfer.FileToPage:
-		return getTransferPipelines(getFileToPagePipelines,
-			pvBlobAuthInfoIsReq,
-			pvSourceURIISReq,
-			pvBlockSizeCheckForPageBlobs,
-			pvContainerIsReq)
-	case transfer.FileToBlock:
-		return getTransferPipelines(getFileToBlockPipelines,
-			pvBlobAuthInfoIsReq,
-			pvSourceURIISReq,
-			pvBlockSizeCheckForBlockBlobs,
-			pvContainerIsReq)
-	case transfer.HTTPToPage:
-		return getTransferPipelines(getHTTPToPagePipelines,
-			pvBlobAuthInfoIsReq,
-			pvSourceURIISReq,
-			pvIsSourceHTTP,
-			pvBlockSizeCheckForPageBlobs,
-			pvContainerIsReq)
-	case transfer.HTTPToBlock:
-		return getTransferPipelines(getHTTPToBlockPipelines,
-			pvBlobAuthInfoIsReq,
-			pvSourceURIISReq,
-			pvIsSourceHTTP,
-			pvContainerIsReq,
-			pvBlockSizeCheckForBlockBlobs)
-	case transfer.BlobToFile:
-		return getTransferPipelines(getBlobToFilePipelines,
-			pvBlobAuthInfoIsReq,
-			pvContainerIsReq,
-			pvBlockSizeCheckForBlockBlobs,
-			pvNumOfHandlesPerFile)
-	case transfer.HTTPToFile:
-		return getTransferPipelines(getHTTPToFilePipelines,
-			pvSourceURIISReq,
-			pvIsSourceHTTP,
-			pvNumOfHandlesPerFile)
-	case transfer.BlobToBlock:
-		return getTransferPipelines(getBlobToBlockPipelines,
-			pvBlobAuthInfoIsReq,
-			pvContainerIsReq,
-			pvSourceURIISReq,
-			pvSourceInfoForBlobIsReq,
-			pvBlockSizeCheckForBlockBlobs)
-	case transfer.BlobToPage:
-		return getTransferPipelines(getBlobToPagePipelines,
-			pvBlobAuthInfoIsReq,
-			pvContainerIsReq,
-			pvSourceURIISReq,
-			pvSourceInfoForBlobIsReq,
-			pvBlockSizeCheckForPageBlobs)
-	case transfer.S3ToPage:
-		return getTransferPipelines(getS3ToPagePipelines,
-			pvBlobAuthInfoIsReq,
-			pvSourceURIISReq,
-			pvSourceInfoForS3IsReq,
-			pvBlockSizeCheckForPageBlobs,
-			pvContainerIsReq)
-	case transfer.S3ToBlock:
-		return getTransferPipelines(getS3ToBlockPipelines,
-			pvBlobAuthInfoIsReq,
-			pvSourceURIISReq,
-			pvSourceInfoForS3IsReq,
-			pvContainerIsReq,
-			pvBlockSizeCheckForBlockBlobs)
-	case transfer.PerfToBlock:
-		return getTransferPipelines(getPerfSourceToBlockPipelines,
-			pvBlobAuthInfoIsReq,
-			pvContainerIsReq,
-			pvSourceURIISReq,
-			pvBlockSizeCheckForBlockBlobs,
-			pvPerfSourceIsReq)
-	case transfer.PerfToPage:
-		return getTransferPipelines(getPerfSourceToPagePipelines,
-			pvBlobAuthInfoIsReq,
-			pvContainerIsReq,
-			pvSourceURIISReq,
-			pvBlockSizeCheckForPageBlobs,
-			pvPerfSourceIsReq)
-	case transfer.BlobToPerf:
-		return getTransferPipelines(getBlobToPerfPipelines,
-			pvSourceURIISReq,
-			pvSourceInfoForBlobIsReq)
+	sourcesp, err = fact.newSourcePipelines()
 
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return nil, nil, fmt.Errorf("Invalid transfer type: %v ", transferType)
+	return sourcesp, targetp, nil
 
-	return nil, nil, nil
-}
-func getFileToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	params := &sources.MultiFileParams{
-		SourcePatterns:   sourceURIs,
-		BlockSize:        blockSize,
-		TargetAliases:    blobNames,
-		NumOfPartitions:  numberOfReaders,
-		MD5:              calculateMD5,
-		KeepDirStructure: keepDirStructure,
-		FilesPerPipeline: numberOfFilesInBatch}
-
-	source = sources.NewMultiFile(params)
-	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-
-	err = adjustReaders(len(source))
-
-	return
-}
-func getFileToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-	//Since this is default value detect if the source is http and change th transfer type
-	if isSourceHTTP() {
-		source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-		transferDefStr = transfer.HTTPToBlock
-	} else {
-		params := &sources.MultiFileParams{
-			SourcePatterns:   sourceURIs,
-			BlockSize:        blockSize,
-			TargetAliases:    blobNames,
-			NumOfPartitions:  numberOfReaders,
-			MD5:              calculateMD5,
-			KeepDirStructure: keepDirStructure,
-			FilesPerPipeline: numberOfFilesInBatch}
-
-		source = sources.NewMultiFile(params)
-	}
-	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-
-	err = adjustReaders(len(source))
-
-	return
-}
-func getHTTPToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-	source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getHTTPToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-	source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-	return
 }
 
-//S3...
-const defaulPreSignedExpMins = 90
-
-func getS3ToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	params := &sources.S3Params{
-		Bucket:          sourceParameters["BUCKET"],
-		Prefixes:        []string{sourceParameters["PREFIX"]},
-		Endpoint:        sourceParameters["ENDPOINT"],
-		PreSignedExpMin: defaulPreSignedExpMins,
-		AccessKey:       sourceParameters[s3AccessKeyEnvVar],
-		SecretKey:       sourceParameters[s3SecretKeyEnvVar],
-		SourceParams: sources.SourceParams{
-			CalculateMD5:      calculateMD5,
-			UseExactNameMatch: exactNameMatch,
-			FilesPerPipeline:  numberOfFilesInBatch,
-			//default to always true so blob names are kept
-			KeepDirStructure: true}}
-
-	source = sources.NewS3Pipeline(params)
-	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getS3ToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	params := &sources.S3Params{
-		Bucket:          sourceParameters["BUCKET"],
-		Prefixes:        []string{sourceParameters["PREFIX"]},
-		Endpoint:        sourceParameters["ENDPOINT"],
-		PreSignedExpMin: defaulPreSignedExpMins,
-		AccessKey:       sourceParameters[s3AccessKeyEnvVar],
-		SecretKey:       sourceParameters[s3SecretKeyEnvVar],
-		SourceParams: sources.SourceParams{
-			CalculateMD5:      calculateMD5,
-			UseExactNameMatch: exactNameMatch,
-			FilesPerPipeline:  numberOfFilesInBatch,
-			//default to always true so blob names are kept
-			KeepDirStructure: true}}
-
-	source = sources.NewS3Pipeline(params)
-	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getBlobToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	params := &sources.AzureBlobParams{
-		Container:   sourceParameters["CONTAINER"],
-		BlobNames:   blobNames,
-		AccountName: sourceParameters["ACCOUNT_NAME"],
-		AccountKey:  sourceAuthorization,
-		SourceParams: sources.SourceParams{
-			CalculateMD5:      calculateMD5,
-			UseExactNameMatch: exactNameMatch,
-			FilesPerPipeline:  numberOfFilesInBatch,
-			//default to always true so blob names are kept
-			KeepDirStructure: true}}
-
-	source = sources.NewAzureBlob(params)
-	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getPerfSourceToPagePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	defs := perfSourceDefinitions
-
-	params := sources.PerfSourceParams{
-		Definitions: defs,
-		SourceParams: sources.SourceParams{
-			CalculateMD5: calculateMD5}}
-
-	source = sources.NewPerfSourcePipeline(params, blockSize)
-	target = targets.NewAzurePage(storageAccountName, storageAccountKey, containerName)
-	return
-}
-
-func getPerfSourceToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	defs := perfSourceDefinitions
-
-	params := sources.PerfSourceParams{
-		Definitions: defs,
-		SourceParams: sources.SourceParams{
-			CalculateMD5: calculateMD5}}
-
-	source = sources.NewPerfSourcePipeline(params, blockSize)
-	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getBlobToPerfPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	blobNames = []string{sourceParameters["PREFIX"]}
-
-	params := &sources.AzureBlobParams{
-		Container:   sourceParameters["CONTAINER"],
-		BlobNames:   blobNames,
-		AccountName: sourceParameters["ACCOUNT_NAME"],
-		AccountKey:  sourceAuthorization,
-		SourceParams: sources.SourceParams{
-			CalculateMD5:      calculateMD5,
-			UseExactNameMatch: exactNameMatch,
-			FilesPerPipeline:  numberOfFilesInBatch,
-			//default to always true so blob names are kept
-			KeepDirStructure: true}}
-
-	source = sources.NewAzureBlob(params)
-	target = targets.NewPerfTargetPipeline()
-	return
-}
-func getBlobToBlockPipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	blobNames = []string{sourceParameters["PREFIX"]}
-
-	params := &sources.AzureBlobParams{
-		Container:   sourceParameters["CONTAINER"],
-		BlobNames:   blobNames,
-		AccountName: sourceParameters["ACCOUNT_NAME"],
-		AccountKey:  sourceAuthorization,
-		SourceParams: sources.SourceParams{
-			CalculateMD5:      calculateMD5,
-			UseExactNameMatch: exactNameMatch,
-			FilesPerPipeline:  numberOfFilesInBatch,
-			//default to always true so blob names are kept
-			KeepDirStructure: true}}
-
-	source = sources.NewAzureBlob(params)
-	target = targets.NewAzureBlock(storageAccountName, storageAccountKey, containerName)
-	return
-}
-func getBlobToFilePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-
-	if len(blobNames) == 0 {
-		//use empty prefix to get the bloblist
-		blobNames = []string{""}
-	}
-
-	params := &sources.AzureBlobParams{
-		Container:   containerName,
-		BlobNames:   blobNames,
-		AccountName: storageAccountName,
-		AccountKey:  storageAccountKey,
-		SourceParams: sources.SourceParams{
-			CalculateMD5:      calculateMD5,
-			UseExactNameMatch: exactNameMatch,
-			FilesPerPipeline:  numberOfFilesInBatch,
-			KeepDirStructure:  keepDirStructure}}
-
-	source = sources.NewAzureBlob(params)
-	target = targets.NewMultiFile(true, numberOfHandlesPerFile)
-	return
-}
-func getHTTPToFilePipelines() (source []pipeline.SourcePipeline, target pipeline.TargetPipeline, err error) {
-	source = []pipeline.SourcePipeline{sources.NewHTTP(sourceURIs, blobNames, calculateMD5)}
-
-	var targetAliases []string
-
-	if len(blobNames) > 0 {
-		targetAliases = blobNames
-	} else {
-		targetAliases = make([]string, len(sourceURIs))
-		for i, src := range sourceURIs {
-			targetAliases[i], err = util.GetFileNameFromURL(src)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-	}
-
-	target = targets.NewMultiFile(true, numberOfHandlesPerFile)
-	return
-}
-
+/*
 const openFileLimitForLinux = 1024
 
 //validates if the number of readers needs to be adjusted to accommodate max filehandle limits in Debian systems
@@ -394,228 +55,150 @@ func adjustReaders(numOfSources int) error {
 
 	return nil
 }
+*/
+type pipelinesFactory struct {
+	source    transfer.TransferSegment
+	target    transfer.TransferSegment
+	def       transfer.Definition
+	valParams *validatedParameters
+}
+type parseAndValidationRule func() error
 
-//**************************
-//Parsing and validation rules...
-//These rules validate and prepare the parameters to construct the pipelines
-// and are applied for all transfers or for an specific one.
-//**************************
+func newPipelinesFactory(params *validatedParameters) pipelinesFactory {
 
-//Global rules....
-func pvgParseBlockSize() error {
-	var err error
-	blockSize, err = util.ByteCountFromSizeString(blockSizeStr)
-	if err != nil {
-		return fmt.Errorf("Invalid block size specified: %v. Parse Error: %v ", blockSizeStr, err)
-	}
-	return nil
-}
-func pvgBatchLimits() error {
-	if numberOfFilesInBatch < 1 {
-		log.Fatal("Invalid value for option -x, the value must be greater than 1")
-	}
-	return nil
-}
-func pvgHTTPTimeOut() error {
-	if util.HTTPClientTimeout < 30 {
-		fmt.Printf("Warning! The storage HTTP client timeout is too low (>5). Setting value to 600s \n")
-		util.HTTPClientTimeout = 600
-	}
-	return nil
-}
-func pvgDupCheck() error {
-	var err error
-	dedupeLevel, err = transfer.ParseDupeCheckLevel(dedupeLevelOptStr)
-	if err != nil {
-		fmt.Errorf("Duplicate detection level is invalid.  Found '%s', must be one of %s. Error:%v", dedupeLevelOptStr, transfer.DupeCheckLevelStr, err)
-	}
+	s, t := transfer.ParseTransferSegment(params.transferType)
+	p := pipelinesFactory{source: s, target: t, def: params.transferType, valParams: params}
 
-	return nil
-}
-func pvgTransferType() error {
-	var err error
-	if transferType, err = transfer.ParseTransferDefinition(transferDefStr); err != nil {
-		return err
-	}
-	return nil
+	return p
 }
 
-//Transfer specific rules...
-func pvNumOfHandlesPerFile() error {
-	if numberOfHandlesPerFile < 1 {
-		return fmt.Errorf("Invalid value for option -h, the value must be greater than 1")
-	}
+func (p *pipelinesFactory) newTargetPipeline() (pipeline.TargetPipeline, error) {
 
-	return nil
-}
-
-func pvBlockSizeCheckForBlockBlobs() error {
-
-	blockSizeMax := util.LargeBlockSizeMax
-	if blockSize > blockSizeMax {
-		return fmt.Errorf("Block size specified (%v) exceeds maximum of %v", blockSizeStr, util.PrintSize(blockSizeMax))
-	}
-
-	return nil
-
-}
-
-func pvIsSourceHTTP() error {
-	if !isSourceHTTP() {
-		return fmt.Errorf("The source is an invalid HTTP endpoint")
-	}
-	return nil
-}
-
-func pvBlockSizeCheckForPageBlobs() error {
-	if blockSize%uint64(targets.PageSize) != 0 {
-		return fmt.Errorf("Invalid block size (%v) for a page blob. The size must be a multiple of %v (bytes) and less or equal to %v (4MB)", blockSize, targets.PageSize, 4*util.MB)
-	}
-
-	if blockSize > 4*util.MB {
-		//adjust the block size to 4 MB
-		blockSize = 4 * util.MB
-
-	}
-
-	return nil
-}
-
-func pvSourceURIISReq() error {
-	if len(sourceURIs) == 0 || sourceURIs == nil {
-		return fmt.Errorf("The source parameter is missing (-f).\nMust be a file, URL, Azure Blob URL or file pattern (e.g. /data/*.fastq) ")
-	}
-	return nil
-}
-
-func pvSourceInfoForBlobIsReq() error {
-	burl, err := url.Parse(sourceURIs[0])
+	params, err := p.newTargetParams()
 
 	if err != nil {
-		return fmt.Errorf("Invalid Blob URL. Parsing error: %v", err)
+		return nil, err
 	}
 
-	host := strings.Split(burl.Hostname(), ".")
-
-	sourceAccountName := host[0]
-
-	if sourceAccountName == "" {
-		return fmt.Errorf("Invalid source Azure Blob URL. Account name could be parsed from the domain")
+	switch p.target {
+	case transfer.File:
+		params := params.(targets.FileTargetParams)
+		return targets.NewMultiFile(params.Overwrite, params.NumberOfHandlesPerFile), nil
+	case transfer.BlockBlob:
+		return targets.NewAzureBlockPipeline(params.(targets.AzureTargetParams)), nil
+	case transfer.PageBlob:
+		return targets.NewAzurePagePipeline(params.(targets.AzureTargetParams)), nil
+	case transfer.Perf:
+		return targets.NewPerfTargetPipeline(), nil
 	}
 
-	segments := strings.Split(burl.Path, "/")
-
-	sourceContName := segments[1]
-
-	if sourceContName == "" {
-		return fmt.Errorf("Invalid source Azure Blob URL. A container is required")
-	}
-	sourceBlobName := ""
-	if len(segments) > 1 {
-		sourceBlobName = strings.Join(segments[2:len(segments)], "/")
-	}
-
-	sourceParameters = make(map[string]string)
-
-	sourceParameters["ACCOUNT_NAME"] = sourceAccountName
-	sourceParameters["CONTAINER"] = sourceContName
-	sourceParameters["PREFIX"] = sourceBlobName
-
-	if sourceAuthorization == "" {
-		envVal := os.Getenv(sourceAuthorizationEnvVar)
-		if envVal == "" {
-			return fmt.Errorf("The source storage acccount key is required for this transfer type")
-		}
-		sourceAuthorization = envVal
-	}
-
-	return nil
+	return nil, fmt.Errorf("Invalid target segment:%v", p.target)
 }
 
-func pvSourceInfoForS3IsReq() error {
-	burl, err := url.Parse(sourceURIs[0])
+func (p *pipelinesFactory) newSourcePipelines() ([]pipeline.SourcePipeline, error) {
+
+	params, err := p.newSourceParams()
 
 	if err != nil {
-		return fmt.Errorf("Invalid S3 endpoint URL. Parsing error: %v.\nThe format is s3://[END_POINT]/[BUCKET]/[OBJECT]", err)
+		return nil, err
 	}
 
-	endpoint := burl.Hostname()
-
-	if endpoint == "" {
-		return fmt.Errorf("Invalid source S3 URI. The endpoint is required")
+	switch p.source {
+	case transfer.File:
+		params := params.(sources.MultiFileParams)
+		return sources.NewMultiFile(&params), nil
+	case transfer.HTTP:
+		params := params.(sources.HTTPSourceParams)
+		return []pipeline.SourcePipeline{sources.NewHTTP(params.SourceURIs, params.TargetAliases, params.SourceParams.CalculateMD5)}, nil
+	case transfer.S3:
+		params := params.(sources.S3Params)
+		return sources.NewS3Pipeline(&params), nil
+	case transfer.Blob:
+		params := params.(sources.AzureBlobParams)
+		return sources.NewAzureBlob(&params), nil
+	case transfer.Perf:
+		return sources.NewPerfSourcePipeline(params.(sources.PerfSourceParams)), nil
 	}
 
-	segments := strings.Split(burl.Path, "/")
+	return nil, fmt.Errorf("Invalid source segment:%v", p.source)
+}
+func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 
-	bucket := segments[1]
-
-	if bucket == "" {
-		return fmt.Errorf("Invalid source S3 URI. Bucket name could be parsed")
+	switch p.source {
+	case transfer.File:
+		return sources.MultiFileParams{
+			SourcePatterns:   p.valParams.sourceURIs,
+			BlockSize:        p.valParams.blockSize,
+			TargetAliases:    p.valParams.targetAliases,
+			NumOfPartitions:  p.valParams.numberOfReaders, //TODO make this more explicit by numofpartitions as param..
+			MD5:              p.valParams.calculateMD5,
+			KeepDirStructure: p.valParams.keepDirStructure,
+			FilesPerPipeline: p.valParams.numberOfIlesInBatch}, nil
+	case transfer.HTTP:
+		return sources.HTTPSourceParams{
+			SourceURIs:    p.valParams.sourceURIs,
+			TargetAliases: p.valParams.targetAliases,
+			SourceParams: sources.SourceParams{
+				CalculateMD5: p.valParams.calculateMD5}}, nil
+	case transfer.S3:
+		return sources.S3Params{
+			Bucket:          p.valParams.s3Source.bucket,
+			Prefixes:        p.valParams.s3Source.prefixes,
+			Endpoint:        p.valParams.s3Source.endpoint,
+			PreSignedExpMin: p.valParams.s3Source.preSignedExpMin,
+			AccessKey:       p.valParams.s3Source.accessKey,
+			SecretKey:       p.valParams.s3Source.secretKey,
+			SourceParams: sources.SourceParams{
+				CalculateMD5:      p.valParams.calculateMD5,
+				UseExactNameMatch: p.valParams.useExactMatch,
+				FilesPerPipeline:  p.valParams.numberOfIlesInBatch,
+				//default to always true so blob names are kept
+				KeepDirStructure: p.valParams.keepDirStructure}}, nil
+	case transfer.Blob:
+		return sources.AzureBlobParams{
+			Container:   p.valParams.blobSource.container,
+			BlobNames:   p.valParams.blobSource.prefixes,
+			AccountName: p.valParams.blobSource.accountName,
+			AccountKey:  p.valParams.blobSource.accountKey,
+			BaseBlobURL: p.valParams.blobSource.baseBlobURL,
+			SourceParams: sources.SourceParams{
+				CalculateMD5:      p.valParams.calculateMD5,
+				UseExactNameMatch: p.valParams.useExactMatch,
+				FilesPerPipeline:  p.valParams.numberOfIlesInBatch,
+				KeepDirStructure:  p.valParams.keepDirStructure}}, nil
+	case transfer.Perf:
+		return sources.PerfSourceParams{
+			Definitions: p.valParams.perfSourceDefinitions,
+			SourceParams: sources.SourceParams{
+				CalculateMD5: p.valParams.calculateMD5}}, nil
 	}
 
-	prefix := ""
-	if len(segments) > 1 {
-		prefix = strings.Join(segments[2:len(segments)], "/")
-	}
+	return nil, fmt.Errorf("Invalid segment type: %v ", p.source)
 
-	//The S3 Source uses the environment variables cred provider. So here we are just checking they are set.
-
-	if os.Getenv(s3AccessKeyEnvVar) == "" {
-		return fmt.Errorf("The S3 access key is required for this transfer type. Environment variable name:%v", s3AccessKeyEnvVar)
-	}
-
-	if os.Getenv(s3SecretKeyEnvVar) == "" {
-		return fmt.Errorf("The S3 secret key is required for this transfer type. Environment variable name:%v", s3SecretKeyEnvVar)
-	}
-
-	sourceParameters = make(map[string]string)
-
-	sourceParameters["PREFIX"] = prefix
-	sourceParameters["BUCKET"] = bucket
-	sourceParameters["ENDPOINT"] = endpoint
-	sourceParameters[s3AccessKeyEnvVar] = os.Getenv(s3AccessKeyEnvVar)
-	sourceParameters[s3SecretKeyEnvVar] = os.Getenv(s3SecretKeyEnvVar)
-
-	return nil
 }
 
-func pvContainerIsReq() error {
-	if containerName == "" {
-		return fmt.Errorf("container name not specified ")
-	}
-	return nil
-}
+func (p *pipelinesFactory) newTargetParams() (interface{}, error) {
 
-func pvPerfSourceIsReq() error {
-	var err error
-	perfSourceDefinitions, err = sources.ParseSourceDefinitions(sourceURIs[0])
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func pvBlobAuthInfoIsReq() error {
-
-	// wasn't specified, try the environment variable
-	if storageAccountName == "" {
-		envVal := os.Getenv(storageAccountNameEnvVar)
-		if envVal == "" {
-			return errors.New("storage account name not specified or found in environment variable " + storageAccountNameEnvVar)
-		}
-		storageAccountName = envVal
+	switch p.target {
+	case transfer.File:
+		return targets.FileTargetParams{
+			Overwrite:              true, //set this to always overwrite, TODO, expose this as an option
+			NumberOfHandlesPerFile: p.valParams.numberOfHandlesPerFile}, nil
+	case transfer.PageBlob:
+		return targets.AzureTargetParams{
+			AccountName: p.valParams.blobTarget.accountName,
+			AccountKey:  p.valParams.blobTarget.accountKey,
+			Container:   p.valParams.blobTarget.container,
+			BaseBlobURL: p.valParams.blobTarget.baseBlobURL}, nil
+	case transfer.BlockBlob:
+		return targets.AzureTargetParams{
+			AccountName: p.valParams.blobTarget.accountName,
+			AccountKey:  p.valParams.blobTarget.accountKey,
+			Container:   p.valParams.blobTarget.container,
+			BaseBlobURL: p.valParams.blobTarget.baseBlobURL}, nil
+	case transfer.Perf:
+		return nil, nil
 	}
 
-	// wasn't specified, try the environment variable
-	if storageAccountKey == "" {
-		envVal := os.Getenv(storageAccountKeyEnvVar)
-		if envVal == "" {
-			return errors.New("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
-		}
-		storageAccountKey = envVal
-	}
-
-	return nil
+	return nil, fmt.Errorf("Invalid target segment type: %v ", p.target)
 }

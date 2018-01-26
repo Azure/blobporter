@@ -51,7 +51,7 @@ func newSourceDefinition(def string) (*SourceDefinition, error) {
 	}
 	names := make([]string, numOfSrcs)
 	for n := 0; n < numOfSrcs; n++ {
-		names[n] = fmt.Sprintf("%s%v.dat", strings.Replace(def,":","_",1), time.Now().Nanosecond())
+		names[n] = fmt.Sprintf("%s%v.dat", strings.Replace(def, ":", "_", 1), time.Now().Nanosecond())
 	}
 
 	return &SourceDefinition{Size: size, NumberOfSources: numOfSrcs, Names: names}, nil
@@ -77,14 +77,15 @@ type PerfSourcePipeline struct {
 type PerfSourceParams struct {
 	SourceParams
 	Definitions []SourceDefinition
+	BlockSize   uint64
 }
 
 //NewPerfSourcePipeline TODO
-func NewPerfSourcePipeline(params PerfSourceParams, blockSize uint64) []pipeline.SourcePipeline {
+func NewPerfSourcePipeline(params PerfSourceParams) []pipeline.SourcePipeline {
 	ssps := make([]pipeline.SourcePipeline, 1)
 	ssp := PerfSourcePipeline{
 		definitions: params.Definitions,
-		blockSize:   blockSize,
+		blockSize:   params.BlockSize,
 		includeMD5:  params.CalculateMD5}
 	ssp.setSharedDataBlock()
 	ssps[0] = &ssp
