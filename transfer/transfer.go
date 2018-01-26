@@ -84,8 +84,8 @@ const (
 	BlobToPage             = "blob-pageblob"
 	S3ToBlock              = "s3-blockblob"
 	S3ToPage               = "s3-pageblob"
-	PerfToBlock            = "perf-block"
-	PerfToPage             = "perf-page"
+	PerfToBlock            = "perf-blockblob"
+	PerfToPage             = "perf-pageblob"
 	BlobToPerf             = "blob-perf"
 	none                   = "none"
 )
@@ -158,9 +158,9 @@ func ParseTransferDefinition(str string) (Definition, error) {
 		return S3ToBlock, nil
 	case "s3-pageblob":
 		return S3ToPage, nil
-	case "perf-block":
+	case "perf-blockblob":
 		return PerfToBlock, nil
-	case "perf-page":
+	case "perf-pageblob":
 		return PerfToPage, nil
 	case "blob-perf":
 		return BlobToPerf, nil

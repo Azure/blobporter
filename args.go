@@ -88,7 +88,7 @@ type validatedParameters struct {
 	filesPerPipeline       int
 	useExactMatch          bool
 	numberOfHandlesPerFile int
-	numberOfIlesInBatch    int
+	numberOfFilesInBatch   int
 	blobSource             blobParams
 	blobTarget             blobParams
 	perfSourceDefinitions  []sources.SourceDefinition
@@ -277,7 +277,7 @@ func (p *paramParserValidator) pvgBatchLimits() error {
 	if p.args.numberOfFilesInBatch < 1 {
 		return fmt.Errorf("Invalid value for option -x, the value must be greater than 1")
 	}
-	p.params.numberOfIlesInBatch = p.args.numberOfFilesInBatch
+	p.params.numberOfFilesInBatch = p.args.numberOfFilesInBatch
 	return nil
 }
 func (p *paramParserValidator) pvgHTTPTimeOut() error {

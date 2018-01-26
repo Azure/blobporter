@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"log"
 	"math"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
-
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
 )
 
-const programVersion = "0.5.32"
+const programVersion = "0.5.33"
 
 var argsUtil paramParserValidator
 
@@ -138,6 +138,10 @@ func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, thre
 }
 
 func main() {
+	go func() {
+		//runtime.SetBlockProfileRate(5)
+		//log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	flag.Parse()
 

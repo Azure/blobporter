@@ -33,29 +33,6 @@ func newTransferPipelines(params *validatedParameters) ([]pipeline.SourcePipelin
 
 }
 
-/*
-const openFileLimitForLinux = 1024
-
-//validates if the number of readers needs to be adjusted to accommodate max filehandle limits in Debian systems
-func adjustReaders(numOfSources int) error {
-	if runtime.GOOS != "linux" {
-		return nil
-	}
-
-	if (numOfSources * numberOfHandlesPerFile) > openFileLimitForLinux {
-		numberOfHandlesPerFile = openFileLimitForLinux / (numOfSources * numberOfHandlesPerFile)
-
-		if numberOfHandlesPerFile == 0 {
-			return fmt.Errorf("The number of files will cause the process to exceed the limit of open files allowed by the OS. Reduce the number of files to be transferred")
-		}
-
-		fmt.Printf("Warning! Adjusting the number of handles per file (-h) to %v\n", numberOfHandlesPerFile)
-
-	}
-
-	return nil
-}
-*/
 type pipelinesFactory struct {
 	source    transfer.TransferSegment
 	target    transfer.TransferSegment
@@ -133,7 +110,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 			NumOfPartitions:  p.valParams.numberOfReaders, //TODO make this more explicit by numofpartitions as param..
 			MD5:              p.valParams.calculateMD5,
 			KeepDirStructure: p.valParams.keepDirStructure,
-			FilesPerPipeline: p.valParams.numberOfIlesInBatch}, nil
+			FilesPerPipeline: p.valParams.numberOfFilesInBatch}, nil
 	case transfer.HTTP:
 		return sources.HTTPSourceParams{
 			SourceURIs:    p.valParams.sourceURIs,
@@ -151,7 +128,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 			SourceParams: sources.SourceParams{
 				CalculateMD5:      p.valParams.calculateMD5,
 				UseExactNameMatch: p.valParams.useExactMatch,
-				FilesPerPipeline:  p.valParams.numberOfIlesInBatch,
+				FilesPerPipeline:  p.valParams.numberOfFilesInBatch,
 				//default to always true so blob names are kept
 				KeepDirStructure: p.valParams.keepDirStructure}}, nil
 	case transfer.Blob:
@@ -164,10 +141,11 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 			SourceParams: sources.SourceParams{
 				CalculateMD5:      p.valParams.calculateMD5,
 				UseExactNameMatch: p.valParams.useExactMatch,
-				FilesPerPipeline:  p.valParams.numberOfIlesInBatch,
+				FilesPerPipeline:  p.valParams.numberOfFilesInBatch,
 				KeepDirStructure:  p.valParams.keepDirStructure}}, nil
 	case transfer.Perf:
 		return sources.PerfSourceParams{
+			BlockSize:   p.valParams.blockSize,
 			Definitions: p.valParams.perfSourceDefinitions,
 			SourceParams: sources.SourceParams{
 				CalculateMD5: p.valParams.calculateMD5}}, nil
