@@ -20,7 +20,6 @@ type AzureBlock struct {
 	azutil    *util.AzUtil
 }
 
-
 //NewAzureBlockPipeline TODO
 func NewAzureBlockPipeline(params AzureTargetParams) pipeline.TargetPipeline {
 
@@ -90,9 +89,11 @@ func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize
 	}
 
 	//clean uncommitted blocks for large files only (>1GB)
-	if source.Size > util.GB {
-		return t.azutil.CleanUncommittedBlocks(source.TargetAlias)
-	}
+	/*
+		if source.Size > util.GB {
+			return t.azutil.CleanUncommittedBlocks(source.TargetAlias)
+		}
+	*/
 
 	return nil
 }
@@ -138,6 +139,7 @@ func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, sta
 
 		return
 	}
-	err = t.azutil.PutBlock(part.TargetAlias, part.BlockID, bytes.NewReader(part.Data))
+	reader := bytes.NewReader(part.Data)
+	err = t.azutil.PutBlock(t.container, part.TargetAlias, part.BlockID, reader)
 	return
 }

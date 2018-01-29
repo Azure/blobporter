@@ -133,7 +133,7 @@ func newParamParserValidator() paramParserValidator {
 		numberOfWorkers:        defaultNumberOfWorkers,
 		blockSizeStr:           defaultBlockSizeStr,
 		dedupeLevelOptStr:      defaultDedupeLevelStr,
-		transferDef:            transfer.FileToBlock,
+		transferDefStr:         string(transfer.FileToBlock),
 		numberOfHandlesPerFile: defaultNumberOfHandlesPerFile,
 		hTTPClientTimeout:      defaultHTTPClientTimeout,
 		numberOfFilesInBatch:   defaultNumberOfFilesInBatch}
@@ -268,9 +268,10 @@ func (p *paramParserValidator) pvgCalculateReadersAndWorkers() error {
 func (p *paramParserValidator) pvgParseBlockSize() error {
 	var err error
 	p.params.blockSize, err = util.ByteCountFromSizeString(p.args.blockSizeStr)
-	if err != nil {
+	if err != nil || p.params.blockSize <= 0 {
 		return fmt.Errorf("Invalid block size specified: %v. Parse Error: %v ", p.args.blockSizeStr, err)
 	}
+
 	return nil
 }
 func (p *paramParserValidator) pvgBatchLimits() error {

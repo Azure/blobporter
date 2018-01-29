@@ -15,7 +15,6 @@ import (
 type AzUtil struct {
 	serviceURL   *azblob.ServiceURL
 	containerURL *azblob.ContainerURL
-	context      context.Context
 	creds        *azblob.SharedKeyCredential
 }
 
@@ -23,15 +22,20 @@ type AzUtil struct {
 func NewAzUtil(accountName string, accountKey string, container string, baseBlobURL string) (*AzUtil, error) {
 
 	creds := azblob.NewSharedKeyCredential(accountName, accountKey)
-	ua, _ := GetUserAgentInfo()
-	pipeline := azblob.NewPipeline(creds, azblob.PipelineOptions{
-		Telemetry: azblob.TelemetryOptions{
-			Value: fmt.Sprintf("%s/%s", ua, azblob.UserAgent())},
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyFixed,
-			MaxTries:      1000,
-			RetryDelay:    200 * time.Millisecond,
-			MaxRetryDelay: 5 * time.Minute}})
+	/*
+		ua, _ := GetUserAgentInfo()
+
+			pipeline := azblob.NewPipeline(creds, azblob.PipelineOptions{
+				Telemetry: azblob.TelemetryOptions{
+					Value: fmt.Sprintf("%s/%s", ua, azblob.UserAgent())},
+				Retry: azblob.RetryOptions{
+					Policy:        azblob.RetryPolicyFixed,
+					MaxTries:      1000,
+					RetryDelay:    200 * time.Millisecond,
+					MaxRetryDelay: 5 * time.Minute}})
+	*/
+
+	pipeline := azblob.NewPipeline(creds, azblob.PipelineOptions{})
 
 	baseURL, err := parseBaseURL(accountName, baseBlobURL)
 	if err != nil {
@@ -43,13 +47,13 @@ func NewAzUtil(accountName string, accountKey string, container string, baseBlob
 
 	return &AzUtil{serviceURL: &surl,
 		containerURL: &curl,
-		creds:        creds,
-		context:      context.Background()}, nil
+		creds:        creds}, nil
 }
 
 //CreateContainerIfNotExists returs true if the container did not exist.
 func (p *AzUtil) CreateContainerIfNotExists() (bool, error) {
-	response, err := p.containerURL.GetPropertiesAndMetadata(p.context, azblob.LeaseAccessConditions{})
+	ctx := context.Background()
+	response, err := p.containerURL.GetPropertiesAndMetadata(ctx, azblob.LeaseAccessConditions{})
 
 	if response != nil {
 		defer response.Response().Body.Close()
@@ -63,7 +67,7 @@ func (p *AzUtil) CreateContainerIfNotExists() (bool, error) {
 		errResp := storageErr.Response()
 		if errResp != nil && errResp.StatusCode == 404 {
 			//not found
-			_, err = p.containerURL.Create(p.context, azblob.Metadata{}, azblob.PublicAccessNone)
+			_, err = p.containerURL.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 
 			if err != nil {
 				return true, err
@@ -78,8 +82,8 @@ func (p *AzUtil) CreateContainerIfNotExists() (bool, error) {
 }
 
 func (p *AzUtil) blobExists(bburl azblob.BlockBlobURL) (bool, error) {
-
-	response, err := bburl.GetPropertiesAndMetadata(p.context, azblob.BlobAccessConditions{})
+	ctx := context.Background()
+	response, err := bburl.GetPropertiesAndMetadata(ctx, azblob.BlobAccessConditions{})
 
 	if response != nil {
 		defer response.Response().Body.Close()
@@ -118,7 +122,9 @@ func (p *AzUtil) CleanUncommittedBlocks(blobName string) error {
 	}
 
 	var blst *azblob.BlockList
-	blst, err = bburl.GetBlockList(p.context, azblob.BlockListUncommitted, azblob.LeaseAccessConditions{})
+	ctx := context.Background()
+
+	blst, err = bburl.GetBlockList(ctx, azblob.BlockListUncommitted, azblob.LeaseAccessConditions{})
 
 	if blst != nil {
 		defer blst.Response().Body.Close()
@@ -137,7 +143,9 @@ func (p *AzUtil) CleanUncommittedBlocks(blobName string) error {
 	empty := make([]byte, 0)
 
 	var resp *azblob.BlobsPutResponse
-	resp, err = bburl.PutBlob(p.context, bytes.NewReader(empty), azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	ctx = context.Background()
+
+	resp, err = bburl.PutBlob(ctx, bytes.NewReader(empty), azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
 	defer resp.Response().Body.Close()
 
 	return err
@@ -148,8 +156,8 @@ func (p *AzUtil) PutBlockList(blobName string, blockIDs []string) error {
 	bburl := p.containerURL.NewBlockBlobURL(blobName)
 
 	h := azblob.BlobHTTPHeaders{}
-
-	resp, err := bburl.PutBlockList(p.context, blockIDs, azblob.Metadata{}, h, azblob.BlobAccessConditions{})
+	ctx := context.Background()
+	resp, err := bburl.PutBlockList(ctx, blockIDs, azblob.Metadata{}, h, azblob.BlobAccessConditions{})
 
 	if err != nil {
 		return err
@@ -160,10 +168,12 @@ func (p *AzUtil) PutBlockList(blobName string, blockIDs []string) error {
 }
 
 //PutBlock TODO
-func (p *AzUtil) PutBlock(blobName string, id string, body io.ReadSeeker) error {
-	bburl := p.containerURL.NewBlockBlobURL(blobName)
+func (p *AzUtil) PutBlock(container string, blobName string, id string, body io.ReadSeeker) error {
+	curl := p.serviceURL.NewContainerURL(container)
+	bburl := curl.NewBlockBlobURL(blobName)
 
-	resp, err := bburl.PutBlock(p.context, id, body, azblob.LeaseAccessConditions{})
+	ctx :=context.Background()
+	resp, err := bburl.PutBlock(ctx, id, body, azblob.LeaseAccessConditions{})
 
 	if err != nil {
 		return err
@@ -186,11 +196,14 @@ func (p *AzUtil) PutBlockBlob(blobName string, body io.ReadSeeker, md5 []byte) e
 		h.ContentMD5 = md5bytes
 	}
 
-	resp, err := bburl.PutBlob(p.context, body, h, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	ctx := context.Background()
+
+	resp, err := bburl.PutBlob(ctx, body, h, azblob.Metadata{}, azblob.BlobAccessConditions{})
 
 	if err != nil {
 		return err
 	}
+
 	resp.Response().Body.Close()
 
 	return nil
@@ -200,8 +213,9 @@ func (p *AzUtil) PutBlockBlob(blobName string, body io.ReadSeeker, md5 []byte) e
 func (p *AzUtil) CreatePageBlob(blobName string, size uint64) error {
 	pburl := p.containerURL.NewPageBlobURL(blobName)
 	h := azblob.BlobHTTPHeaders{}
+	ctx := context.Background()
 
-	resp, err := pburl.Create(p.context, int64(size), 0, azblob.Metadata{}, h, azblob.BlobAccessConditions{})
+	resp, err := pburl.Create(ctx, int64(size), 0, azblob.Metadata{}, h, azblob.BlobAccessConditions{})
 
 	if err != nil {
 		return err
@@ -217,8 +231,9 @@ func (p *AzUtil) PutPages(blobName string, start int32, end int32, body io.ReadS
 	pageRange := azblob.PageRange{
 		Start: start,
 		End:   end}
+	ctx := context.Background()
 
-	resp, err := pburl.PutPages(p.context, pageRange, body, azblob.BlobAccessConditions{})
+	resp, err := pburl.PutPages(ctx, pageRange, body, azblob.BlobAccessConditions{})
 
 	if err != nil {
 		return err
@@ -250,13 +265,13 @@ type BlobCallback func(*azblob.Blob, string) (bool, error)
 func (p *AzUtil) IterateBlobList(prefix string, callback BlobCallback) error {
 
 	var marker azblob.Marker
-	ctx := context.Background()
 	options := azblob.ListBlobsOptions{
 		Details: azblob.BlobListingDetails{
 			Metadata: true},
 		Prefix: prefix}
 
 	for {
+		ctx := context.Background()
 		response, err := p.containerURL.ListBlobs(ctx, marker, options)
 
 		if err != nil {
