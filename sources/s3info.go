@@ -118,7 +118,6 @@ func (s *s3InfoProvider) getObjectLists() (map[string][]minio.ObjectInfo, error)
 			if object.Err != nil {
 				return nil, object.Err
 			}
-
 			list = append(list, object)
 		}
 
