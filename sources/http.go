@@ -49,10 +49,11 @@ func newHTTPSource(sourceListManager objectListManager, pipelineFactory sourceHT
 
 	for b := 0; b < numOfBatches; b++ {
 
+		start = b * numOfFilesInBatch
+
 		if filesSent < numOfFilesInBatch {
 			numOfFilesInBatch = filesSent
 		}
-		start = b * numOfFilesInBatch
 
 		httpSource := HTTPPipeline{Sources: sourceInfos[start : start+numOfFilesInBatch], HTTPClient: util.NewHTTPClient(), includeMD5: includeMD5}
 

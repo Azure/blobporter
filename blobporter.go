@@ -54,7 +54,7 @@ const (
 	s3AccessKeyEnvVar = "S3_ACCESS_KEY"
 	s3SecretKeyEnvVar = "S3_SECRET_KEY"
 
-	programVersion = "0.5.23" // version number to show in help
+	programVersion = "0.5.25" // version number to show in help
 )
 
 const numOfWorkersFactor = 8

@@ -77,7 +77,7 @@ func (s *s3InfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
 				if !s.params.KeepDirStructure {
 					targetAlias = path.Base(obj.Key)
 				}
-
+				
 				sourceURIs = append(sourceURIs, pipeline.SourceInfo{
 					SourceName:  u.String(),
 					Size:        uint64(obj.Size),
@@ -118,7 +118,7 @@ func (s *s3InfoProvider) getObjectLists() (map[string][]minio.ObjectInfo, error)
 			if object.Err != nil {
 				return nil, object.Err
 			}
-
+			fmt.Printf("Object from s3 %+v\n", object)
 			list = append(list, object)
 		}
 
