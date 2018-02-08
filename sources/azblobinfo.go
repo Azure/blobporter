@@ -2,10 +2,11 @@ package sources
 
 import (
 	"fmt"
+	"log"
 	"path"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -18,19 +19,24 @@ type AzureBlobParams struct {
 	AccountName         string
 	AccountKey          string
 	SasExpNumberOfHours int
+	BaseBlobURL         string
 }
 
 const defaultSasExpHours = 2
 
 type azBlobInfoProvider struct {
-	params        *AzureBlobParams
-	storageClient *storage.BlobStorageClient
+	params *AzureBlobParams
+	azUtil *util.AzUtil
 }
 
 func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
-	client := util.GetBlobStorageClient(params.AccountName, params.AccountKey)
+	azutil, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
 
-	return &azBlobInfoProvider{params: params, storageClient: &client}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &azBlobInfoProvider{params: params, azUtil: azutil}
 }
 
 //getSourceInfo gets a list of SourceInfo that represent the list of azure blobs returned by the service
@@ -43,40 +49,38 @@ func (b *azBlobInfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
 		exp = defaultSasExpHours
 	}
 	date := time.Now().Add(time.Duration(exp) * time.Hour).UTC()
+	sourceURIs := make([]pipeline.SourceInfo, 0)
 
-	var blobLists []storage.BlobListResponse
-	blobLists, err = b.getBlobLists()
-	if err != nil {
-		return nil, err
+	blobCallback := func(blob *azblob.Blob, prefix string) (bool, error) {
+		include := true
+		if b.params.UseExactNameMatch {
+			include = blob.Name == prefix
+		}
+		if include {
+			sourceURLWithSAS := b.azUtil.GetBlobURLWithReadOnlySASToken(blob.Name, date)
+
+			targetAlias := blob.Name
+			if !b.params.KeepDirStructure {
+				targetAlias = path.Base(blob.Name)
+			}
+
+			sourceURIs = append(sourceURIs, pipeline.SourceInfo{
+				SourceName:  sourceURLWithSAS.String(),
+				Size:        uint64(*blob.Properties.ContentLength),
+				TargetAlias: targetAlias})
+			if b.params.UseExactNameMatch {
+				//true, stops iteration
+				return true, nil
+			}
+		}
+
+		//false, continues the iteration
+		return false, nil
 	}
 
-	sourceURIs := make([]pipeline.SourceInfo, 0)
-	var sourceURI string
-	for _, blobList := range blobLists {
-		for _, blob := range blobList.Blobs {
-
-			include := true
-			if b.params.UseExactNameMatch {
-				include = blob.Name == blobList.Prefix
-			}
-
-			if include {
-				sourceURI, err = b.storageClient.GetBlobSASURI(b.params.Container, blob.Name, date, "r")
-
-				if err != nil {
-					return nil, err
-				}
-
-				targetAlias := blob.Name
-				if !b.params.KeepDirStructure {
-					targetAlias = path.Base(blob.Name)
-				}
-
-				sourceURIs = append(sourceURIs, pipeline.SourceInfo{
-					SourceName:  sourceURI,
-					Size:        uint64(blob.Properties.ContentLength),
-					TargetAlias: targetAlias})
-			}
+	for _, blobName := range b.params.BlobNames {
+		if err = b.azUtil.IterateBlobList(blobName, blobCallback); err != nil {
+			return nil, err
 		}
 	}
 
@@ -89,44 +93,4 @@ func (b *azBlobInfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
 	}
 
 	return sourceURIs, nil
-}
-
-func (b *azBlobInfoProvider) getBlobLists() ([]storage.BlobListResponse, error) {
-	var err error
-	listLength := 1
-
-	if len(b.params.BlobNames) > 1 {
-		listLength = len(b.params.BlobNames)
-	}
-
-	listOfLists := make([]storage.BlobListResponse, listLength)
-
-	for i, blobname := range b.params.BlobNames {
-		var list *storage.BlobListResponse
-		listParams := storage.ListBlobsParameters{Prefix: blobname}
-
-		for {
-			var listpage storage.BlobListResponse
-			if listpage, err = b.storageClient.ListBlobs(b.params.Container, listParams); err != nil {
-				return nil, err
-			}
-
-			if list == nil {
-				list = &listpage
-			} else {
-				(*list).Blobs = append((*list).Blobs, listpage.Blobs...)
-			}
-
-			if listpage.NextMarker == "" {
-				break
-			}
-
-			listParams.Marker = listpage.NextMarker
-		}
-
-		listOfLists[i] = *list
-	}
-
-	return listOfLists, nil
-
 }

@@ -106,7 +106,7 @@ func getSourceSize(sourceURI string) (size int) {
 		}
 		err = fmt.Errorf("HEAD request failed. Please check the URL.%s Error: %v", statusCode, err)
 
-		util.PrintfIfDebug("getSourceSize -> %v", err)
+		util.PrintfIfDebug("getSourceSize ->  err:%v", err)
 
 		size = getSourceSizeFromByteRangeHeader(sourceURI)
 		return
@@ -209,7 +209,7 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 				}
 				f.HTTPClient = util.NewHTTPClient()
 
-				util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, status, err, header)
+				util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v err:%v head:%v", p.BlockID, p.BytesToRead, status, err, header)
 
 				return err
 			}
@@ -225,7 +225,7 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 				p.MD5()
 			}
 
-			util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
+			util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v read:%v head:%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 
 			return nil
 		})
