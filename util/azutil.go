@@ -22,20 +22,19 @@ type AzUtil struct {
 func NewAzUtil(accountName string, accountKey string, container string, baseBlobURL string) (*AzUtil, error) {
 
 	creds := azblob.NewSharedKeyCredential(accountName, accountKey)
-	/*
-		ua, _ := GetUserAgentInfo()
 
-			pipeline := azblob.NewPipeline(creds, azblob.PipelineOptions{
-				Telemetry: azblob.TelemetryOptions{
-					Value: fmt.Sprintf("%s/%s", ua, azblob.UserAgent())},
-				Retry: azblob.RetryOptions{
-					Policy:        azblob.RetryPolicyFixed,
-					MaxTries:      1000,
-					RetryDelay:    200 * time.Millisecond,
-					MaxRetryDelay: 5 * time.Minute}})
-	*/
+	ua, _ := GetUserAgentInfo()
 
-	pipeline := azblob.NewPipeline(creds, azblob.PipelineOptions{})
+	pipeline := azblob.NewPipeline(creds, azblob.PipelineOptions{
+		Telemetry: azblob.TelemetryOptions{
+			Value: fmt.Sprintf("%s/%s", ua, azblob.UserAgent())},
+		Retry: azblob.RetryOptions{
+			Policy:        azblob.RetryPolicyFixed,
+			MaxTries:      1000,
+			RetryDelay:    200 * time.Millisecond,
+			MaxRetryDelay: 5 * time.Minute}})
+
+
 
 	baseURL, err := parseBaseURL(accountName, baseBlobURL)
 	if err != nil {
@@ -172,7 +171,7 @@ func (p *AzUtil) PutBlock(container string, blobName string, id string, body io.
 	curl := p.serviceURL.NewContainerURL(container)
 	bburl := curl.NewBlockBlobURL(blobName)
 
-	ctx :=context.Background()
+	ctx := context.Background()
 	resp, err := bburl.PutBlock(ctx, id, body, azblob.LeaseAccessConditions{})
 
 	if err != nil {

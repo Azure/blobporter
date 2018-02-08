@@ -104,7 +104,7 @@ func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint
 	totalNumberOfBlocks := 0
 	var totalSize uint64
 	var err error
-	fileInfos := make(map[string]FileInfo, len(files))
+	fileInfos := make(map[string]FileInfo)
 	useTargetAlias := len(targetAliases) == len(files)
 	for f := 0; f < len(files); f++ {
 		var fileStat os.FileInfo
@@ -112,6 +112,11 @@ func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint
 
 		if fileStat, err = os.Stat(files[f]); err != nil {
 			log.Fatalf("Error: %v", err)
+		}
+
+		//directories are not allowed... so skipping them
+		if fileStat.IsDir() {
+			continue
 		}
 
 		if fileStat.Size() == 0 {

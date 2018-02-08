@@ -27,7 +27,12 @@ func NewAzurePagePipeline(params AzureTargetParams) pipeline.TargetPipeline {
 		log.Fatal(err)
 	}
 
-	_, err = az.CreateContainerIfNotExists()
+	var notfound bool
+	notfound, err = az.CreateContainerIfNotExists()
+
+	if notfound {
+		fmt.Printf("Info! Container was not found, creating it...\n")
+	}
 
 	if err != nil {
 		log.Fatal(err)

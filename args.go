@@ -129,6 +129,7 @@ func newParamParserValidator() paramParserValidator {
 	}
 
 	args := &arguments{
+		keepDirStructure: 		true,
 		numberOfReaders:        defaultNumberOfReaders,
 		numberOfWorkers:        defaultNumberOfWorkers,
 		blockSizeStr:           defaultBlockSizeStr,
@@ -163,7 +164,8 @@ func (p *paramParserValidator) parseAndValidate() error {
 		p.pvgHTTPTimeOut,
 		p.pvgDupCheck,
 		p.pvgParseBlockSize,
-		p.pvgQuietMode)
+		p.pvgQuietMode,
+		p.pvgKeepDirectoryStructure)
 
 	if err != nil {
 		return err
@@ -246,6 +248,10 @@ func (p *paramParserValidator) getSourceRules() ([]parseAndValidationRule, error
 //**************************
 
 //Global rules....
+func (p *paramParserValidator) pvgKeepDirectoryStructure() error {
+	p.params.keepDirStructure = p.args.keepDirStructure
+	return nil
+}
 func (p *paramParserValidator) pvgQuietMode() error {
 	p.params.quietMode = p.args.quietMode
 	return nil

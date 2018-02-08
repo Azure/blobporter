@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -21,14 +20,18 @@ type MultiFile struct {
 	NumberOfHandles int
 	OverWrite       bool
 	sync.Mutex
-	fileHandlesMan *fileHandleManager
+	fileHandlesMan *poolHandlerManager
 }
+
+const maxFileHandlesInCache int32 = 600
 
 //NewMultiFile creates a new multi file target and 'n' number of handles for concurrent writes to a file.
 func NewMultiFile(overwrite bool, numberOfHandles int) pipeline.TargetPipeline {
 
 	//return &MultiFile{FileHandles: make(map[string]chan *os.File), NumberOfHandles: numberOfHandles, OverWrite: overwrite}
-	fhm := newFileHandlerManager(numberOfHandles, true, overwrite)
+	//fhm := newFileHandlePool(numberOfHandles, overwrite)
+	fhm := newpoolHandlerManager(numberOfHandles, int(maxFileHandlesInCache), overwrite)
+
 	return &MultiFile{NumberOfHandles: numberOfHandles,
 		fileHandlesMan: fhm,
 		OverWrite:      overwrite}
@@ -83,189 +86,4 @@ func (t *MultiFile) WritePart(part *pipeline.Part) (duration time.Duration, star
 	duration = time.Now().Sub(startTime)
 
 	return
-}
-
-type fileHandleManager struct {
-	sync.Mutex
-	fileHandlesQMap     sync.Map
-	initTracker         sync.Map
-	cachedFileHandles   int
-	cacheEnabled        bool
-	overwriteEnabled    bool
-	numOfHandlesPerFile int
-}
-
-const maxFileHandlesInCache = 600
-
-func newFileHandlerManager(numOfHandlesPerFile int, cacheEnabled bool, overwriteEnabled bool) *fileHandleManager {
-	return &fileHandleManager{
-		numOfHandlesPerFile: numOfHandlesPerFile,
-		cacheEnabled:        cacheEnabled,
-		overwriteEnabled:    overwriteEnabled}
-}
-
-func (h *fileHandleManager) getHandle(path string) (*os.File, error) {
-	var fh *os.File
-	var err error
-	var isInit bool
-
-	h.Lock()
-	_, isInit = h.initTracker.Load(path)
-
-	if !isInit {
-		fh, err = h.initFile(path)
-	}
-	h.initTracker.Store(path, true)
-	h.Unlock()
-
-	if err != nil {
-		return nil, err
-	}
-
-
-
-	if !h.cacheEnabled {
-		//we don't have handle from the initialization, so open a new one.
-		if fh != nil {
-			if fh, err = os.OpenFile(path, os.O_WRONLY, os.ModeAppend); err != nil {
-				return nil, err
-			}
-		}
-		return fh, nil
-	}
-
-	//try to get it from the cache
-	var fhQ chan *os.File
-	var incache bool
-	var val interface{}
-
-	val, incache = h.fileHandlesQMap.Load(path)
-	if incache {
-		fhQ = val.(chan *os.File)
-		fh := <-fhQ
-		
-		return fh, nil
-	}
-
-	//if init, the handle from the creation is not available (e.i. fh == nil)
-	if isInit {
-		if fh, err = os.OpenFile(path, os.O_WRONLY, os.ModeAppend); err != nil {
-			return nil, err
-		}
-
-	}
-
-	h.Lock()
-	defer h.Unlock()
-	//ok not in the cache so we need to check if the cache is full
-	if h.cachedFileHandles+h.numOfHandlesPerFile > maxFileHandlesInCache {
-		return fh, nil
-	}
-
-	//add items to the cache
-	fhQ = make(chan *os.File, h.numOfHandlesPerFile)
-	h.cachedFileHandles = h.cachedFileHandles + 1
-	for i := 1; i < h.numOfHandlesPerFile; i++ {
-		var fhi *os.File
-
-		if fhi, err = os.OpenFile(path, os.O_WRONLY, os.ModeAppend); err != nil {
-			return nil, err
-		}
-		
-		fhQ <- fhi
-		h.cachedFileHandles = h.cachedFileHandles + 1
-	}
-
-	h.fileHandlesQMap.Store(path, fhQ)
-
-	return fh, nil
-
-}
-
-func (h *fileHandleManager) returnHandle(path string, fileHandle *os.File) error {
-
-	if !h.cacheEnabled {
-		if fileHandle != nil {
-			return fileHandle.Close()
-		}
-	}
-	var fhq chan *os.File
-	var val interface{}
-	var ok bool
-
-	val, ok = h.fileHandlesQMap.Load(path)
-
-	if ok {
-		fhq = val.(chan *os.File)
-		//fmt.Printf("return to dequeue %v\n", path)
-		fhq <- fileHandle
-		//fmt.Printf("after to dequeue %v\n", path)
-		h.fileHandlesQMap.Store(path, fhq)
-		return nil
-	}
-
-	//not found in the map, which is the case when the cache is at capacity
-	//fmt.Printf("close (not in the map) %v", path)
-	return fileHandle.Close()
-}
-
-func (h *fileHandleManager) closeCacheHandles(path string) error {
-
-	val, ok := h.fileHandlesQMap.Load(path)
-	if !ok {
-		return nil
-	}
-	fhq := val.(chan *os.File)
-	close(fhq)
-	c := 0
-	for {
-
-		fh, ok := <-fhq
-
-		if !ok {
-			break
-		}
-		err := fh.Close()
-		if err != nil {
-			return err
-		}
-		c++
-	}
-
-	h.cachedFileHandles = h.cachedFileHandles - c
-	h.fileHandlesQMap.Delete(path)
-
-	return nil
-}
-
-//creates the directory structure if one doesn't exists. Creates a file checking existance while honoring the overwrite flag.
-func (h *fileHandleManager) initFile(filePath string) (*os.File, error) {
-	var fh *os.File
-	var err error
-
-	path := filepath.Dir(filePath)
-
-	if path != "" {
-		err = os.MkdirAll(path, 0777)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if _, err = os.Stat(filePath); os.IsExist(err) || !h.overwriteEnabled {
-		return nil, fmt.Errorf("The file already exists and file overwrite is disabled")
-	}
-
-	if fh, err = os.Create(filePath); os.IsExist(err) {
-		if err = os.Remove(filePath); err != nil {
-			return nil, err
-		}
-
-		if fh, err = os.Create(filePath); err != nil {
-			return nil, err
-		}
-	}
-
-	return fh, nil
 }

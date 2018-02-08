@@ -88,13 +88,6 @@ func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize
 		return fmt.Errorf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
 	}
 
-	//clean uncommitted blocks for large files only (>1GB)
-	/*
-		if source.Size > util.GB {
-			return t.azutil.CleanUncommittedBlocks(source.TargetAlias)
-		}
-	*/
-
 	return nil
 }
 
@@ -126,7 +119,7 @@ func (t *AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo 
 func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	startTime = time.Now()
 	defer func() { duration = time.Now().Sub(startTime) }()
-	defer util.PrintfIfDebug("WritePart -> blockid:%v read:%v name:%v err:%v", part.BlockID, len(part.Data), part.TargetAlias, err)
+	util.PrintfIfDebug("WritePart -> blockid:%v read:%v name:%v err:%v", part.BlockID, len(part.Data), part.TargetAlias, err)
 	//computation of the MD5 happens is done by the readers.
 	var md5 []byte
 	if part.IsMD5Computed() {
@@ -140,6 +133,8 @@ func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, sta
 		return
 	}
 	reader := bytes.NewReader(part.Data)
+	util.PrintfIfDebug("WritePart -> blockid:%v reader:%v name:%v err:%v", part.BlockID, reader.Len(), part.TargetAlias, err)
+
 	err = t.azutil.PutBlock(t.container, part.TargetAlias, part.BlockID, reader)
 	return
 }
