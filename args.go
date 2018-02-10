@@ -65,7 +65,7 @@ type arguments struct {
 	quietMode                bool
 	calculateMD5             bool
 	exactNameMatch           bool
-	keepDirStructure         bool
+	removeDirStructure       bool
 	hTTPClientTimeout        int
 	numberOfHandlesPerFile   int //numberOfHandlesPerFile = defaultNumberOfHandlesPerFile
 	numberOfFilesInBatch     int //numberOfFilesInBatch = defaultNumberOfFilesInBatch
@@ -121,15 +121,15 @@ func newParamParserValidator() paramParserValidator {
 	var defaultNumberOfWorkers = runtime.NumCPU() * numOfWorkersFactor
 	var defaultNumberOfReaders = runtime.NumCPU() * numOfReadersFactor
 
-	if defaultNumberOfWorkers > 50 {
-		defaultNumberOfWorkers = 50
+	if defaultNumberOfWorkers > 60 {
+		defaultNumberOfWorkers = 60
 	}
-	if defaultNumberOfReaders > 80 {
-		defaultNumberOfReaders = 80
+	if defaultNumberOfReaders > 50 {
+		defaultNumberOfReaders = 50
 	}
 
 	args := &arguments{
-		keepDirStructure: 		true,
+		removeDirStructure:     false,
 		numberOfReaders:        defaultNumberOfReaders,
 		numberOfWorkers:        defaultNumberOfWorkers,
 		blockSizeStr:           defaultBlockSizeStr,
@@ -192,7 +192,8 @@ func (p *paramParserValidator) getTargetRules() ([]parseAndValidationRule, error
 	switch p.targetSegment {
 	case transfer.File:
 		return []parseAndValidationRule{
-			p.pvNumOfHandlesPerFile}, nil
+			p.pvNumOfHandlesPerFile,
+			p.pvKeepDirStructueIsFalseWarning}, nil
 	case transfer.PageBlob:
 		return []parseAndValidationRule{
 			p.pvTargetContainerIsReq,
@@ -249,7 +250,7 @@ func (p *paramParserValidator) getSourceRules() ([]parseAndValidationRule, error
 
 //Global rules....
 func (p *paramParserValidator) pvgKeepDirectoryStructure() error {
-	p.params.keepDirStructure = p.args.keepDirStructure
+	p.params.keepDirStructure = !p.args.removeDirStructure
 	return nil
 }
 func (p *paramParserValidator) pvgQuietMode() error {
@@ -541,6 +542,14 @@ func (p *paramParserValidator) pvTargetBlobAuthInfoIsReq() error {
 			return errors.New("storage account key not specified or found in environment variable " + storageAccountKeyEnvVar)
 		}
 	}
+	return nil
+}
+
+func (p *paramParserValidator) pvKeepDirStructueIsFalseWarning() error {
+	if !p.params.keepDirStructure && !p.params.quietMode {
+		fmt.Printf("Warning!\nThe directory structure from the source won't be created.\nFiles with the same file name will be overwritten.\n")
+	}
+
 	return nil
 }
 

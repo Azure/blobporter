@@ -9,14 +9,13 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
-	"time"
 
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
 )
 
-const programVersion = "0.6.03"
+const programVersion = "0.6.05"
 
 var argsUtil paramParserValidator
 
@@ -46,7 +45,7 @@ func init() {
 		dupcheckLevelMsg           = "Desired level of effort to detect duplicate data to minimize upload size.\n\tMust be one of " + transfer.DupeCheckLevelStr
 		transferDefMsg             = "Defines the type of source and target in the transfer.\n\tMust be one of:\n\tfile-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file,\n\tpageblock-file (alias of blob-file), blockblob-file (alias of blob-file)\n\tor http-file."
 		exactNameMatchMsg          = "If set or true only blobs that match the name exactly will be downloaded."
-		keepDirStructureMsg        = "Keeps the directory structure from the source.\n\tNot applicable when the source is a HTTP endpoint."
+		removeDirStructureMsg      = "If set the directory structure from the source won't be kept.\n\tNot applicable when the source is a HTTP endpoint."
 		numberOfHandlersPerFileMsg = "Number of open handles for concurrent reads and writes per file."
 		numberOfFilesInBatchMsg    = "Maximum number of files in a transfer.\n\tIf the number is exceeded new transfers are created"
 	)
@@ -67,7 +66,7 @@ func init() {
 		util.PrintUsageDefaults("d", "dup_check_level", argsUtil.args.dedupeLevelOptStr, dupcheckLevelMsg)
 		util.PrintUsageDefaults("t", "transfer_definition", argsUtil.args.transferDefStr, transferDefMsg)
 		util.PrintUsageDefaults("e", "exact_name", "false", exactNameMatchMsg)
-		util.PrintUsageDefaults("p", "keep_directories", "true", keepDirStructureMsg)
+		util.PrintUsageDefaults("i", "remove_directories", "false", removeDirStructureMsg)
 		util.PrintUsageDefaults("h", "handles_per_file", strconv.Itoa(argsUtil.args.numberOfHandlesPerFile), numberOfHandlersPerFileMsg)
 		util.PrintUsageDefaults("x", "files_per_transfer", strconv.Itoa(argsUtil.args.numberOfFilesInBatch), numberOfFilesInBatchMsg)
 
@@ -88,7 +87,7 @@ func init() {
 	util.StringVarAlias(&argsUtil.args.dedupeLevelOptStr, "d", "dup_check_level", argsUtil.args.dedupeLevelOptStr, dupcheckLevelMsg)
 	util.StringVarAlias(&argsUtil.args.transferDefStr, "t", "transfer_definition", argsUtil.args.transferDefStr, transferDefMsg)
 	util.BoolVarAlias(&argsUtil.args.exactNameMatch, "e", "exact_name", false, exactNameMatchMsg)
-	util.BoolVarAlias(&argsUtil.args.keepDirStructure, "p", "keep_directories", true, keepDirStructureMsg)
+	util.BoolVarAlias(&argsUtil.args.removeDirStructure, "i", "remove_directories", false, removeDirStructureMsg)
 	util.IntVarAlias(&argsUtil.args.numberOfHandlesPerFile, "h", "handles_per_file", defaultNumberOfHandlesPerFile, numberOfHandlersPerFileMsg)
 	util.IntVarAlias(&argsUtil.args.numberOfFilesInBatch, "x", "files_per_transfer", defaultNumberOfFilesInBatch, numberOfFilesInBatchMsg)
 }
@@ -98,7 +97,7 @@ var targetRetries int32
 
 func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int, batchNumber int) {
 	if numOfBatches == 1 {
-		fmt.Printf("Files to Transfer (%v) :\n ", argsUtil.params.transferType)
+		fmt.Printf("Files to Transfer (%v) :\n", argsUtil.params.transferType)
 		var totalSize uint64
 		summary := ""
 
@@ -112,7 +111,7 @@ func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int,
 			totalSize = totalSize + source.Size
 		}
 
-		if len(sourcesInfo) < 50 {
+		if len(sourcesInfo) < 20 {
 			fmt.Printf(summary)
 			return
 		}
@@ -123,18 +122,6 @@ func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int,
 	}
 
 	fmt.Printf("\nBatch transfer (%v).\nFiles per Batch: %v.\nBatch: %v of %v\n ", argsUtil.params.transferType, len(sourcesInfo), batchNumber+1, numOfBatches)
-}
-
-func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, threadTarget int, totalNumberOfBlocks int, totalSize uint64, cumWriteDuration time.Duration) {
-	var netMB float64 = 1000000
-	fmt.Printf("\nThe transfer took %v to run.\n", duration)
-	MBs := float64(totalSize) / netMB / duration.Seconds()
-	fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
-	fmt.Printf("Configuration: R=%d, W=%d, DataSize=%s, Blocks=%d\n",
-		argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, util.PrintSize(totalSize), totalNumberOfBlocks)
-	fmt.Printf("Cumulative Writes Duration: Total=%v, Avg Per Worker=%v\n",
-		cumWriteDuration, time.Duration(cumWriteDuration.Nanoseconds()/int64(argsUtil.params.numberOfWorkers)))
-	fmt.Printf("Retries: Avg=%v Total=%v\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
 }
 
 func main() {

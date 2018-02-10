@@ -4,13 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"net/http"
@@ -247,7 +245,10 @@ func isValidContainerName(name string) bool {
 }
 
 var storageHTTPClient *http.Client
+//HTTPClientTimeout HTTP timeout of the HTTP client used by the storage client.
+var HTTPClientTimeout = 60
 
+/*
 const (
 	maxIdleConns        = 50
 	maxIdleConnsPerHost = 50
@@ -255,9 +256,6 @@ const (
 
 var c *http.Client
 var mtx sync.Mutex
-
-//HTTPClientTimeout HTTP timeout of the HTTP client used by the storage client.
-var HTTPClientTimeout = 60
 
 //NewHTTPClient  creates a shared HTTP client with the configured timeout and MaxIdleConnsPerHost = 50, keep alive dialer.
 func NewHTTPClient() *http.Client {
@@ -277,6 +275,7 @@ func NewHTTPClient() *http.Client {
 	}
 	return c
 }
+*/
 
 func handleExceededRetries(err error) {
 	errMsg := fmt.Sprintf("The number of retries has exceeded the maximum allowed.\nError: %v\nSuggestion:%v\n", err.Error(), getSuggestion(err))

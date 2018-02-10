@@ -385,6 +385,7 @@ func (t *Transfer) preprocessSources() {
 	sourcesInfo := (*t.SourcePipeline).GetSourcesInfo()
 	var wg sync.WaitGroup
 	wg.Add(len(sourcesInfo))
+
 	for i := 0; i < len(sourcesInfo); i++ {
 		go func(s *pipeline.SourceInfo, b uint64) {
 			defer wg.Done()
