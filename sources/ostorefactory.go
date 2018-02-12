@@ -7,16 +7,16 @@ import (
 	"github.com/Azure/blobporter/pipeline"
 )
 
-//AzureBlob constructs parts channel and implements data readers for Azure Blobs exposed via HTTP
-type AzureBlob struct {
-	HTTPPipeline
-	Container      string
-	BlobNames      []string
+//AzureBlobSource constructs parts channel and implements data readers for Azure Blobs exposed via HTTP
+type AzureBlobSource struct {
+	HTTPSource
+	container      string
+	blobNames      []string
 	exactNameMatch bool
 }
 
-//NewAzureBlob creates a new instance of the HTTPPipeline for Azure Blobs
-func NewAzureBlob(params *AzureBlobParams) []pipeline.SourcePipeline {
+//NewAzureBlobSourcePipeline creates a new instance of the HTTPPipeline for Azure Blobs
+func NewAzureBlobSourcePipeline(params *AzureBlobParams) []pipeline.SourcePipeline {
 	var err error
 	var azObjStorage objectListManager
 	azObjStorage = newazBlobInfoProvider(params)
@@ -25,10 +25,10 @@ func NewAzureBlob(params *AzureBlobParams) []pipeline.SourcePipeline {
 		log.Fatal(fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero"))
 	}
 
-	factory := func(httpSource HTTPPipeline) (pipeline.SourcePipeline, error) {
-		return &AzureBlob{Container: params.Container,
-			BlobNames:      params.BlobNames,
-			HTTPPipeline:   httpSource,
+	factory := func(httpSource HTTPSource) (pipeline.SourcePipeline, error) {
+		return &AzureBlobSource{container: params.Container,
+			blobNames:      params.BlobNames,
+			HTTPSource:     httpSource,
 			exactNameMatch: params.SourceParams.UseExactNameMatch}, nil
 	}
 
@@ -40,14 +40,14 @@ func NewAzureBlob(params *AzureBlobParams) []pipeline.SourcePipeline {
 	return pipelines
 }
 
-//S3Pipeline S3 source HTTP based pipeline
-type S3Pipeline struct {
-	HTTPPipeline
+//S3Source S3 source HTTP based pipeline
+type S3Source struct {
+	HTTPSource
 	exactNameMatch bool
 }
 
-//NewS3Pipeline creates a new instance of the HTTPPipeline for S3
-func NewS3Pipeline(params *S3Params) []pipeline.SourcePipeline {
+//NewS3SourcePipeline creates a new instance of the HTTPPipeline for S3
+func NewS3SourcePipeline(params *S3Params) []pipeline.SourcePipeline {
 	var err error
 	var s3ObjStorage objectListManager
 	s3ObjStorage, err = newS3InfoProvider(params)
@@ -60,9 +60,9 @@ func NewS3Pipeline(params *S3Params) []pipeline.SourcePipeline {
 		log.Fatal(fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero"))
 	}
 
-	factory := func(httpSource HTTPPipeline) (pipeline.SourcePipeline, error) {
-		return &S3Pipeline{
-			HTTPPipeline:   httpSource,
+	factory := func(httpSource HTTPSource) (pipeline.SourcePipeline, error) {
+		return &S3Source{
+			HTTPSource:     httpSource,
 			exactNameMatch: params.SourceParams.UseExactNameMatch}, nil
 	}
 

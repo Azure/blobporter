@@ -97,7 +97,8 @@ type Part struct {
 	BlockID                 string
 	DuplicateOfBlockOrdinal int    // -1 if not a duplicate of another, already read, block.
 	Ordinal                 int    // sequentially assigned at creation time to enable chunk ordering (0,1,2)
-	md5Value                string // internal copy of computed MD5, initially empty string
+	md5ValueStr             string // internal copy of computed MD5, initially empty string
+	md5Value                []byte // internal copy of computed MD5, initially empty string
 	SourceURI               string
 	TargetAlias             string
 	NumberOfBlocks          int
@@ -150,9 +151,7 @@ func createPartsInPartition(partitionSize int64, partitionOffSet int64, ordinalS
 
 //ConstructPartsPartition creates a slice of PartsPartition with a len of numberOfPartitions.
 func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) []PartsPartition {
-	//bsib := uint64(blockSize)
 	numOfBlocks := int((size + blockSize - 1) / blockSize)
-
 	Partitions := make([]PartsPartition, numberOfPartitions)
 	//the size of the partition needs to be a multiple (blockSize * int) to make sure all but the last part/block
 	//are the same size
@@ -164,17 +163,27 @@ func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64
 	var partOrdinal int
 	for p := 0; p < numberOfPartitions; p++ {
 		poffSet := int64(int64(p) * partitionSize)
+
 		if p == numberOfPartitions-1 {
 			partitionSize = int64(bytesLeft)
 		}
-		partition := PartsPartition{TotalNumOfParts: int64(numOfBlocks), TotalSize: size, Offset: poffSet, PartitionSize: partitionSize}
-		parts, partOrdinal, numOfPartsInPartition = createPartsInPartition(partitionSize, poffSet, partOrdinal, numOfBlocks, blockSize, sourceURI, targetAlias, bufferQ)
+
+		partition := PartsPartition{TotalNumOfParts: int64(numOfBlocks),
+			TotalSize:     size,
+			Offset:        poffSet,
+			PartitionSize: partitionSize}
+
+		parts, partOrdinal, numOfPartsInPartition = createPartsInPartition(partitionSize,
+			poffSet,
+			partOrdinal,
+			numOfBlocks,
+			blockSize,
+			sourceURI, targetAlias, bufferQ)
 
 		partition.Parts = parts
 		partition.NumOfParts = numOfPartsInPartition
 		Partitions[p] = partition
-
-		bytesLeft = bytesLeft - int64(partitionSize)
+	  	bytesLeft = bytesLeft - int64(partitionSize)
 	}
 
 	return Partitions
@@ -274,18 +283,25 @@ func (p *Part) ReturnBuffer() {
 
 //IsMD5Computed true if the MD5 value was computed
 func (p *Part) IsMD5Computed() bool {
-	return p.md5Value != ""
+	return p.md5ValueStr != ""
 }
 
 // MD5  returns computed MD5 for this block or empty string if no data yet.
 func (p *Part) MD5() string {
 	// haven't yet computed the MD5, and have data to do so
-	if p.md5Value == "" && p.Data != nil {
+	if p.md5ValueStr == "" && p.Data != nil {
 		h := md5.New()
 
 		h.Write(p.Data)
-		p.md5Value = base64.StdEncoding.EncodeToString(h.Sum(nil))
+		p.md5Value = h.Sum(nil)
+		p.md5ValueStr = base64.StdEncoding.EncodeToString(p.md5Value)
 	}
+	return p.md5ValueStr
+}
+
+//MD5Bytes TODO
+func (p *Part) MD5Bytes() []byte {
+	p.MD5()
 	return p.md5Value
 }
 
@@ -296,14 +312,14 @@ func (p *Part) LookupMD5DupeOrdinal() (ordinal int) {
 		return -1
 	}
 
-	var md5Value = p.MD5()
+	var md5ValueStr = p.MD5()
 	var dupOfBlock = -1
 
 	MD5ToBlockIDLock.Lock()
-	alias, keyExists := MD5ToBlockID[md5Value]
+	alias, keyExists := MD5ToBlockID[md5ValueStr]
 
 	if !keyExists { //TODO: small quirk, since default integer is 0, might miss dup where first two blocks are the same
-		MD5ToBlockID[md5Value] = p.Ordinal // haven't seen this hash before, so remember this block ordinal
+		MD5ToBlockID[md5ValueStr] = p.Ordinal // haven't seen this hash before, so remember this block ordinal
 		dupOfBlock = -1
 	} else {
 		dupOfBlock = alias

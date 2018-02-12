@@ -3,9 +3,11 @@ package sources
 import (
 	"io/ioutil"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"fmt"
 	"net/http"
@@ -20,14 +22,14 @@ import (
 
 const sasTokenNumberOfHours = 4
 
-// HTTPPipeline  constructs parts  channel and implements data readers for file exposed via HTTP
-type HTTPPipeline struct {
+// HTTPSource  constructs parts  channel and implements data readers for file exposed via HTTP
+type HTTPSource struct {
 	Sources    []pipeline.SourceInfo
 	HTTPClient *http.Client
 	includeMD5 bool
 }
 
-type sourceHTTPPipelineFactory func(httpSource HTTPPipeline) (pipeline.SourcePipeline, error)
+type sourceHTTPPipelineFactory func(httpSource HTTPSource) (pipeline.SourcePipeline, error)
 
 func newHTTPSource(sourceListManager objectListManager, pipelineFactory sourceHTTPPipelineFactory, numOfFilePerPipeline int, includeMD5 bool) ([]pipeline.SourcePipeline, error) {
 	var err error
@@ -55,7 +57,7 @@ func newHTTPSource(sourceListManager objectListManager, pipelineFactory sourceHT
 			numOfFilesInBatch = filesSent
 		}
 
-		httpSource := HTTPPipeline{Sources: sourceInfos[start : start+numOfFilesInBatch], HTTPClient: util.NewHTTPClient(), includeMD5: includeMD5}
+		httpSource := HTTPSource{Sources: sourceInfos[start : start+numOfFilesInBatch], HTTPClient: httpSourceHTTPClient, includeMD5: includeMD5}
 
 		pipelines[b], err = pipelineFactory(httpSource)
 
@@ -69,9 +71,9 @@ func newHTTPSource(sourceListManager objectListManager, pipelineFactory sourceHT
 	return pipelines, err
 }
 
-//NewHTTP creates a new instance of an HTTP source
+//NewHTTPSourcePipeline creates a new instance of an HTTP source
 //To get the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
-func NewHTTP(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
+func NewHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
 	setTargetAlias := len(sourceURIs) == len(targetAliases)
 	sources := make([]pipeline.SourceInfo, len(sourceURIs))
 	for i := 0; i < len(sourceURIs); i++ {
@@ -92,7 +94,7 @@ func NewHTTP(sourceURIs []string, targetAliases []string, md5 bool) pipeline.Sou
 			TargetAlias: targetAlias,
 			SourceName:  sourceURIs[i]}
 	}
-	return &HTTPPipeline{Sources: sources, HTTPClient: util.NewHTTPClient(), includeMD5: md5}
+	return &HTTPSource{Sources: sources, HTTPClient: httpSourceHTTPClient, includeMD5: md5}
 }
 
 func getSourceSize(sourceURI string) (size int) {
@@ -106,7 +108,7 @@ func getSourceSize(sourceURI string) (size int) {
 		}
 		err = fmt.Errorf("HEAD request failed. Please check the URL.%s Error: %v", statusCode, err)
 
-		util.PrintfIfDebug("getSourceSize -> %v", err)
+		util.PrintfIfDebug("getSourceSize ->  err:%v", err)
 
 		size = getSourceSizeFromByteRangeHeader(sourceURI)
 		return
@@ -161,14 +163,14 @@ func getSourceSizeFromByteRangeHeader(sourceURI string) (size int) {
 
 //GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
 //Returns an array of pipeline.SourceInfo[] with the files URL, alias and size.
-func (f *HTTPPipeline) GetSourcesInfo() []pipeline.SourceInfo {
+func (f *HTTPSource) GetSourcesInfo() []pipeline.SourceInfo {
 	return f.Sources
 }
 
 //ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
 //For each part the reader makes a byte range request to the source
 // starting from the part's Offset to BytesToRead - 1 (zero based).
-func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
+func (f *HTTPSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	var blocksHandled = 0
 	var err error
 	var req *http.Request
@@ -207,9 +209,8 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 				if res != nil && res.Body != nil {
 					res.Body.Close()
 				}
-				f.HTTPClient = util.NewHTTPClient()
 
-				util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, status, err, header)
+				util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v err:%v head:%v", p.BlockID, p.BytesToRead, status, err, header)
 
 				return err
 			}
@@ -225,7 +226,7 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 				p.MD5()
 			}
 
-			util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
+			util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v read:%v head:%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 
 			return nil
 		})
@@ -238,7 +239,7 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 
 //ConstructBlockInfoQueue implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
 //Constructs the Part's channel arithmetically from the size of the sources.
-func (f *HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
+func (f *HTTPSource) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
 	allParts := make([][]pipeline.Part, len(f.Sources))
 	//disable memory buffer for parts (bufferQ == nil)
 	var bufferQ chan []byte
@@ -266,4 +267,30 @@ func (f *HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ ch
 	close(partsQ)
 
 	return
+}
+
+const (
+	maxIdleConns        = 50
+	maxIdleConnsPerHost = 50
+)
+
+var httpSourceHTTPClient = newSourceHTTPClient()
+
+func newSourceHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: time.Duration(util.HTTPClientTimeout) * time.Second,
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout:   30 * time.Second, // dial timeout
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).Dial,
+			MaxIdleConns:           maxIdleConns,
+			MaxIdleConnsPerHost:    maxIdleConnsPerHost,
+			IdleConnTimeout:        90 * time.Second,
+			TLSHandshakeTimeout:    30 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     false,
+			MaxResponseHeaderBytes: 0}}
 }

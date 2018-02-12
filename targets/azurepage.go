@@ -1,10 +1,11 @@
 package targets
 
 import (
+	"bytes"
 	"fmt"
+	"log"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -13,19 +14,30 @@ import (
 ///// AzurePage Target
 ////////////////////////////////////////////////////////////
 
-//AzurePage represents an Azure Block target
-type AzurePage struct {
-	Creds         *pipeline.StorageAccountCredentials
-	Container     string
-	StorageClient *storage.BlobStorageClient
+//AzurePageTarget represents an Azure Block target
+type AzurePageTarget struct {
+	azUtil *util.AzUtil
 }
 
-//NewAzurePage creates a new Azure Block target
-func NewAzurePage(accountName string, accountKey string, container string) pipeline.TargetPipeline {
-	util.CreateContainerIfNotExists(container, accountName, accountKey)
-	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
-	client := util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)
-	return &AzurePage{Creds: &creds, Container: container, StorageClient: &client}
+//NewAzurePageTargetPipeline creates a new Azure Block target
+func NewAzurePageTargetPipeline(params AzureTargetParams) pipeline.TargetPipeline {
+	az, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var notfound bool
+	notfound, err = az.CreateContainerIfNotExists()
+
+	if notfound {
+		fmt.Printf("Info! Container was not found, creating it...\n")
+	}
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &AzurePageTarget{azUtil: az}
 }
 
 //Page blobs limits and units
@@ -37,14 +49,14 @@ const maxPageBlobSize uint64 = 8 * util.TB
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //initializes the page blob.
-func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
-	size := int64(source.Size)
+func (t *AzurePageTarget) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
+	size := source.Size
 
-	if size%int64(PageSize) != 0 {
+	if size%PageSize != 0 {
 		return fmt.Errorf(" invalid size for a page blob. The size of the file %v (%v) is not a multiple of %v ", source.SourceName, source.Size, PageSize)
 	}
 
-	if size > int64(maxPageBlobSize) {
+	if size > maxPageBlobSize {
 		return fmt.Errorf(" the file %v is too big (%v). Tha maximum size of a page blob is %v ", source.SourceName, source.Size, maxPageBlobSize)
 	}
 
@@ -52,25 +64,13 @@ func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize 
 		return fmt.Errorf(" invalid block size for page blob: %v. The value must be greater than %v and less than %v", PageSize, maxPageSize)
 	}
 
-	//if the max retries is exceeded, panic will happen, hence no error is returned.
-	headers := make(map[string]string)
-	userAgent, _ := util.GetUserAgentInfo()
-	headers["User-Agent"] = userAgent
-	util.RetriableOperation(func(r int) error {
-		if err := (*t.StorageClient).PutPageBlob(t.Container, (*source).TargetAlias, size, headers); err != nil {
-			t.resetClient()
-			return err
-		}
-		return nil
-	})
-
-	return nil
+	err = t.azUtil.CreatePageBlob(source.TargetAlias, size)
+	return
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //Passthrough no need to a commit for page blob.
-func (t *AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, NumberOfBlocks int, targetName string) (msg string, err error) {
-
+func (t *AzurePageTarget) CommitList(listInfo *pipeline.TargetCommittedListInfo, NumberOfBlocks int, targetName string) (msg string, err error) {
 	msg = "Page blob committed"
 	err = nil
 	return
@@ -78,7 +78,7 @@ func (t *AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, Numbe
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Passthrough no need to process a written part when transferring to a page blob.
-func (t *AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
+func (t *AzurePageTarget) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	err = nil
 	return
@@ -87,35 +87,12 @@ func (t *AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 //WritePart implements WritePart from the pipeline.TargetPipeline interface.
 //Performs a PUT page operation with the data contained in the part.
 //This assumes the part.BytesToRead is a multiple of the PageSize
-func (t *AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+func (t *AzurePageTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+	start := int32(part.Offset)
+	end := int32(part.Offset + uint64(part.BytesToRead) - 1)
+	defer util.PrintfIfDebug("WritePart -> start:%v end:%v name:%v err:%v", start, end, part.TargetAlias, err)
 
-	offset := int64(part.Offset)
-	endByte := int64(part.Offset + uint64(part.BytesToRead) - 1)
-	headers := make(map[string]string)
-	//if the max retries is exceeded, panic will happen, hence no error is returned.
-	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
-		//computation of the MD5 happens is done by the readers.
-		if part.IsMD5Computed() {
-			headers["Content-MD5"] = part.MD5()
-		}
-		userAgent, _ := util.GetUserAgentInfo()
-		headers["User-Agent"] = userAgent
-
-		if err := (*t.StorageClient).PutPage(t.Container, part.TargetAlias, offset, endByte, "update", part.Data, headers); err != nil {
-			util.PrintfIfDebug("WritePart -> |%v|%v|%v|%v", part.Offset, len(part.Data), part.TargetAlias, err)
-			t.resetClient()
-			return err
-		}
-
-		util.PrintfIfDebug("WritePart -> |%v|%v|%v", part.Offset, len(part.Data), part.TargetAlias)
-
-		return nil
-	})
+	err = t.azUtil.PutPages(part.TargetAlias, start, end, bytes.NewReader(part.Data))
 
 	return
-}
-
-func (t *AzurePage) resetClient() {
-	client := util.GetBlobStorageClientWithNewHTTPClient(t.Creds.AccountName, t.Creds.AccountKey)
-	t.StorageClient = &client
 }

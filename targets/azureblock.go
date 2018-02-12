@@ -3,9 +3,9 @@ package targets
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -14,27 +14,39 @@ import (
 ///// AzureBlock Target
 ////////////////////////////////////////////////////////////
 
-//AzureBlock represents an Azure Block target
-type AzureBlock struct {
-	Creds         *pipeline.StorageAccountCredentials
-	Container     string
-	StorageClient storage.BlobStorageClient
+//AzureBlockTarget represents an Azure Block target
+type AzureBlockTarget struct {
+	container string
+	azutil    *util.AzUtil
 }
 
-//NewAzureBlock creates a new Azure Block target
-func NewAzureBlock(accountName string, accountKey string, container string) pipeline.TargetPipeline {
+//NewAzureBlockTargetPipeline TODO
+func NewAzureBlockTargetPipeline(params AzureTargetParams) pipeline.TargetPipeline {
 
-	util.CreateContainerIfNotExists(container, accountName, accountKey)
+	azutil, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
 
-	creds := pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}
-	bc := util.GetBlobStorageClient(creds.AccountName, creds.AccountKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var notfound bool
 
-	return &AzureBlock{Creds: &creds, Container: container, StorageClient: bc}
+	notfound, err = azutil.CreateContainerIfNotExists()
+
+	if notfound {
+		fmt.Printf("Info! Container was not found, creating it...\n")
+	}
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &AzureBlockTarget{azutil: azutil, container: params.Container}
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //Commits the list of blocks to Azure Storage to finalize the transfer.
-func (t *AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
+func (t *AzureBlockTarget) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
+	startTime := time.Now()
 
 	//Only commit if the number blocks is greater than one.
 	if numberOfBlocks == 1 {
@@ -45,38 +57,30 @@ func (t *AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numb
 	}
 
 	lInfo := (*listInfo)
-
-	blockList := convertToStorageBlockList(lInfo.List, numberOfBlocks)
-
+	blockList := convertToBase64EncodedList(lInfo.List, numberOfBlocks)
+	defer func() {
+		duration := time.Now().Sub(startTime)
+		msg = fmt.Sprintf("\rFile:%v, Blocks Committed: %d, Commit time = %v",
+			targetName, len(blockList), duration)
+	}()
 	util.PrintfIfDebug("Blocklist -> blob: %s\n list:%+v", targetName, blockList)
 
-	//if the max retries is exceeded, panic will happen, hence no error is returned.
-	duration, _, _ := util.RetriableOperation(func(r int) error {
-		if err := t.StorageClient.PutBlockList(t.Container, targetName, blockList); err != nil {
-			t.resetClient()
-			return fmt.Errorf(" PUT Blocklist Failed: err:%s file:%s\n list:%+v\n --", err, targetName, blockList)
-		}
-		return nil
-	})
-
-	msg = fmt.Sprintf("\rFile:%v, Blocks Committed: %d, Commit time = %v",
-		targetName, len(blockList), duration)
-	err = nil
+	err = t.azutil.PutBlockList(targetName, blockList)
 	return
 }
 
-func convertToStorageBlockList(list interface{}, numOfBlocks int) []storage.Block {
+func convertToBase64EncodedList(list interface{}, numOfBlocks int) []string {
 
 	if list == nil {
-		return make([]storage.Block, numOfBlocks)
+		return make([]string, numOfBlocks)
 	}
 
-	return list.([]storage.Block)
+	return list.([]string)
 }
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //Checks if uncommitted blocks are present and cleans them by creating an empty blob.
-func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
+func (t *AzureBlockTarget) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
 	numOfBlocks := int(source.Size+(blockSize-1)) / int(blockSize)
 
 	if numOfBlocks > util.MaxBlockCount { // more than 50,000 blocks needed, so can't work
@@ -84,26 +88,25 @@ func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize
 		return fmt.Errorf("Block size is too small, minimum block size for this file would be %d bytes", minBlkSize)
 	}
 
-	return util.CleanUncommittedBlocks(&t.StorageClient, t.Container, source.TargetAlias)
+	return nil
 }
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Appends the written part to a list. If the part is duplicated the list is updated with a reference, to the first occurrence of the block.
 //If the first occurrence has not yet being processed, the part is requested to be placed back in the results channel (requeue == true).
-func (t *AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
+func (t *AzureBlockTarget) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
-	blockList := convertToStorageBlockList((*listInfo).List, result.NumberOfBlocks)
+	blockList := convertToBase64EncodedList((*listInfo).List, result.NumberOfBlocks)
 
 	if result.DuplicateOfBlockOrdinal >= 0 { // this block is a duplicate of another.
-		if blockList[result.DuplicateOfBlockOrdinal].ID != "" {
+		if blockList[result.DuplicateOfBlockOrdinal] != "" {
 			blockList[result.Ordinal] = blockList[result.DuplicateOfBlockOrdinal]
 		} else { // we haven't yet see the block of which this is a dup, so requeue this one
 			requeue = true
 		}
 	} else {
 
-		blockList[result.Ordinal].ID = result.ItemID
-		blockList[result.Ordinal].Status = "Uncommitted"
+		blockList[result.Ordinal] = result.ItemID
 	}
 
 	(*listInfo).List = blockList
@@ -113,49 +116,25 @@ func (t *AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo 
 
 //WritePart implements WritePart from the pipeline.TargetPipeline interface.
 //Performs a PUT block operation with the data contained in the part.
-func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
-
-	headers := make(map[string]string)
-	userAgent, _ := util.GetUserAgentInfo()
-	headers["User-Agent"] = userAgent
-
-	//if the max retries is exceeded, panic will happen, hence no error is returned.
-	duration, startTime, numOfRetries = util.RetriableOperation(func(r int) error {
-		//computation of the MD5 happens is done by the readers.
-		if part.IsMD5Computed() {
-			headers["Content-MD5"] = part.MD5()
+func (t *AzureBlockTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+	startTime = time.Now()
+	defer func() { duration = time.Now().Sub(startTime) }()
+	util.PrintfIfDebug("WritePart -> blockid:%v read:%v name:%v err:%v", part.BlockID, len(part.Data), part.TargetAlias, err)
+	//computation of the MD5 happens is done by the readers.
+	var md5 []byte
+	if part.IsMD5Computed() {
+		md5 = part.MD5Bytes()
+	}
+	if part.NumberOfBlocks == 1 {
+		if err = t.azutil.PutBlockBlob(part.TargetAlias,
+			bytes.NewReader(part.Data), md5); err != nil {
 		}
 
-		if part.NumberOfBlocks == 1 {
-			if err := t.StorageClient.CreateBlockBlobFromReader(t.Container,
-				part.TargetAlias,
-				uint64(len(part.Data)),
-				bytes.NewReader(part.Data),
-				headers); err != nil {
-				util.PrintfIfDebug("Error|S|%v|%v|%v|%v", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
-				t.resetClient()
-				return err
-			}
-			return nil
-		}
+		return
+	}
+	reader := bytes.NewReader(part.Data)
+	util.PrintfIfDebug("WritePart -> blockid:%v reader:%v name:%v err:%v", part.BlockID, reader.Len(), part.TargetAlias, err)
 
-		if err := t.StorageClient.PutBlockWithLength(t.Container,
-			part.TargetAlias,
-			part.BlockID,
-			uint64(len(part.Data)),
-			part.NewBuffer(),
-			headers); err != nil {
-			util.PrintfIfDebug("Error|S|%v|%v|%v|%v", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
-			t.resetClient()
-			return err
-		}
-
-		util.PrintfIfDebug("OK|S|%v|%v|%v|%v", (*part).BlockID, len((*part).Data), (*part).TargetAlias, err)
-		return nil
-	})
+	err = t.azutil.PutBlock(t.container, part.TargetAlias, part.BlockID, reader)
 	return
-}
-
-func (t *AzureBlock) resetClient() {
-	t.StorageClient = util.GetBlobStorageClientWithNewHTTPClient(t.Creds.AccountName, t.Creds.AccountKey)
 }

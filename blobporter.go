@@ -7,77 +7,27 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"runtime"
 	"strconv"
 	"sync/atomic"
-	"time"
 
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
 )
 
-var containerName string
-var blobNames util.ListFlag
-var sourceURIs util.ListFlag
-var numberOfWorkers int
+const programVersion = "0.6.06"
 
-var blockSize uint64
-var blockSizeStr string
-
-var numberOfReaders int
-var dedupeLevel = transfer.None
-var dedupeLevelOptStr = dedupeLevel.ToString()
-var transferDef transfer.Definition
-var transferDefStr string
-var defaultTransferDef = transfer.FileToBlock
-var storageAccountName string
-var storageAccountKey string
-var storageClientHTTPTimeout int
-
-var sourceParameters map[string]string
-var sourceAuthorization string
-
-var quietMode bool
-var calculateMD5 bool
-var exactNameMatch bool
-var keepDirStructure bool
-var numberOfHandlesPerFile = defaultNumberOfHandlesPerFile
-var numberOfFilesInBatch = defaultNumberOfFilesInBatch
-
-const (
-	// User can use environment variables to specify storage account information
-	storageAccountNameEnvVar  = "ACCOUNT_NAME"
-	storageAccountKeyEnvVar   = "ACCOUNT_KEY"
-	sourceAuthorizationEnvVar = "SRC_ACCOUNT_KEY"
-	//S3 creds information
-	s3AccessKeyEnvVar = "S3_ACCESS_KEY"
-	s3SecretKeyEnvVar = "S3_SECRET_KEY"
-
-	programVersion = "0.5.25" // version number to show in help
-)
-
-const numOfWorkersFactor = 8
-const numOfReadersFactor = 5
-const defaultNumberOfFilesInBatch = 500
-const defaultNumberOfHandlesPerFile = 2
+var argsUtil paramParserValidator
 
 func init() {
 
 	//Show blobporter banner
 	fmt.Printf("BlobPorter \nCopyright (c) Microsoft Corporation. \nVersion: %v\n---------------\n", programVersion)
 
-	// shape the default parallelism based on number of CPUs
-	var defaultNumberOfWorkers = runtime.NumCPU() * numOfWorkersFactor
-	var defaultNumberOfReaders = runtime.NumCPU() * numOfReadersFactor
+	argsUtil = newParamParserValidator()
 
 	// set user agent info
 	util.SetUserAgentInfo(programVersion)
-
-	blockSizeStr = "8MB" // default size for blob blocks
-	const (
-		dblockSize = 8 * util.MB
-	)
 
 	const (
 		fileMsg                    = "Source URL, file or files (e.g. /data/*.gz) to upload."
@@ -95,7 +45,7 @@ func init() {
 		dupcheckLevelMsg           = "Desired level of effort to detect duplicate data to minimize upload size.\n\tMust be one of " + transfer.DupeCheckLevelStr
 		transferDefMsg             = "Defines the type of source and target in the transfer.\n\tMust be one of:\n\tfile-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file,\n\tpageblock-file (alias of blob-file), blockblob-file (alias of blob-file)\n\tor http-file."
 		exactNameMatchMsg          = "If set or true only blobs that match the name exactly will be downloaded."
-		keepDirStructureMsg        = "If set blobs are downloaded or uploaded keeping the directory structure from the source.\n\tNot applicable when the source is a HTTP endpoint."
+		removeDirStructureMsg      = "If set the directory structure from the source is not kept.\n\tNot applicable when the source is a HTTP endpoint."
 		numberOfHandlersPerFileMsg = "Number of open handles for concurrent reads and writes per file."
 		numberOfFilesInBatchMsg    = "Maximum number of files in a transfer.\n\tIf the number is exceeded new transfers are created"
 	)
@@ -104,51 +54,52 @@ func init() {
 		util.PrintUsageDefaults("f", "source_file", "", fileMsg)
 		util.PrintUsageDefaults("n", "name", "", nameMsg)
 		util.PrintUsageDefaults("c", "container_name", "", containerNameMsg)
-		util.PrintUsageDefaults("g", "concurrent_workers", strconv.Itoa(defaultNumberOfWorkers), concurrentWorkersMsg)
-		util.PrintUsageDefaults("r", "concurrent_readers", strconv.Itoa(defaultNumberOfReaders), concurrentReadersMsg)
-		util.PrintUsageDefaults("b", "block_size", blockSizeStr, blockSizeMsg)
+		util.PrintUsageDefaults("g", "concurrent_workers", strconv.Itoa(argsUtil.args.numberOfWorkers), concurrentWorkersMsg)
+		util.PrintUsageDefaults("r", "concurrent_readers", strconv.Itoa(argsUtil.args.numberOfReaders), concurrentReadersMsg)
+		util.PrintUsageDefaults("b", "block_size", argsUtil.args.blockSizeStr, blockSizeMsg)
 		util.PrintUsageDefaults("v", "verbose", "false", verboseMsg)
 		util.PrintUsageDefaults("q", "quiet_mode", "false", quietModeMsg)
 		util.PrintUsageDefaults("m", "compute_blockmd5", "false", computeBlockMD5Msg)
-		util.PrintUsageDefaults("s", "http_timeout", strconv.Itoa(util.HTTPClientTimeout), httpTimeoutMsg)
+		util.PrintUsageDefaults("s", "http_timeout", strconv.Itoa(argsUtil.args.hTTPClientTimeout), httpTimeoutMsg)
 		util.PrintUsageDefaults("a", "account_name", "", accountNameMsg)
 		util.PrintUsageDefaults("k", "account_key", "", accountKeyMsg)
-		util.PrintUsageDefaults("d", "dup_check_level", dedupeLevelOptStr, dupcheckLevelMsg)
-		util.PrintUsageDefaults("t", "transfer_definition", string(defaultTransferDef), transferDefMsg)
+		util.PrintUsageDefaults("d", "dup_check_level", argsUtil.args.dedupeLevelOptStr, dupcheckLevelMsg)
+		util.PrintUsageDefaults("t", "transfer_definition", argsUtil.args.transferDefStr, transferDefMsg)
 		util.PrintUsageDefaults("e", "exact_name", "false", exactNameMatchMsg)
-		util.PrintUsageDefaults("p", "keep_directories", "false", keepDirStructureMsg)
-		util.PrintUsageDefaults("h", "handles_per_file", strconv.Itoa(defaultNumberOfHandlesPerFile), numberOfHandlersPerFileMsg)
-		util.PrintUsageDefaults("x", "files_per_transfer", strconv.Itoa(defaultNumberOfFilesInBatch), numberOfFilesInBatchMsg)
+		util.PrintUsageDefaults("i", "remove_directories", "false", removeDirStructureMsg)
+		util.PrintUsageDefaults("h", "handles_per_file", strconv.Itoa(argsUtil.args.numberOfHandlesPerFile), numberOfHandlersPerFileMsg)
+		util.PrintUsageDefaults("x", "files_per_transfer", strconv.Itoa(argsUtil.args.numberOfFilesInBatch), numberOfFilesInBatchMsg)
 
 	}
 
-	util.StringListVarAlias(&sourceURIs, "f", "source_file", "", fileMsg)
-	util.StringListVarAlias(&blobNames, "n", "name", "", nameMsg)
-	util.StringVarAlias(&containerName, "c", "container_name", "", containerNameMsg)
-	util.IntVarAlias(&numberOfWorkers, "g", "concurrent_workers", defaultNumberOfWorkers, concurrentWorkersMsg)
-	util.IntVarAlias(&numberOfReaders, "r", "concurrent_readers", defaultNumberOfReaders, concurrentReadersMsg)
-	util.StringVarAlias(&blockSizeStr, "b", "block_size", blockSizeStr, blockSizeMsg)
+	util.StringListVarAlias(&argsUtil.args.sourceURIs, "f", "source_file", "", fileMsg)
+	util.StringListVarAlias(&argsUtil.args.blobNames, "n", "name", "", nameMsg)
+	util.StringVarAlias(&argsUtil.args.containerName, "c", "container_name", "", containerNameMsg)
+	util.IntVarAlias(&argsUtil.args.numberOfWorkers, "g", "concurrent_workers", argsUtil.args.numberOfWorkers, concurrentWorkersMsg)
+	util.IntVarAlias(&argsUtil.args.numberOfReaders, "r", "concurrent_readers", argsUtil.args.numberOfReaders, concurrentReadersMsg)
+	util.StringVarAlias(&argsUtil.args.blockSizeStr, "b", "block_size", argsUtil.args.blockSizeStr, blockSizeMsg)
 	util.BoolVarAlias(&util.Verbose, "v", "verbose", false, verboseMsg)
-	util.BoolVarAlias(&quietMode, "q", "quiet_mode", false, quietModeMsg)
-	util.BoolVarAlias(&calculateMD5, "m", "compute_blockmd5", false, computeBlockMD5Msg)
-	util.IntVarAlias(&util.HTTPClientTimeout, "s", "http_timeout", util.HTTPClientTimeout, httpTimeoutMsg)
-	util.StringVarAlias(&storageAccountName, "a", "account_name", "", accountNameMsg)
-	util.StringVarAlias(&storageAccountKey, "k", "account_key", "", accountKeyMsg)
-	util.StringVarAlias(&dedupeLevelOptStr, "d", "dup_check_level", dedupeLevelOptStr, dupcheckLevelMsg)
-	util.StringVarAlias(&transferDefStr, "t", "transfer_definition", string(defaultTransferDef), transferDefMsg)
-	util.BoolVarAlias(&exactNameMatch, "e", "exact_name", false, exactNameMatchMsg)
-	util.BoolVarAlias(&keepDirStructure, "p", "keep_directories", false, keepDirStructureMsg)
-	util.IntVarAlias(&numberOfHandlesPerFile, "h", "handles_per_file", defaultNumberOfHandlesPerFile, numberOfHandlersPerFileMsg)
-	util.IntVarAlias(&numberOfFilesInBatch, "x", "files_per_transfer", defaultNumberOfFilesInBatch, numberOfFilesInBatchMsg)
+	util.BoolVarAlias(&argsUtil.args.quietMode, "q", "quiet_mode", false, quietModeMsg)
+	util.BoolVarAlias(&argsUtil.args.calculateMD5, "m", "compute_blockmd5", false, computeBlockMD5Msg)
+	util.IntVarAlias(&argsUtil.args.hTTPClientTimeout, "s", "http_timeout", argsUtil.args.hTTPClientTimeout, httpTimeoutMsg)
+	util.StringVarAlias(&argsUtil.args.storageAccountName, "a", "account_name", "", accountNameMsg)
+	util.StringVarAlias(&argsUtil.args.storageAccountKey, "k", "account_key", "", accountKeyMsg)
+	util.StringVarAlias(&argsUtil.args.dedupeLevelOptStr, "d", "dup_check_level", argsUtil.args.dedupeLevelOptStr, dupcheckLevelMsg)
+	util.StringVarAlias(&argsUtil.args.transferDefStr, "t", "transfer_definition", argsUtil.args.transferDefStr, transferDefMsg)
+	util.BoolVarAlias(&argsUtil.args.exactNameMatch, "e", "exact_name", false, exactNameMatchMsg)
+	util.BoolVarAlias(&argsUtil.args.removeDirStructure, "i", "remove_directories", false, removeDirStructureMsg)
+	util.IntVarAlias(&argsUtil.args.numberOfHandlesPerFile, "h", "handles_per_file", defaultNumberOfHandlesPerFile, numberOfHandlersPerFileMsg)
+	util.IntVarAlias(&argsUtil.args.numberOfFilesInBatch, "x", "files_per_transfer", defaultNumberOfFilesInBatch, numberOfFilesInBatchMsg)
 }
 
 var dataTransferred uint64
 var targetRetries int32
-var transferType transfer.Definition
 
 func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int, batchNumber int) {
 	if numOfBatches == 1 {
-		fmt.Printf("Files to Transfer (%v) :\n ", transferDefStr)
+		fmt.Printf("Files to Transfer (%v) :\n", argsUtil.params.transferType)
+		var totalSize uint64
+		summary := ""
 
 		for _, source := range sourcesInfo {
 			//if the source is URL, remove the QS
@@ -156,49 +107,49 @@ func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int,
 			if u, err := url.Parse(source.SourceName); err == nil {
 				display = fmt.Sprintf("%v%v", u.Hostname(), u.Path)
 			}
-			fmt.Printf("Source: %v Size:%v \n", display, source.Size)
+			summary = summary + fmt.Sprintf("Source: %v Size:%v \n", display, source.Size)
+			totalSize = totalSize + source.Size
 		}
+
+		if len(sourcesInfo) < 10 {
+			fmt.Printf(summary)
+			return
+		}
+
+		fmt.Printf("%v files. Total size:%v\n", len(sourcesInfo), totalSize)
 
 		return
 	}
 
-	fmt.Printf("\nBatch transfer (%v).\nFiles per Batch: %v.\nBatch: %v of %v\n ", transferDefStr, len(sourcesInfo), batchNumber+1, numOfBatches)
-}
-
-func displayFinalWrapUpSummary(duration time.Duration, targetRetries int32, threadTarget int, totalNumberOfBlocks int, totalSize uint64, cumWriteDuration time.Duration) {
-	var netMB float64 = 1000000
-	fmt.Printf("\nThe transfer took %v to run.\n", duration)
-	MBs := float64(totalSize) / netMB / duration.Seconds()
-	fmt.Printf("Throughput: %1.2f MB/s (%1.2f Mb/s) \n", MBs, MBs*8)
-	fmt.Printf("Configuration: R=%d, W=%d, DataSize=%s, Blocks=%d\n",
-		numberOfReaders, numberOfWorkers, util.PrintSize(totalSize), totalNumberOfBlocks)
-	fmt.Printf("Cumulative Writes Duration: Total=%v, Avg Per Worker=%v\n",
-		cumWriteDuration, time.Duration(cumWriteDuration.Nanoseconds()/int64(numberOfWorkers)))
-	fmt.Printf("Retries: Avg=%v Total=%v\n", float32(targetRetries)/float32(totalNumberOfBlocks), targetRetries)
+	fmt.Printf("\nBatch transfer (%v).\nFiles per Batch: %v.\nBatch: %v of %v\n ", argsUtil.params.transferType, len(sourcesInfo), batchNumber+1, numOfBatches)
 }
 
 func main() {
 
 	flag.Parse()
 
-	// Create pipelines
-	sourcePipelines, targetPipeline, err := getPipelines()
+	if err := argsUtil.parseAndValidate(); err != nil {
+		log.Fatal(err)
+	}
+
+	//Create pipelines
+	sourcePipelines, targetPipeline, err := newTransferPipelines(argsUtil.params)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	stats := transfer.NewStats(numberOfWorkers, numberOfReaders)
+	stats := transfer.NewStats(argsUtil.params.numberOfWorkers, argsUtil.params.numberOfReaders)
 
 	for b, sourcePipeline := range sourcePipelines {
 		sourcesInfo := sourcePipeline.GetSourcesInfo()
 
-		tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, numberOfReaders, numberOfWorkers, blockSize)
+		tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, argsUtil.params.blockSize)
 
 		displayFilesToTransfer(sourcesInfo, len(sourcePipelines), b)
-		pb := getProgressBarDelegate(tfer.TotalSize, quietMode)
+		pb := getProgressBarDelegate(tfer.TotalSize, argsUtil.params.quietMode)
 
-		tfer.StartTransfer(dedupeLevel, pb)
+		tfer.StartTransfer(argsUtil.params.dedupeLevel, pb)
 
 		tfer.WaitForCompletion()
 
