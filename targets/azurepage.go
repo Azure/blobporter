@@ -61,7 +61,7 @@ func (t *AzurePageTarget) PreProcessSourceInfo(source *pipeline.SourceInfo, bloc
 	}
 
 	if blockSize > maxPageSize || blockSize < PageSize {
-		return fmt.Errorf(" invalid block size for page blob: %v. The value must be greater than %v and less than %v", PageSize, maxPageSize)
+		return fmt.Errorf(" invalid block size for page blob: %v. The value must be greater than %v and less than %v", source.SourceName, PageSize, maxPageSize)
 	}
 
 	err = t.azUtil.CreatePageBlob(source.TargetAlias, size)

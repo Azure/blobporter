@@ -34,8 +34,6 @@ func NewAzUtil(accountName string, accountKey string, container string, baseBlob
 			RetryDelay:    200 * time.Millisecond,
 			MaxRetryDelay: 5 * time.Minute}})
 
-
-
 	baseURL, err := parseBaseURL(accountName, baseBlobURL)
 	if err != nil {
 		return nil, err

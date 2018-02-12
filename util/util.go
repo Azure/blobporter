@@ -245,6 +245,7 @@ func isValidContainerName(name string) bool {
 }
 
 var storageHTTPClient *http.Client
+
 //HTTPClientTimeout HTTP timeout of the HTTP client used by the storage client.
 var HTTPClientTimeout = 60
 

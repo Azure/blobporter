@@ -299,7 +299,7 @@ func (p *paramParserValidator) pvgDupCheck() error {
 	var err error
 	p.params.dedupeLevel, err = transfer.ParseDupeCheckLevel(p.args.dedupeLevelOptStr)
 	if err != nil {
-		fmt.Errorf("Duplicate detection level is invalid.  Found '%s', must be one of %s. Error:%v", p.args.dedupeLevelOptStr, transfer.DupeCheckLevelStr, err)
+		return fmt.Errorf("Duplicate detection level is invalid.  Found '%s', must be one of %s. Error:%v", p.args.dedupeLevelOptStr, transfer.DupeCheckLevelStr, err)
 	}
 
 	return nil
@@ -403,7 +403,7 @@ func (p *paramParserValidator) pvPerfSourceIsReq() error {
 func (p *paramParserValidator) pvSetEmptyPrefixIfNone() error {
 
 	if len(p.params.blobSource.prefixes) == 0 {
-		//if empty set an empty prefix so the entire container is downlaoded..
+		//if empty set an empty prefix so the entire container is downloaded..
 		p.params.blobSource.prefixes = []string{""}
 	}
 
@@ -412,7 +412,7 @@ func (p *paramParserValidator) pvSetEmptyPrefixIfNone() error {
 
 //this rule checks if the transfer type is blob to file (download). Im which case blob authorization rule also aplies since
 //there are two combinations of param line options that can be provided. One, similar to upload, where the source is main
-// storage account that is the target in all other cases. And the second with the URI provided, as when blob to blob transfers occurr.
+// storage account that is the target in all other cases. And the second with the URI provided, as when blob to blob transfers occur.
 func (p *paramParserValidator) pvSourceInfoForBlobIsReq() error {
 
 	//if the scenarios is download then check if download is via short-mode
