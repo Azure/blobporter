@@ -3,9 +3,11 @@ package sources
 import (
 	"io/ioutil"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"fmt"
 	"net/http"
@@ -55,7 +57,7 @@ func newHTTPSource(sourceListManager objectListManager, pipelineFactory sourceHT
 			numOfFilesInBatch = filesSent
 		}
 
-		httpSource := HTTPPipeline{Sources: sourceInfos[start : start+numOfFilesInBatch], HTTPClient: util.NewHTTPClient(), includeMD5: includeMD5}
+		httpSource := HTTPPipeline{Sources: sourceInfos[start : start+numOfFilesInBatch], HTTPClient: httpSourceHTTPClient, includeMD5: includeMD5}
 
 		pipelines[b], err = pipelineFactory(httpSource)
 
@@ -92,7 +94,7 @@ func NewHTTP(sourceURIs []string, targetAliases []string, md5 bool) pipeline.Sou
 			TargetAlias: targetAlias,
 			SourceName:  sourceURIs[i]}
 	}
-	return &HTTPPipeline{Sources: sources, HTTPClient: util.NewHTTPClient(), includeMD5: md5}
+	return &HTTPPipeline{Sources: sources, HTTPClient: httpSourceHTTPClient, includeMD5: md5}
 }
 
 func getSourceSize(sourceURI string) (size int) {
@@ -106,7 +108,7 @@ func getSourceSize(sourceURI string) (size int) {
 		}
 		err = fmt.Errorf("HEAD request failed. Please check the URL.%s Error: %v", statusCode, err)
 
-		util.PrintfIfDebug("getSourceSize -> %v", err)
+		util.PrintfIfDebug("getSourceSize ->  err:%v", err)
 
 		size = getSourceSizeFromByteRangeHeader(sourceURI)
 		return
@@ -207,9 +209,8 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 				if res != nil && res.Body != nil {
 					res.Body.Close()
 				}
-				f.HTTPClient = util.NewHTTPClient()
 
-				util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, status, err, header)
+				util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v err:%v head:%v", p.BlockID, p.BytesToRead, status, err, header)
 
 				return err
 			}
@@ -225,7 +226,7 @@ func (f *HTTPPipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, p
 				p.MD5()
 			}
 
-			util.PrintfIfDebug("ExecuteReader -> |%v|%v|%v|%v|%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
+			util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v read:%v head:%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 
 			return nil
 		})
@@ -266,4 +267,30 @@ func (f *HTTPPipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ ch
 	close(partsQ)
 
 	return
+}
+
+const (
+	maxIdleConns        = 50
+	maxIdleConnsPerHost = 50
+)
+
+var httpSourceHTTPClient = newSourceHTTPClient() 
+
+func newSourceHTTPClient() *http.Client {
+	return  &http.Client{
+			Timeout: time.Duration(util.HTTPClientTimeout) * time.Second,
+			Transport: &http.Transport{
+				Dial: (&net.Dialer{
+					Timeout:   30 * time.Second, // dial timeout
+					KeepAlive: 30 * time.Second,
+					DualStack: true,
+				}).Dial,
+				MaxIdleConns:           maxIdleConns,
+				MaxIdleConnsPerHost:    maxIdleConnsPerHost,
+				IdleConnTimeout:        90 * time.Second,
+				TLSHandshakeTimeout:    30 * time.Second,
+				ExpectContinueTimeout:  1 * time.Second,
+				DisableKeepAlives:      false,
+				DisableCompression:     false,
+				MaxResponseHeaderBytes: 0}}
 }

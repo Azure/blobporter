@@ -4,9 +4,19 @@
 	"GodepVersion": "v79",
 	"Deps": [
 		{
+			"ImportPath": "github.com/Azure/azure-pipeline-go/pipeline",
+			"Comment": "1.1.3",
+			"Rev": "f4da77e3846319876aebb41f2e6dccc6b1d7f1e0"
+		},
+		{
 			"ImportPath": "github.com/Azure/azure-sdk-for-go/storage",
 			"Comment": "v7.0.1-beta-14-gd05c22d",
 			"Rev": "d05c22dc3f9fdd2ec6e3593839fdd44df17f2de5"
+		},
+		{
+			"ImportPath": "github.com/Azure/azure-storage-blob-go/2016-05-31/azblob",
+			"Comment": "0.1.1-12-gfb32827",
+			"Rev": "fb328272929aed4cd6e5108011abe489d6e445fa"
 		},
 		{
 			"ImportPath": "github.com/go-ini/ini",

@@ -2,14 +2,14 @@ package transfer
 
 import (
 	"errors"
+	"fmt"
 	"log"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"fmt"
 
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
@@ -84,8 +84,45 @@ const (
 	BlobToPage             = "blob-pageblob"
 	S3ToBlock              = "s3-blockblob"
 	S3ToPage               = "s3-pageblob"
+	PerfToBlock            = "perf-blockblob"
+	PerfToPage             = "perf-pageblob"
+	BlobToPerf             = "blob-perf"
 	none                   = "none"
 )
+
+//TransferSegment source and target types
+type TransferSegment string
+
+//valid transfer segments
+const (
+	File      TransferSegment = "file"
+	HTTP                      = "http"
+	BlockBlob                 = "blockblob"
+	PageBlob                  = "pageblob"
+	S3                        = "s3"
+	Perf                      = "perf"
+	Blob                      = "blob"
+	NA                        = "na"
+)
+
+//ParseTransferSegment
+func ParseTransferSegment(def Definition) (TransferSegment, TransferSegment) {
+	//defstr := string(def)
+
+	if def == none || def == "" {
+		return NA, NA
+	}
+
+	ref := reflect.ValueOf(def)
+
+	defstr := ref.String()
+	segments := strings.Split(defstr, "-")
+
+	source := TransferSegment(segments[0])
+	target := TransferSegment(segments[1])
+
+	return source, target
+}
 
 //ParseTransferDefinition parses a Definition from a string.
 func ParseTransferDefinition(str string) (Definition, error) {
@@ -121,6 +158,12 @@ func ParseTransferDefinition(str string) (Definition, error) {
 		return S3ToBlock, nil
 	case "s3-pageblob":
 		return S3ToPage, nil
+	case "perf-blockblob":
+		return PerfToBlock, nil
+	case "perf-pageblob":
+		return PerfToPage, nil
+	case "blob-perf":
+		return BlobToPerf, nil
 	default:
 		return none, fmt.Errorf("%v is not a valid transfer definition value.\n Valid values: file-blockblob, http-blockblob,file-pageblob, http-pageblob, pageblob-file, blockblob-file, http-file", str)
 	}
@@ -342,6 +385,7 @@ func (t *Transfer) preprocessSources() {
 	sourcesInfo := (*t.SourcePipeline).GetSourcesInfo()
 	var wg sync.WaitGroup
 	wg.Add(len(sourcesInfo))
+
 	for i := 0; i < len(sourcesInfo); i++ {
 		go func(s *pipeline.SourceInfo, b uint64) {
 			defer wg.Done()

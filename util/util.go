@@ -4,19 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"net/http"
 	"net/url"
-
-	"github.com/Azure/azure-sdk-for-go/storage"
 )
 
 // Verbose mode active?
@@ -208,117 +204,6 @@ func RetriableOperation(operation func(r int) error) (duration time.Duration, st
 	}
 }
 
-//CreateContainerIfNotExists Creates a new container if doesn't exists. Validates the name of the container.
-func CreateContainerIfNotExists(container string, accountName string, accountKey string) {
-
-	if !isValidContainerName(container) {
-		log.Fatalf("Container name is invalid")
-	}
-
-	bc := GetBlobStorageClient(accountName, accountKey)
-
-	if exists, err := bc.ContainerExists(container); err == nil {
-		if !exists {
-			fmt.Printf("Info! The container doesn't exist. Creating it...\n")
-			if err := bc.CreateContainer(container, storage.ContainerAccessTypePrivate); err != nil {
-				log.Fatalf("Could not create the container '%v'. Error: %v\n", container, err)
-
-			}
-		}
-	} else {
-		log.Fatal(err)
-	}
-
-}
-
-//CleanUncommittedBlocks clears uncommitted blocks if an existing blob does not exists.
-func CleanUncommittedBlocks(client *storage.BlobStorageClient, container string, blobName string) error {
-	list, _ := client.GetBlockList(container, blobName, "Uncommitted")
-
-	if len(list.UncommittedBlocks) == 0 {
-		return nil
-	}
-
-	fmt.Printf("Warning! uncommitted blocks detected for blob %v \nAttempting to clean them up\n", blobName)
-
-	exists, err := client.BlobExists(container, blobName)
-
-	if exists {
-		fmt.Printf("Can't delete uncommitted blocks for the blob:%v. A committed blob with the same name already exists \n", blobName)
-		return nil
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return client.CreateBlockBlob(container, blobName)
-
-}
-
-//GetBlobStorageClient gets a storage client with support for larg block blobs
-func GetBlobStorageClient(accountName string, accountKey string) storage.BlobStorageClient {
-	var bc storage.BlobStorageClient
-	var client storage.Client
-	var err error
-
-	if accountName == "" || accountKey == "" {
-		log.Fatal("Storage account and/or key not specified via options or in environment variables ACCOUNT_NAME and ACCOUNT_KEY")
-	}
-
-	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
-		log.Fatal(err)
-	}
-
-	client.HTTPClient = getStorageHTTPClient()
-
-	bc = client.GetBlobService()
-
-	return bc
-}
-
-//GetBlobStorageClientWithNewHTTPClient gets a storage client with a new instace of the HTTP client.
-func GetBlobStorageClientWithNewHTTPClient(accountName string, accountKey string) storage.BlobStorageClient {
-	var bc storage.BlobStorageClient
-	var client storage.Client
-	var err error
-
-	if accountName == "" || accountKey == "" {
-		log.Fatal("Storage account and/or key not specified via options or in environment variables ACCOUNT_NAME and ACCOUNT_KEY")
-	}
-
-	if client, err = storage.NewClient(accountName, accountKey, storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
-		log.Fatal(err)
-	}
-
-	client.HTTPClient = NewHTTPClient()
-
-	bc = client.GetBlobService()
-
-	return bc
-}
-
-//GetBlobStorageClientWithSASToken gets a storage client with support for large block blobs
-func GetBlobStorageClientWithSASToken(accountName string, sasToken string) storage.BlobStorageClient {
-	var bc storage.BlobStorageClient
-	var client storage.Client
-	var err error
-
-	if accountName == "" || sasToken == "" {
-		log.Fatal("Storage account and/or SAS token not specified via options or in environment variables ACCOUNT_NAME and SAS_TOKEN")
-	}
-
-	if client, err = storage.NewClient(accountName, "", storage.DefaultBaseURL, LargeBlockAPIVersion, true); err != nil {
-		log.Fatal(err)
-	}
-
-	client.HTTPClient = getStorageHTTPClient()
-
-	bc = client.GetBlobService()
-
-	return bc
-}
-
 //AskUser places a yes/no question to the user provided by the stdin
 func AskUser(question string) bool {
 	fmt.Printf(question)
@@ -360,23 +245,14 @@ func isValidContainerName(name string) bool {
 }
 
 var storageHTTPClient *http.Client
-
 //HTTPClientTimeout HTTP timeout of the HTTP client used by the storage client.
-var HTTPClientTimeout = 600
+var HTTPClientTimeout = 60
 
+/*
 const (
 	maxIdleConns        = 50
 	maxIdleConnsPerHost = 50
 )
-
-func getStorageHTTPClient() *http.Client {
-	if storageHTTPClient == nil {
-		storageHTTPClient = NewHTTPClient()
-	}
-
-	return storageHTTPClient
-
-}
 
 var c *http.Client
 var mtx sync.Mutex
@@ -399,6 +275,7 @@ func NewHTTPClient() *http.Client {
 	}
 	return c
 }
+*/
 
 func handleExceededRetries(err error) {
 	errMsg := fmt.Sprintf("The number of retries has exceeded the maximum allowed.\nError: %v\nSuggestion:%v\n", err.Error(), getSuggestion(err))
@@ -458,5 +335,5 @@ func GetUserAgentInfo() (string, error) {
 
 //SetUserAgentInfo TODO
 func SetUserAgentInfo(programVersion string) {
-	userAgent = fmt.Sprintf("%s/%s/(%s %s)/", "BlobPorter", programVersion, runtime.GOOS, runtime.GOARCH)
+	userAgent = fmt.Sprintf("%s/%s/%s", "BlobPorter", programVersion, runtime.GOARCH)
 }
