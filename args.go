@@ -25,8 +25,8 @@ const (
 	s3SecretKeyEnvVar = "S3_SECRET_KEY"
 )
 
-//defautls for some of the arguments and parameters...
-const defaulPreSignedExpMins = 90
+//defaults for some of the arguments and parameters...
+const defaulPreSignedExpMins = 360
 const numOfWorkersFactor = 8
 const numOfReadersFactor = 5
 const defaultNumberOfFilesInBatch = 500

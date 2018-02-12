@@ -10,8 +10,8 @@ import (
 //AzureBlobSource constructs parts channel and implements data readers for Azure Blobs exposed via HTTP
 type AzureBlobSource struct {
 	HTTPSource
-	Container      string
-	BlobNames      []string
+	container      string
+	blobNames      []string
 	exactNameMatch bool
 }
 
@@ -26,8 +26,8 @@ func NewAzureBlobSourcePipeline(params *AzureBlobParams) []pipeline.SourcePipeli
 	}
 
 	factory := func(httpSource HTTPSource) (pipeline.SourcePipeline, error) {
-		return &AzureBlobSource{Container: params.Container,
-			BlobNames:      params.BlobNames,
+		return &AzureBlobSource{container: params.Container,
+			blobNames:      params.BlobNames,
 			HTTPSource:     httpSource,
 			exactNameMatch: params.SourceParams.UseExactNameMatch}, nil
 	}
