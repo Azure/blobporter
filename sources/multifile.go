@@ -11,6 +11,7 @@ import (
 
 	"io"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -21,12 +22,13 @@ import (
 
 // MultiFilePipeline  Contructs blocks queue and implements data readers
 type MultiFilePipeline struct {
-	FilesInfo           map[string]FileInfo
-	TotalNumberOfBlocks int
-	TotalSize           uint64
-	BlockSize           uint64
-	NumOfPartitions     int
+	filesInfo           map[string]FileInfo
+	totalNumberOfBlocks int
+	totalSize           uint64
+	blockSize           uint64
+	numOfPartitions     int
 	includeMD5          bool
+	handlePool          *internal.FileHandlePool
 }
 
 //FileInfo Contains the metadata associated with a file to be transferred
@@ -100,6 +102,8 @@ func NewMultiFile(params *MultiFileParams) []pipeline.SourcePipeline {
 	return pipelines
 }
 
+const maxNumOfHandlesPerFile int = 4
+
 func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint64, numOfPartitions int, md5 bool, keepDirStructure bool) pipeline.SourcePipeline {
 	totalNumberOfBlocks := 0
 	var totalSize uint64
@@ -142,19 +146,22 @@ func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint
 		fileInfos[files[f]] = fileInfo
 	}
 
-	return &MultiFilePipeline{FilesInfo: fileInfos,
-		TotalNumberOfBlocks: totalNumberOfBlocks,
-		BlockSize:           blockSize,
-		TotalSize:           totalSize,
-		NumOfPartitions:     numOfPartitions,
-		includeMD5:          md5}
+	handlePool := internal.NewFileHandlePool(maxNumOfHandlesPerFile, internal.Read, false)
+
+	return &MultiFilePipeline{filesInfo: fileInfos,
+		totalNumberOfBlocks: totalNumberOfBlocks,
+		blockSize:           blockSize,
+		totalSize:           totalSize,
+		numOfPartitions:     numOfPartitions,
+		includeMD5:          md5,
+		handlePool:          handlePool,
+	}
 }
 
 //ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
 //For each file the reader will maintain a open handle from which data will be read.
 // This implementation uses partitions (group of parts that can be read sequentially).
 func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
-	fileHandles := make(map[string]*os.File, len(f.FilesInfo))
 	var err error
 	var partition pipeline.PartsPartition
 
@@ -167,25 +174,30 @@ func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartiti
 		partition, ok = <-partitionsQ
 
 		if !ok {
-			for _, fh := range fileHandles {
-				fh.Close()
+			for _, finfo := range f.filesInfo {
+				err = f.handlePool.CloseHandles(finfo.SourceURI)
+				if err != nil {
+					log.Fatal(fmt.Errorf("error closing handle for file:%v. Error:%v", finfo.SourceURI, err))
+				}
 			}
 			return // no more blocks of file data to be read
+		}
+
+		//check if the partition is empty, as this may happen with small files
+		if len(partition.Parts) == 0 {
+			continue
 		}
 
 		var part pipeline.Part
 		for pip := 0; pip < len(partition.Parts); pip++ {
 			part = partition.Parts[pip]
 
-			fileURI = f.FilesInfo[part.SourceURI].SourceURI
-			fileHandle = fileHandles[fileURI]
+			fileURI = f.filesInfo[part.SourceURI].SourceURI
 
 			if fileHandle == nil {
-				if fileHandle, err = os.Open(fileURI); err != nil {
-					fmt.Printf("Error while opening the file %v \n", err)
-					log.Fatal(err)
+				if fileHandle, err = f.handlePool.GetHandle(fileURI); err != nil {
+					log.Fatal(fmt.Errorf(" error while opening the file.\nError:%v ", err))
 				}
-				fileHandles[fileURI] = fileHandle
 			}
 
 			if pip == 0 {
@@ -195,8 +207,7 @@ func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartiti
 			part.GetBuffer()
 
 			if _, err = fileHandle.Read(part.Data); err != nil && err != io.EOF {
-				fmt.Printf("Error while reading the file %v \n", err)
-				log.Fatal(err)
+				log.Fatal(fmt.Errorf(" error while reading the file.\nError:%v ", err))
 			}
 
 			util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v name:%v read:%v ", part.BlockID, part.BytesToRead, part.TargetAlias, bytesRead)
@@ -207,6 +218,13 @@ func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartiti
 
 			readPartsQ <- part
 		}
+
+		//return handle
+		if err = f.handlePool.ReturnHandle(fileURI, fileHandle); err != nil {
+			log.Fatal(fmt.Errorf(" error returning the handle to the pool.\nPath: %v error:%v ", fileURI, err))
+		}
+
+		fileHandle = nil
 	}
 }
 
@@ -214,9 +232,9 @@ func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartiti
 //Returns an an array of SourceInfo with the name, alias and size of the files to be transferred.
 func (f *MultiFilePipeline) GetSourcesInfo() []pipeline.SourceInfo {
 
-	sources := make([]pipeline.SourceInfo, len(f.FilesInfo))
+	sources := make([]pipeline.SourceInfo, len(f.filesInfo))
 	var i = 0
-	for _, file := range f.FilesInfo {
+	for _, file := range f.filesInfo {
 		sources[i] = pipeline.SourceInfo{SourceName: file.SourceURI, TargetAlias: file.TargetAlias, Size: uint64((*file.FileStats).Size())}
 		i++
 	}
@@ -255,18 +273,18 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 // this implementation uses partitions to group parts into a set that can be read sequentially.
 // This is to avoid Window's memory pressure when calling SetFilePointer numerous times on the same handle
 func (f *MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
-	numOfBlocks = f.TotalNumberOfBlocks
-	size = f.TotalSize
-	allPartitions := make([][]pipeline.PartsPartition, len(f.FilesInfo))
+	numOfBlocks = f.totalNumberOfBlocks
+	size = f.totalSize
+	allPartitions := make([][]pipeline.PartsPartition, len(f.filesInfo))
 	//size of the queue is equal to the number of partitions times the number of files to transfer.
 	//a lower value will block as this method is called before readers start
-	partitionsQ = make(chan pipeline.PartsPartition, f.NumOfPartitions*len(f.FilesInfo))
+	partitionsQ = make(chan pipeline.PartsPartition, f.numOfPartitions*len(f.filesInfo))
 	partsQ = nil
 	bufferQ := pipeline.NewBytesBufferChan(uint64(blockSize))
 	pindex := 0
 	maxpartitionNumber := 0
-	for _, source := range f.FilesInfo {
-		partitions := pipeline.ConstructPartsPartition(f.NumOfPartitions, (*source.FileStats).Size(), int64(blockSize), source.SourceURI, source.TargetAlias, bufferQ)
+	for _, source := range f.filesInfo {
+		partitions := pipeline.ConstructPartsPartition(f.numOfPartitions, (*source.FileStats).Size(), int64(blockSize), source.SourceURI, source.TargetAlias, bufferQ)
 		allPartitions[pindex] = partitions
 		if len(partitions) > maxpartitionNumber {
 			maxpartitionNumber = len(partitions)

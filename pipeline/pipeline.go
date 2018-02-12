@@ -151,9 +151,7 @@ func createPartsInPartition(partitionSize int64, partitionOffSet int64, ordinalS
 
 //ConstructPartsPartition creates a slice of PartsPartition with a len of numberOfPartitions.
 func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) []PartsPartition {
-	//bsib := uint64(blockSize)
 	numOfBlocks := int((size + blockSize - 1) / blockSize)
-
 	Partitions := make([]PartsPartition, numberOfPartitions)
 	//the size of the partition needs to be a multiple (blockSize * int) to make sure all but the last part/block
 	//are the same size
@@ -165,17 +163,27 @@ func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64
 	var partOrdinal int
 	for p := 0; p < numberOfPartitions; p++ {
 		poffSet := int64(int64(p) * partitionSize)
+
 		if p == numberOfPartitions-1 {
 			partitionSize = int64(bytesLeft)
 		}
-		partition := PartsPartition{TotalNumOfParts: int64(numOfBlocks), TotalSize: size, Offset: poffSet, PartitionSize: partitionSize}
-		parts, partOrdinal, numOfPartsInPartition = createPartsInPartition(partitionSize, poffSet, partOrdinal, numOfBlocks, blockSize, sourceURI, targetAlias, bufferQ)
+
+		partition := PartsPartition{TotalNumOfParts: int64(numOfBlocks),
+			TotalSize:     size,
+			Offset:        poffSet,
+			PartitionSize: partitionSize}
+
+		parts, partOrdinal, numOfPartsInPartition = createPartsInPartition(partitionSize,
+			poffSet,
+			partOrdinal,
+			numOfBlocks,
+			blockSize,
+			sourceURI, targetAlias, bufferQ)
 
 		partition.Parts = parts
 		partition.NumOfParts = numOfPartsInPartition
 		Partitions[p] = partition
-
-		bytesLeft = bytesLeft - int64(partitionSize)
+	  	bytesLeft = bytesLeft - int64(partitionSize)
 	}
 
 	return Partitions
@@ -292,7 +300,7 @@ func (p *Part) MD5() string {
 }
 
 //MD5Bytes TODO
-func(p *Part) MD5Bytes()[]byte{
+func (p *Part) MD5Bytes() []byte {
 	p.MD5()
 	return p.md5Value
 }

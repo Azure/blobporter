@@ -15,7 +15,7 @@ import (
 	"github.com/Azure/blobporter/util"
 )
 
-const programVersion = "0.6.05"
+const programVersion = "0.6.06"
 
 var argsUtil paramParserValidator
 
@@ -111,7 +111,7 @@ func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int,
 			totalSize = totalSize + source.Size
 		}
 
-		if len(sourcesInfo) < 20 {
+		if len(sourcesInfo) < 0 {
 			fmt.Printf(summary)
 			return
 		}

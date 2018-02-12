@@ -1,4 +1,4 @@
-package targets
+package internal
 
 import (
 	"fmt"
@@ -9,20 +9,32 @@ import (
 
 //There're two components here: poolHandle and the handle factory.
 //A pool is an asynchronous request/respone worker that runs on a single go-routine and keeps file handles for each file.
-//The number of file handles is constraint by the max number of handlers in cache (numberOfHandlersInCache) and the max number of handles per file (numOfHandlesPerFile).
+//The number of file handles is constraint by the max number of handlers in cache (maxFileHandlesInCache) and the max number of handles per file (numOfHandlesPerFile).
 //When the max number handles is reached file handles will be closed until space is available. The handle factory opens the file handles and initializes the
 //target file in case the folder structure and file need to be created. Since the factory tracks if a file has been initailized
 //, i.e. created or truncated at the begining of the transfer, only one instance of the factory is created.
 
-const maxFileHandlesInCache int32 = 600
+const maxFileHandlesInCache int = 600
 
-type fileHandlePool struct {
+//HandleMode TODO
+type HandleMode int
+
+const (
+	//Read read only file handles
+	Read HandleMode = iota
+	//Write write and append file handles
+	Write
+)
+
+//FileHandlePool TODO
+type FileHandlePool struct {
 	maxCacheSize      int
 	maxHandlesPerFile int
 	factory           *handleFactory
 	fileHandles       map[string][]*os.File
 	overwrite         bool
 	channels          poolChannels
+	mode              HandleMode
 }
 type poolChannels struct {
 	handleReq chan poolRequest
@@ -47,13 +59,15 @@ type poolResponse struct {
 	err    error
 }
 
-func newfileHandlePool(maxCacheSize int, maxHandlesPerFile int, overwrite bool) *fileHandlePool {
-	pool := fileHandlePool{
-		maxCacheSize:      maxCacheSize,
+//NewFileHandlePool TODO
+func NewFileHandlePool(maxHandlesPerFile int, mode HandleMode, overwrite bool) *FileHandlePool {
+	pool := FileHandlePool{
+		maxCacheSize:      maxFileHandlesInCache,
 		maxHandlesPerFile: maxHandlesPerFile,
-		factory:           newhandleFactory(overwrite),
+		factory:           newhandleFactory(mode, overwrite),
 		fileHandles:       make(map[string][]*os.File),
 		overwrite:         overwrite,
+		mode:              mode,
 		channels: poolChannels{
 			handleReq: make(chan poolRequest, 100),
 			closeReq:  make(chan poolCloseRequest, 100),
@@ -66,7 +80,8 @@ func newfileHandlePool(maxCacheSize int, maxHandlesPerFile int, overwrite bool) 
 	return &pool
 }
 
-func (f *fileHandlePool) getHandle(path string) (*os.File, error) {
+//GetHandle TODO
+func (f *FileHandlePool) GetHandle(path string) (*os.File, error) {
 	respChan := make(chan poolResponse, 1)
 	req := poolRequest{path: path, response: respChan}
 	f.channels.handleReq <- req
@@ -74,16 +89,19 @@ func (f *fileHandlePool) getHandle(path string) (*os.File, error) {
 	return resp.handle, resp.err
 }
 
-func (f *fileHandlePool) returnHandle(path string, handle *os.File) error {
+//ReturnHandle TODO
+func (f *FileHandlePool) ReturnHandle(path string, handle *os.File) error {
 	select {
 	case f.channels.returnReq <- poolReturnRequest{handle: handle, path: path}:
 	default:
-		//close the handle if channel is fool
+		//close the handle if channel is full
 		return handle.Close()
 	}
 	return nil
 }
-func (f *fileHandlePool) closeHandles(path string) error {
+
+//CloseHandles TODO
+func (f *FileHandlePool) CloseHandles(path string) error {
 	respChan := make(chan error, 1)
 	req := poolCloseRequest{path: path, err: respChan}
 	f.channels.closeReq <- req
@@ -93,12 +111,12 @@ func (f *fileHandlePool) closeHandles(path string) error {
 
 const fileHandleCacheDebug = "BP_FHC_DBG"
 
-func (f *fileHandlePool) startPool() {
-	//start := time.Now()
-	oc := 0
-	cc := 0
-	cm := 0
-	ch := 0
+func (f *FileHandlePool) startPool() {
+
+	oc := 0 //num of open requests
+	cc := 0 //num of close requests
+	cm := 0 //num of cache misses
+	ch := 0 //num of cache hits
 	dbg := os.Getenv(fileHandleCacheDebug)
 	go func() {
 		for {
@@ -204,6 +222,7 @@ func (f *fileHandlePool) startPool() {
 type handleFactory struct {
 	init       map[string]bool
 	factoryReq chan factoryRequest
+	mode       HandleMode
 }
 
 type factoryRequest struct {
@@ -216,11 +235,12 @@ type factoryResponse struct {
 	err    error
 }
 
-func newhandleFactory(overwrite bool) *handleFactory {
+func newhandleFactory(mode HandleMode, overwrite bool) *handleFactory {
 	reqChan := make(chan factoryRequest, 100)
 	fact := handleFactory{
 		init:       make(map[string]bool),
 		factoryReq: reqChan,
+		mode:       mode,
 	}
 
 	fact.startFactory(overwrite)
@@ -251,12 +271,17 @@ func (h *handleFactory) startFactory(overwrite bool) {
 			_, exists := h.init[req.path]
 			var fh *os.File
 			var err error
-			if !exists {
-				//fmt.Printf("init->%v\n", req.path)
-				fh, err = h.initFile(req.path, overwrite)
-			} else {
-				//fmt.Printf("open->%v\n", req.path)
-				fh, err = os.OpenFile(req.path, os.O_WRONLY, os.ModeAppend)
+			switch h.mode {
+			case Read:
+				fh, err = os.OpenFile(req.path, os.O_RDONLY, os.ModeAppend)
+			case Write:
+				if !exists {
+					fh, err = h.initFile(req.path, overwrite)
+				} else {
+					fh, err = os.OpenFile(req.path, os.O_WRONLY, os.ModeAppend)
+				}
+			default:
+				panic(fmt.Sprintf("Invalid handle mode:%v", h.mode))
 			}
 
 			select {
