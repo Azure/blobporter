@@ -45,7 +45,7 @@ func init() {
 		dupcheckLevelMsg           = "Desired level of effort to detect duplicate data to minimize upload size.\n\tMust be one of " + transfer.DupeCheckLevelStr
 		transferDefMsg             = "Defines the type of source and target in the transfer.\n\tMust be one of:\n\tfile-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file,\n\tpageblock-file (alias of blob-file), blockblob-file (alias of blob-file)\n\tor http-file."
 		exactNameMatchMsg          = "If set or true only blobs that match the name exactly will be downloaded."
-		removeDirStructureMsg      = "If set the directory structure from the source won't be kept.\n\tNot applicable when the source is a HTTP endpoint."
+		removeDirStructureMsg      = "If set the directory structure from the source is not kept.\n\tNot applicable when the source is a HTTP endpoint."
 		numberOfHandlersPerFileMsg = "Number of open handles for concurrent reads and writes per file."
 		numberOfFilesInBatchMsg    = "Maximum number of files in a transfer.\n\tIf the number is exceeded new transfers are created"
 	)
@@ -111,7 +111,7 @@ func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int,
 			totalSize = totalSize + source.Size
 		}
 
-		if len(sourcesInfo) < 0 {
+		if len(sourcesInfo) < 10 {
 			fmt.Printf(summary)
 			return
 		}
