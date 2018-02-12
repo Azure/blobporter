@@ -208,10 +208,6 @@ By default files are downloaded to the same directory where you are running blob
 
 - `i`, `--remove_directories` *bool* if set blobs are downloaded or uploaded without keeping the directory structure of the source. Not applicable when the source is a HTTP endpoint.
 
-## Optimizing Transfers
-
-BlobPorter has several configuration options that can be used to miximize performance for specific use cases. 
-
 ## Performance Considerations
 
 By default, BlobPorter creates 5 readers and 8 workers for each core on the computer. You can overwrite these values by using the options -r (number of readers) and -g (number of workers). When overriding these options there are few considerations:

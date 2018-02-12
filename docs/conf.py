@@ -21,7 +21,7 @@
 
 project = u'BlobPorter'
 #copyright = u'2018, Jesus Aguilar'
-#author = u'Jesus Aguilar'
+author = u'BlobPorter Contributors'
 
 # The short X.Y version
 version = u''
