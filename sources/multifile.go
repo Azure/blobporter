@@ -17,11 +17,11 @@ import (
 )
 
 ////////////////////////////////////////////////////////////
-///// MultiFilePipeline
+///// FileSystemSource
 ////////////////////////////////////////////////////////////
 
-// MultiFilePipeline  Contructs blocks queue and implements data readers
-type MultiFilePipeline struct {
+// FileSystemSource  Contructs blocks queue and implements data readers
+type FileSystemSource struct {
 	filesInfo           map[string]FileInfo
 	totalNumberOfBlocks int
 	totalSize           uint64
@@ -39,8 +39,8 @@ type FileInfo struct {
 	NumOfBlocks int
 }
 
-//MultiFileParams parameters used to create a new instance of multi-file source pipeline
-type MultiFileParams struct {
+//FileSystemSourceParams parameters used to create a new instance of multi-file source pipeline
+type FileSystemSourceParams struct {
 	SourcePatterns   []string
 	BlockSize        uint64
 	TargetAliases    []string
@@ -50,11 +50,10 @@ type MultiFileParams struct {
 	KeepDirStructure bool
 }
 
-// NewMultiFile creates a new MultiFilePipeline.
-// If the sourcePattern results in a single file, the targetAlias, if set, will be used as the target name.
-// Otherwise the full original file name will be used instead.
-//sourcePatterns []string, blockSize uint64, targetAliases []string, numOfPartitions int, md5 bool
-func NewMultiFile(params *MultiFileParams) []pipeline.SourcePipeline {
+// NewFileSystemSourcePipeline creates a new MultiFilePipeline.
+// If the sourcePattern results in a single file and the targetAlias is set, the alias will be used as the target name.
+// Otherwise the full original file name will be used.
+func NewFileSystemSourcePipeline(params *FileSystemSourceParams) []pipeline.SourcePipeline {
 	var files []string
 	var err error
 	//get files from patterns
@@ -148,7 +147,7 @@ func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint
 
 	handlePool := internal.NewFileHandlePool(maxNumOfHandlesPerFile, internal.Read, false)
 
-	return &MultiFilePipeline{filesInfo: fileInfos,
+	return &FileSystemSource{filesInfo: fileInfos,
 		totalNumberOfBlocks: totalNumberOfBlocks,
 		blockSize:           blockSize,
 		totalSize:           totalSize,
@@ -161,7 +160,7 @@ func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint
 //ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
 //For each file the reader will maintain a open handle from which data will be read.
 // This implementation uses partitions (group of parts that can be read sequentially).
-func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
+func (f *FileSystemSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, readPartsQ chan pipeline.Part, id int, wg *sync.WaitGroup) {
 	var err error
 	var partition pipeline.PartsPartition
 
@@ -230,7 +229,7 @@ func (f *MultiFilePipeline) ExecuteReader(partitionsQ chan pipeline.PartsPartiti
 
 //GetSourcesInfo implements GetSourcesInfo from the pipeline.SourcePipeline Interface.
 //Returns an an array of SourceInfo with the name, alias and size of the files to be transferred.
-func (f *MultiFilePipeline) GetSourcesInfo() []pipeline.SourceInfo {
+func (f *FileSystemSource) GetSourcesInfo() []pipeline.SourceInfo {
 
 	sources := make([]pipeline.SourceInfo, len(f.filesInfo))
 	var i = 0
@@ -272,7 +271,7 @@ func createPartsFromSource(size uint64, sourceNumOfBlocks int, blockSize uint64,
 //ConstructBlockInfoQueue implements ConstructBlockInfoQueue from the pipeline.SourcePipeline Interface.
 // this implementation uses partitions to group parts into a set that can be read sequentially.
 // This is to avoid Window's memory pressure when calling SetFilePointer numerous times on the same handle
-func (f *MultiFilePipeline) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
+func (f *FileSystemSource) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
 	numOfBlocks = f.totalNumberOfBlocks
 	size = f.totalSize
 	allPartitions := make([][]pipeline.PartsPartition, len(f.filesInfo))

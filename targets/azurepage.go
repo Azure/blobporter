@@ -14,13 +14,13 @@ import (
 ///// AzurePage Target
 ////////////////////////////////////////////////////////////
 
-//AzurePage represents an Azure Block target
-type AzurePage struct {
+//AzurePageTarget represents an Azure Block target
+type AzurePageTarget struct {
 	azUtil *util.AzUtil
 }
 
-//NewAzurePagePipeline creates a new Azure Block target
-func NewAzurePagePipeline(params AzureTargetParams) pipeline.TargetPipeline {
+//NewAzurePageTargetPipeline creates a new Azure Block target
+func NewAzurePageTargetPipeline(params AzureTargetParams) pipeline.TargetPipeline {
 	az, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
 
 	if err != nil {
@@ -37,7 +37,7 @@ func NewAzurePagePipeline(params AzureTargetParams) pipeline.TargetPipeline {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &AzurePage{azUtil: az}
+	return &AzurePageTarget{azUtil: az}
 }
 
 //Page blobs limits and units
@@ -49,7 +49,7 @@ const maxPageBlobSize uint64 = 8 * util.TB
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //initializes the page blob.
-func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
+func (t *AzurePageTarget) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
 	size := source.Size
 
 	if size%PageSize != 0 {
@@ -70,7 +70,7 @@ func (t *AzurePage) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize 
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //Passthrough no need to a commit for page blob.
-func (t *AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, NumberOfBlocks int, targetName string) (msg string, err error) {
+func (t *AzurePageTarget) CommitList(listInfo *pipeline.TargetCommittedListInfo, NumberOfBlocks int, targetName string) (msg string, err error) {
 	msg = "Page blob committed"
 	err = nil
 	return
@@ -78,7 +78,7 @@ func (t *AzurePage) CommitList(listInfo *pipeline.TargetCommittedListInfo, Numbe
 
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Passthrough no need to process a written part when transferring to a page blob.
-func (t *AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
+func (t *AzurePageTarget) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	err = nil
 	return
@@ -87,7 +87,7 @@ func (t *AzurePage) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *
 //WritePart implements WritePart from the pipeline.TargetPipeline interface.
 //Performs a PUT page operation with the data contained in the part.
 //This assumes the part.BytesToRead is a multiple of the PageSize
-func (t *AzurePage) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+func (t *AzurePageTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	start := int32(part.Offset)
 	end := int32(part.Offset + uint64(part.BytesToRead) - 1)
 	defer util.PrintfIfDebug("WritePart -> start:%v end:%v name:%v err:%v", start, end, part.TargetAlias, err)

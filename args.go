@@ -205,8 +205,7 @@ func (p *paramParserValidator) getTargetRules() ([]parseAndValidationRule, error
 			p.pvBlockSizeCheckForBlockBlobs,
 			p.pvTargetBlobAuthInfoIsReq}, nil
 	case transfer.Perf:
-		return []parseAndValidationRule{
-			p.pvPerfSourceIsReq}, nil
+		return []parseAndValidationRule{}, nil
 	}
 
 	return nil, fmt.Errorf("Invalid target segment type: %v ", p.targetSegment)

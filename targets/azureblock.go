@@ -14,14 +14,14 @@ import (
 ///// AzureBlock Target
 ////////////////////////////////////////////////////////////
 
-//AzureBlock represents an Azure Block target
-type AzureBlock struct {
+//AzureBlockTarget represents an Azure Block target
+type AzureBlockTarget struct {
 	container string
 	azutil    *util.AzUtil
 }
 
-//NewAzureBlockPipeline TODO
-func NewAzureBlockPipeline(params AzureTargetParams) pipeline.TargetPipeline {
+//NewAzureBlockTargetPipeline TODO
+func NewAzureBlockTargetPipeline(params AzureTargetParams) pipeline.TargetPipeline {
 
 	azutil, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
 
@@ -40,12 +40,12 @@ func NewAzureBlockPipeline(params AzureTargetParams) pipeline.TargetPipeline {
 		log.Fatal(err)
 	}
 
-	return &AzureBlock{azutil: azutil, container: params.Container}
+	return &AzureBlockTarget{azutil: azutil, container: params.Container}
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
 //Commits the list of blocks to Azure Storage to finalize the transfer.
-func (t *AzureBlock) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
+func (t *AzureBlockTarget) CommitList(listInfo *pipeline.TargetCommittedListInfo, numberOfBlocks int, targetName string) (msg string, err error) {
 	startTime := time.Now()
 
 	//Only commit if the number blocks is greater than one.
@@ -80,7 +80,7 @@ func convertToBase64EncodedList(list interface{}, numOfBlocks int) []string {
 
 //PreProcessSourceInfo implementation of PreProcessSourceInfo from the pipeline.TargetPipeline interface.
 //Checks if uncommitted blocks are present and cleans them by creating an empty blob.
-func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
+func (t *AzureBlockTarget) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize uint64) (err error) {
 	numOfBlocks := int(source.Size+(blockSize-1)) / int(blockSize)
 
 	if numOfBlocks > util.MaxBlockCount { // more than 50,000 blocks needed, so can't work
@@ -94,7 +94,7 @@ func (t *AzureBlock) PreProcessSourceInfo(source *pipeline.SourceInfo, blockSize
 //ProcessWrittenPart implements ProcessWrittenPart from the pipeline.TargetPipeline interface.
 //Appends the written part to a list. If the part is duplicated the list is updated with a reference, to the first occurrence of the block.
 //If the first occurrence has not yet being processed, the part is requested to be placed back in the results channel (requeue == true).
-func (t *AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
+func (t *AzureBlockTarget) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo *pipeline.TargetCommittedListInfo) (requeue bool, err error) {
 	requeue = false
 	blockList := convertToBase64EncodedList((*listInfo).List, result.NumberOfBlocks)
 
@@ -116,7 +116,7 @@ func (t *AzureBlock) ProcessWrittenPart(result *pipeline.WorkerResult, listInfo 
 
 //WritePart implements WritePart from the pipeline.TargetPipeline interface.
 //Performs a PUT block operation with the data contained in the part.
-func (t *AzureBlock) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
+func (t *AzureBlockTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	startTime = time.Now()
 	defer func() { duration = time.Now().Sub(startTime) }()
 	util.PrintfIfDebug("WritePart -> blockid:%v read:%v name:%v err:%v", part.BlockID, len(part.Data), part.TargetAlias, err)

@@ -44,7 +44,7 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 
 	var sourceFile = createPageFile("tb", 1)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -52,14 +52,14 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container,
 		BaseBlobURL: targetBaseBlobURL}
 
-	ap := targets.NewAzurePagePipeline(tparams)
+	ap := targets.NewAzurePageTargetPipeline(tparams)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -72,8 +72,8 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 		Container:   containerHTTP,
 		BaseBlobURL: targetBaseBlobURL}
 
-	ap = targets.NewAzurePagePipeline(tparams)
-	fp = sources.NewHTTP([]string{sourceURI}, []string{sourceFile}, true)
+	ap = targets.NewAzurePageTargetPipeline(tparams)
+	fp = sources.NewHTTPSourcePipeline([]string{sourceURI}, []string{sourceFile}, true)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -85,7 +85,7 @@ func TestFileToPage(t *testing.T) {
 	var sourceFile = createPageFile("tb", 1)
 	container, _ := getContainers()
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -93,14 +93,14 @@ func TestFileToPage(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container,
 		BaseBlobURL: targetBaseBlobURL}
 
-	pt := targets.NewAzurePagePipeline(tparams)
+	pt := targets.NewAzurePageTargetPipeline(tparams)
 
 	tfer := NewTransfer(&fp, &pt, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -113,7 +113,7 @@ func TestFileToFile(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
 	var destFile = sourceFile + "d"
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -122,8 +122,8 @@ func TestFileToFile(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
-	ft := targets.NewMultiFile(true, numOfWorkers)
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	ft := targets.NewFileSystemTargetPipeline(true, numOfWorkers)
 
 	tfer := NewTransfer(&fp, &ft, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -138,7 +138,7 @@ func TestFileToBlob(t *testing.T) {
 	container, _ := getContainers()
 	var sourceFile = createFile("tb", 1)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -146,13 +146,13 @@ func TestFileToBlob(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -165,7 +165,7 @@ func TestFileToBlobToBlock(t *testing.T) {
 	container, _ := getContainers()
 	var sourceFile = createFile("tb", 1)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -173,13 +173,13 @@ func TestFileToBlobToBlock(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -192,7 +192,7 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
 	bsize := uint64(16 * util.MiByte)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -200,13 +200,13 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, bsize)
 	tfer.StartTransfer(None, delegate)
@@ -222,7 +222,7 @@ func TestFilesToBlob(t *testing.T) {
 	var sf3 = createFile("tbm", 1)
 	var sf4 = createFile("tbm", 1)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{tempDir + "/tbm*"},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -230,14 +230,14 @@ func TestFilesToBlob(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container,
 		BaseBlobURL: ""}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -254,7 +254,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 
 	var sourceFile = createFile("tb", 1)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -262,7 +262,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
@@ -270,7 +270,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 		Container:   container,
 		BaseBlobURL: ""}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -285,9 +285,9 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 		Container:   containerHTTP,
 		BaseBlobURL: ""}
 
-	ap = targets.NewAzureBlockPipeline(tparams)
+	ap = targets.NewAzureBlockTargetPipeline(tparams)
 
-	fp = sources.NewHTTP([]string{sourceURI}, []string{sourceFile}, true)
+	fp = sources.NewHTTPSourcePipeline([]string{sourceURI}, []string{sourceFile}, true)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -298,7 +298,7 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 	container, _ := getContainers()
 	var sourceFile = createFile("tb", 1)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -306,14 +306,14 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container,
 		BaseBlobURL: ""}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
@@ -323,8 +323,8 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	sourceFiles[0] = sourceFile + "d"
-	ap = targets.NewMultiFile(true, numOfWorkers)
-	fp = sources.NewHTTP([]string{sourceURI}, sourceFiles, true)
+	ap = targets.NewFileSystemTargetPipeline(true, numOfWorkers)
+	fp = sources.NewHTTPSourcePipeline([]string{sourceURI}, sourceFiles, true)
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -337,7 +337,7 @@ func TestFileToBlobToFile(t *testing.T) {
 	container, _ := getContainers()
 	var sourceFile = createFile("tb", 1)
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		FilesPerPipeline: filesPerPipeline,
@@ -345,19 +345,19 @@ func TestFileToBlobToFile(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container,
 		BaseBlobURL: ""}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
-	ap = targets.NewMultiFile(true, numOfWorkers)
+	ap = targets.NewFileSystemTargetPipeline(true, numOfWorkers)
 	azureBlobParams := &sources.AzureBlobParams{
 		Container:   container,
 		BlobNames:   []string{sourceFile},
@@ -368,7 +368,7 @@ func TestFileToBlobToFile(t *testing.T) {
 			CalculateMD5:      true,
 			KeepDirStructure:  true,
 			UseExactNameMatch: false}}
-	fp = sources.NewAzureBlob(azureBlobParams)[0]
+	fp = sources.NewAzureBlobSourcePipeline(azureBlobParams)[0]
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -381,7 +381,7 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 	var sourceFile = createFile("tb", 1)
 	var alias = sourceFile + "alias"
 
-	sourceParams := &sources.MultiFileParams{
+	sourceParams := &sources.FileSystemSourceParams{
 		SourcePatterns:   []string{sourceFile},
 		BlockSize:        blockSize,
 		TargetAliases:    []string{alias},
@@ -390,20 +390,20 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewMultiFile(sourceParams)[0]
+	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
 		Container:   container,
 		BaseBlobURL: ""}
 
-	ap := targets.NewAzureBlockPipeline(tparams)
+	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
 
-	ap = targets.NewMultiFile(true, numOfWorkers)
+	ap = targets.NewFileSystemTargetPipeline(true, numOfWorkers)
 	azureBlobParams := &sources.AzureBlobParams{
 		Container:   container,
 		BlobNames:   []string{alias},
@@ -414,7 +414,7 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 			CalculateMD5:      true,
 			KeepDirStructure:  true,
 			UseExactNameMatch: true}}
-	fp = sources.NewAzureBlob(azureBlobParams)[0]
+	fp = sources.NewAzureBlobSourcePipeline(azureBlobParams)[0]
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()

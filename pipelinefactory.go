@@ -60,11 +60,11 @@ func (p *pipelinesFactory) newTargetPipeline() (pipeline.TargetPipeline, error) 
 	switch p.target {
 	case transfer.File:
 		params := params.(targets.FileTargetParams)
-		return targets.NewMultiFile(params.Overwrite, params.NumberOfHandlesPerFile), nil
+		return targets.NewFileSystemTargetPipeline(params.Overwrite, params.NumberOfHandlesPerFile), nil
 	case transfer.BlockBlob:
-		return targets.NewAzureBlockPipeline(params.(targets.AzureTargetParams)), nil
+		return targets.NewAzureBlockTargetPipeline(params.(targets.AzureTargetParams)), nil
 	case transfer.PageBlob:
-		return targets.NewAzurePagePipeline(params.(targets.AzureTargetParams)), nil
+		return targets.NewAzurePageTargetPipeline(params.(targets.AzureTargetParams)), nil
 	case transfer.Perf:
 		return targets.NewPerfTargetPipeline(), nil
 	}
@@ -82,17 +82,17 @@ func (p *pipelinesFactory) newSourcePipelines() ([]pipeline.SourcePipeline, erro
 
 	switch p.source {
 	case transfer.File:
-		params := params.(sources.MultiFileParams)
-		return sources.NewMultiFile(&params), nil
+		params := params.(sources.FileSystemSourceParams)
+		return sources.NewFileSystemSourcePipeline(&params), nil
 	case transfer.HTTP:
 		params := params.(sources.HTTPSourceParams)
-		return []pipeline.SourcePipeline{sources.NewHTTP(params.SourceURIs, params.TargetAliases, params.SourceParams.CalculateMD5)}, nil
+		return []pipeline.SourcePipeline{sources.NewHTTPSourcePipeline(params.SourceURIs, params.TargetAliases, params.SourceParams.CalculateMD5)}, nil
 	case transfer.S3:
 		params := params.(sources.S3Params)
-		return sources.NewS3Pipeline(&params), nil
+		return sources.NewS3SourcePipeline(&params), nil
 	case transfer.Blob:
 		params := params.(sources.AzureBlobParams)
-		return sources.NewAzureBlob(&params), nil
+		return sources.NewAzureBlobSourcePipeline(&params), nil
 	case transfer.Perf:
 		return sources.NewPerfSourcePipeline(params.(sources.PerfSourceParams)), nil
 	}
@@ -103,7 +103,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 
 	switch p.source {
 	case transfer.File:
-		return sources.MultiFileParams{
+		return sources.FileSystemSourceParams{
 			SourcePatterns:   p.valParams.sourceURIs,
 			BlockSize:        p.valParams.blockSize,
 			TargetAliases:    p.valParams.targetAliases,
