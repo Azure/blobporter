@@ -105,7 +105,7 @@ const (
 	NA                        = "na"
 )
 
-//ParseTransferSegment
+//ParseTransferSegment TODO
 func ParseTransferSegment(def Definition) (TransferSegment, TransferSegment) {
 	//defstr := string(def)
 

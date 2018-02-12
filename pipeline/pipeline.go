@@ -183,7 +183,7 @@ func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64
 		partition.Parts = parts
 		partition.NumOfParts = numOfPartsInPartition
 		Partitions[p] = partition
-	  	bytesLeft = bytesLeft - int64(partitionSize)
+		bytesLeft = bytesLeft - int64(partitionSize)
 	}
 
 	return Partitions

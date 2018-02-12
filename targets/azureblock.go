@@ -50,7 +50,7 @@ func (t *AzureBlockTarget) CommitList(listInfo *pipeline.TargetCommittedListInfo
 
 	//Only commit if the number blocks is greater than one.
 	if numberOfBlocks == 1 {
-		msg = fmt.Sprintf("\rFile:%v, The blob is already comitted.",
+		msg = fmt.Sprintf("\rFile:%v, The blob is already committed.",
 			targetName)
 		err = nil
 		return

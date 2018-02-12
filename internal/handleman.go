@@ -8,11 +8,11 @@ import (
 )
 
 //There're two components here: poolHandle and the handle factory.
-//A pool is an asynchronous request/respone worker that runs on a single go-routine and keeps file handles for each file.
+//A pool is an asynchronous request/response worker that runs on a single go-routine and keeps file handles for each file.
 //The number of file handles is constraint by the max number of handlers in cache (maxFileHandlesInCache) and the max number of handles per file (numOfHandlesPerFile).
 //When the max number handles is reached file handles will be closed until space is available. The handle factory opens the file handles and initializes the
 //target file in case the folder structure and file need to be created. Since the factory tracks if a file has been initailized
-//, i.e. created or truncated at the begining of the transfer, only one instance of the factory is created.
+//, i.e. created or truncated at the beginning of the transfer, only one instance of the factory is created.
 
 const maxFileHandlesInCache int = 600
 
