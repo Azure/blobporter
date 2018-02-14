@@ -223,7 +223,7 @@ func (p *AzUtil) CreatePageBlob(blobName string, size uint64) error {
 }
 
 //PutPages TODO
-func (p *AzUtil) PutPages(blobName string, start int32, end int32, body io.ReadSeeker) error {
+func (p *AzUtil) PutPages(blobName string, start int64, end int64, body io.ReadSeeker) error {
 	pburl := p.containerURL.NewPageBlobURL(blobName)
 	pageRange := azblob.PageRange{
 		Start: start,

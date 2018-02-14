@@ -2498,8 +2498,8 @@ func (pl PageList) Version() string {
 
 // PageRange ...
 type PageRange struct {
-	Start int32 `xml:"Start"`
-	End   int32 `xml:"End"`
+	Start int64 `xml:"Start"`
+	End   int64 `xml:"End"`
 }
 
 // RetentionPolicy - the retention policy
