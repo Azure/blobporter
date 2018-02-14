@@ -88,8 +88,9 @@ func (t *AzurePageTarget) ProcessWrittenPart(result *pipeline.WorkerResult, list
 //Performs a PUT page operation with the data contained in the part.
 //This assumes the part.BytesToRead is a multiple of the PageSize
 func (t *AzurePageTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
-	start := int32(part.Offset)
-	end := int32(part.Offset + uint64(part.BytesToRead) - 1)
+	
+	start := int64(part.Offset)
+	end := int64(part.Offset + uint64(part.BytesToRead) - 1)
 	defer util.PrintfIfDebug("WritePart -> start:%v end:%v name:%v err:%v", start, end, part.TargetAlias, err)
 
 	err = t.azUtil.PutPages(part.TargetAlias, start, end, bytes.NewReader(part.Data))

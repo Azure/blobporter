@@ -15,7 +15,7 @@ import (
 	"github.com/Azure/blobporter/util"
 )
 
-const programVersion = "0.6.06"
+const programVersion = "0.6.07"
 
 var argsUtil paramParserValidator
 
