@@ -29,7 +29,7 @@ Sources and targets are decoupled, this design enables the composition of variou
 Download, extract and set permissions:
 
 ```bash
-wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.6.07/bp_linux.tar.gz
+wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.6.09/bp_linux.tar.gz
 tar -xvf bp_linux.tar.gz linux_amd64/blobporter
 chmod +x ~/linux_amd64/blobporter
 cd ~/linux_amd64
@@ -46,7 +46,7 @@ export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
 ### Windows
 
-Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.6.07/bp_windows.zip)
+Download [BlobPorter.exe](https://github.com/Azure/blobporter/releases/download/v0.6.09/bp_windows.zip)
 
 Set environment variables (if using the command prompt):
 
@@ -207,6 +207,8 @@ By default files are downloaded to the same directory where you are running blob
 - `h`, `--handles_per_file` *int* number of open handles for concurrent reads and writes per file. Default is 2.
 
 - `i`, `--remove_directories` *bool* if set blobs are downloaded or uploaded without keeping the directory structure of the source. Not applicable when the source is a HTTP endpoint.
+
+- `o`, `--read_token_exp` *int* Expiration in minutes of the read-only access token that will be generated to read from S3 or Azure Blob sources. Default value: 360.
 
 ## Performance Considerations
 

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -190,8 +191,7 @@ func (f *HTTPSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, par
 
 			header := fmt.Sprintf("bytes=%v-%v", p.Offset, p.Offset-1+uint64(p.BytesToRead))
 			req.Header.Set("Range", header)
-			userAgent, _ := util.GetUserAgentInfo()
-			req.Header.Set("User-Agent", userAgent)
+			req.Header.Set("User-Agent", internal.UserAgentStr)
 
 			//set the close header only when the block is larger than the blob
 			//to minimize the number of open when transferring small files.
@@ -278,7 +278,7 @@ var httpSourceHTTPClient = newSourceHTTPClient()
 
 func newSourceHTTPClient() *http.Client {
 	return &http.Client{
-		Timeout: time.Duration(util.HTTPClientTimeout) * time.Second,
+		Timeout: time.Duration(internal.HTTPClientTimeout) * time.Second,
 		Transport: &http.Transport{
 			Dial: (&net.Dialer{
 				Timeout:   30 * time.Second, // dial timeout

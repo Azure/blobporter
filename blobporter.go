@@ -13,21 +13,18 @@ import (
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
+	"github.com/Azure/blobporter/internal"
 )
 
-const programVersion = "0.6.07"
 
 var argsUtil paramParserValidator
 
 func init() {
 
 	//Show blobporter banner
-	fmt.Printf("BlobPorter \nCopyright (c) Microsoft Corporation. \nVersion: %v\n---------------\n", programVersion)
+	fmt.Printf("BlobPorter \nCopyright (c) Microsoft Corporation. \nVersion: %v\n---------------\n", internal.ProgramVersion)
 
 	argsUtil = newParamParserValidator()
-
-	// set user agent info
-	util.SetUserAgentInfo(programVersion)
 
 	const (
 		fileMsg                    = "Source URL, file or files (e.g. /data/*.gz) to upload."
@@ -48,6 +45,7 @@ func init() {
 		removeDirStructureMsg      = "If set the directory structure from the source is not kept.\n\tNot applicable when the source is a HTTP endpoint."
 		numberOfHandlersPerFileMsg = "Number of open handles for concurrent reads and writes per file."
 		numberOfFilesInBatchMsg    = "Maximum number of files in a transfer.\n\tIf the number is exceeded new transfers are created"
+		readTokenExpMsg            = "Expiration in minutes of the read-only access token that will be generated to read from S3 or Azure Blob sources."
 	)
 
 	flag.Usage = func() {
@@ -69,7 +67,7 @@ func init() {
 		util.PrintUsageDefaults("i", "remove_directories", "false", removeDirStructureMsg)
 		util.PrintUsageDefaults("h", "handles_per_file", strconv.Itoa(argsUtil.args.numberOfHandlesPerFile), numberOfHandlersPerFileMsg)
 		util.PrintUsageDefaults("x", "files_per_transfer", strconv.Itoa(argsUtil.args.numberOfFilesInBatch), numberOfFilesInBatchMsg)
-
+		util.PrintUsageDefaults("o", "read_token_exp", strconv.Itoa(defaultReadTokenExp), readTokenExpMsg)
 	}
 
 	util.StringListVarAlias(&argsUtil.args.sourceURIs, "f", "source_file", "", fileMsg)
@@ -90,6 +88,8 @@ func init() {
 	util.BoolVarAlias(&argsUtil.args.removeDirStructure, "i", "remove_directories", false, removeDirStructureMsg)
 	util.IntVarAlias(&argsUtil.args.numberOfHandlesPerFile, "h", "handles_per_file", defaultNumberOfHandlesPerFile, numberOfHandlersPerFileMsg)
 	util.IntVarAlias(&argsUtil.args.numberOfFilesInBatch, "x", "files_per_transfer", defaultNumberOfFilesInBatch, numberOfFilesInBatchMsg)
+	util.IntVarAlias(&argsUtil.args.readTokenExp, "o", "read_token_exp", defaultReadTokenExp, readTokenExpMsg)
+
 }
 
 var dataTransferred uint64

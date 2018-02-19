@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -16,12 +17,12 @@ import (
 
 //AzurePageTarget represents an Azure Block target
 type AzurePageTarget struct {
-	azUtil *util.AzUtil
+	azUtil *internal.AzUtil
 }
 
 //NewAzurePageTargetPipeline creates a new Azure Block target
 func NewAzurePageTargetPipeline(params AzureTargetParams) pipeline.TargetPipeline {
-	az, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
+	az, err := internal.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
 
 	if err != nil {
 		log.Fatal(err)
@@ -88,7 +89,7 @@ func (t *AzurePageTarget) ProcessWrittenPart(result *pipeline.WorkerResult, list
 //Performs a PUT page operation with the data contained in the part.
 //This assumes the part.BytesToRead is a multiple of the PageSize
 func (t *AzurePageTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
-	
+
 	start := int64(part.Offset)
 	end := int64(part.Offset + uint64(part.BytesToRead) - 1)
 	defer util.PrintfIfDebug("WritePart -> start:%v end:%v name:%v err:%v", start, end, part.TargetAlias, err)

@@ -138,6 +138,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 			AccountName: p.valParams.blobSource.accountName,
 			AccountKey:  p.valParams.blobSource.accountKey,
 			BaseBlobURL: p.valParams.blobSource.baseBlobURL,
+			SasExp:      p.valParams.blobSource.sasExpMin,
 			SourceParams: sources.SourceParams{
 				CalculateMD5:      p.valParams.calculateMD5,
 				UseExactNameMatch: p.valParams.useExactMatch,

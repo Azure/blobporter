@@ -9,6 +9,7 @@ _test
 _build/linux_amd64
 _build/windows_amd64
 _wd
+_old
 .vscode
 
 # Architecture specific extensions/prefixes

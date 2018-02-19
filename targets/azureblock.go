@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/util"
 )
@@ -17,13 +18,13 @@ import (
 //AzureBlockTarget represents an Azure Block target
 type AzureBlockTarget struct {
 	container string
-	azutil    *util.AzUtil
+	azutil    *internal.AzUtil
 }
 
 //NewAzureBlockTargetPipeline TODO
 func NewAzureBlockTargetPipeline(params AzureTargetParams) pipeline.TargetPipeline {
 
-	azutil, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
+	azutil, err := internal.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
 
 	if err != nil {
 		log.Fatal(err)
