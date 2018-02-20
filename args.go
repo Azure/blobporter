@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/sources"
 	"github.com/Azure/blobporter/targets"
 	"github.com/Azure/blobporter/transfer"
@@ -31,9 +32,10 @@ const numOfWorkersFactor = 8
 const numOfReadersFactor = 5
 const defaultNumberOfFilesInBatch = 500
 const defaultNumberOfHandlesPerFile = 2
-const defaultHTTPClientTimeout = 30
+const defaultHTTPClientTimeout = 60
 const defaultBlockSizeStr = "8MB"
 const defaultDedupeLevelStr = "None"
+const defaultReadTokenExp = 360
 
 //sets the parameters by parsing and validating the arguments
 type paramParserValidator struct {
@@ -67,6 +69,7 @@ type arguments struct {
 	exactNameMatch           bool
 	removeDirStructure       bool
 	hTTPClientTimeout        int
+	readTokenExp             int
 	numberOfHandlesPerFile   int //numberOfHandlesPerFile = defaultNumberOfHandlesPerFile
 	numberOfFilesInBatch     int //numberOfFilesInBatch = defaultNumberOfFilesInBatch
 }
@@ -109,6 +112,7 @@ type blobParams struct {
 	container   string
 	prefixes    []string
 	baseBlobURL string
+	sasExpMin   int
 }
 
 func (b blobParams) isSourceAuthAndContainerInfoSet() bool {
@@ -134,14 +138,16 @@ func newParamParserValidator() paramParserValidator {
 		numberOfWorkers:        defaultNumberOfWorkers,
 		blockSizeStr:           defaultBlockSizeStr,
 		dedupeLevelOptStr:      defaultDedupeLevelStr,
+		readTokenExp:           defaultReadTokenExp,
 		transferDefStr:         string(transfer.FileToBlock),
 		numberOfHandlesPerFile: defaultNumberOfHandlesPerFile,
 		hTTPClientTimeout:      defaultHTTPClientTimeout,
 		numberOfFilesInBatch:   defaultNumberOfFilesInBatch}
 	params := &validatedParameters{
 		s3Source: s3Source{
-			preSignedExpMin: defaulPreSignedExpMins},
-		blobSource: blobParams{},
+			preSignedExpMin: defaultReadTokenExp},
+		blobSource: blobParams{
+			sasExpMin: defaultReadTokenExp},
 		blobTarget: blobParams{}}
 
 	p := paramParserValidator{args: args, params: params}
@@ -256,6 +262,7 @@ func (p *paramParserValidator) pvgQuietMode() error {
 	p.params.quietMode = p.args.quietMode
 	return nil
 }
+
 func (p *paramParserValidator) pvgCalculateReadersAndWorkers() error {
 
 	if p.args.numberOfWorkers <= 0 {
@@ -289,10 +296,10 @@ func (p *paramParserValidator) pvgBatchLimits() error {
 }
 func (p *paramParserValidator) pvgHTTPTimeOut() error {
 	if p.args.hTTPClientTimeout < defaultHTTPClientTimeout {
-		fmt.Printf("Warning! The storage HTTP client timeout is too low (<30). Setting value to default (%v)s \n", defaultHTTPClientTimeout)
+		fmt.Printf("Warning! The HTTP timeout is too low (<30). Setting value to default (%v)s \n", defaultHTTPClientTimeout)
 		p.args.hTTPClientTimeout = defaultHTTPClientTimeout
 	}
-	util.HTTPClientTimeout = p.args.hTTPClientTimeout
+	internal.HTTPClientTimeout = p.args.hTTPClientTimeout
 	return nil
 }
 func (p *paramParserValidator) pvgDupCheck() error {
@@ -431,6 +438,12 @@ func (p *paramParserValidator) pvSourceInfoForBlobIsReq() error {
 
 		p.params.blobSource.prefixes = p.args.blobNames
 
+		if p.args.readTokenExp < 1 {
+			return fmt.Errorf("Invalid read token expiration value. Minimum is 1 (1m)")
+		}
+
+		p.params.blobSource.sasExpMin = p.args.readTokenExp
+
 		if p.params.blobSource.isSourceAuthAndContainerInfoSet() {
 			return nil
 		}
@@ -477,6 +490,12 @@ func (p *paramParserValidator) pvSourceInfoForBlobIsReq() error {
 		return fmt.Errorf("The source storage acccount key (env variable: %v) is required for this transfer type", sourceAuthorizationEnvVar)
 	}
 
+	if p.args.readTokenExp < 1 {
+		return fmt.Errorf("Invalid read token expiration value. Minimum is 1 (1m)")
+	}
+
+	p.params.blobSource.sasExpMin = p.args.readTokenExp
+
 	return nil
 }
 
@@ -518,6 +537,12 @@ func (p *paramParserValidator) pvSourceInfoForS3IsReq() error {
 	if p.params.s3Source.secretKey == "" {
 		return fmt.Errorf("The S3 secret key is required for this transfer type. Environment variable name:%v", s3SecretKeyEnvVar)
 	}
+
+	if p.args.readTokenExp < 1 {
+		return fmt.Errorf("Invalid read token expiration value. Minimum is 1 (1m)")
+	}
+
+	p.params.s3Source.preSignedExpMin = p.args.readTokenExp
 
 	return nil
 }

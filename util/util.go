@@ -6,12 +6,10 @@ import (
 	"log"
 	"os"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
-	"net/http"
 	"net/url"
 )
 
@@ -244,40 +242,6 @@ func isValidContainerName(name string) bool {
 	return resp
 }
 
-var storageHTTPClient *http.Client
-
-//HTTPClientTimeout HTTP timeout of the HTTP client used by the storage client.
-var HTTPClientTimeout = 60
-
-/*
-const (
-	maxIdleConns        = 50
-	maxIdleConnsPerHost = 50
-)
-
-var c *http.Client
-var mtx sync.Mutex
-
-//NewHTTPClient  creates a shared HTTP client with the configured timeout and MaxIdleConnsPerHost = 50, keep alive dialer.
-func NewHTTPClient() *http.Client {
-	mtx.Lock()
-	defer mtx.Unlock()
-
-	if c == nil {
-		c = &http.Client{
-			Timeout: time.Duration(HTTPClientTimeout) * time.Second,
-			Transport: &http.Transport{
-				Dial: (&net.Dialer{
-					Timeout:   30 * time.Second, // dial timeout
-					KeepAlive: 30 * time.Second,
-				}).Dial,
-				MaxIdleConns:        maxIdleConns,
-				MaxIdleConnsPerHost: maxIdleConnsPerHost}}
-	}
-	return c
-}
-*/
-
 func handleExceededRetries(err error) {
 	errMsg := fmt.Sprintf("The number of retries has exceeded the maximum allowed.\nError: %v\nSuggestion:%v\n", err.Error(), getSuggestion(err))
 	log.Fatal(errMsg)
@@ -319,22 +283,4 @@ func GetFileNameFromURL(sourceURI string) (string, error) {
 	}
 
 	return parts[len(parts)-1], nil
-}
-
-//UserAgent TODO
-var userAgent string
-
-//GetUserAgentInfo TODO
-func GetUserAgentInfo() (string, error) {
-	if userAgent == "" {
-		return "", fmt.Errorf("User agent is not set")
-	}
-
-	return userAgent, nil
-
-}
-
-//SetUserAgentInfo TODO
-func SetUserAgentInfo(programVersion string) {
-	userAgent = fmt.Sprintf("%s/%s/%s", "BlobPorter", programVersion, runtime.GOARCH)
 }

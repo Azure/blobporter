@@ -7,30 +7,30 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
-	"github.com/Azure/blobporter/util"
 )
 
 //AzureBlobParams parameters for the creation of Azure Blob source pipeline
 type AzureBlobParams struct {
 	SourceParams
-	Container           string
-	BlobNames           []string
-	AccountName         string
-	AccountKey          string
-	SasExpNumberOfHours int
-	BaseBlobURL         string
+	Container   string
+	BlobNames   []string
+	AccountName string
+	AccountKey  string
+	SasExp      int
+	BaseBlobURL string
 }
 
 const defaultSasExpHours = 2
 
 type azBlobInfoProvider struct {
 	params *AzureBlobParams
-	azUtil *util.AzUtil
+	azUtil *internal.AzUtil
 }
 
 func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
-	azutil, err := util.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
+	azutil, err := internal.NewAzUtil(params.AccountName, params.AccountKey, params.Container, params.BaseBlobURL)
 
 	if err != nil {
 		log.Fatal(err)
@@ -44,11 +44,11 @@ func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
 // performed instead of the prefix. Marker semantics are also honored so a complete list is expected
 func (b *azBlobInfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
 	var err error
-	exp := b.params.SasExpNumberOfHours
+	exp := b.params.SasExp
 	if exp == 0 {
 		exp = defaultSasExpHours
 	}
-	date := time.Now().Add(time.Duration(exp) * time.Hour).UTC()
+	date := time.Now().Add(time.Duration(exp) * time.Minute).UTC()
 	sourceURIs := make([]pipeline.SourceInfo, 0)
 
 	blobCallback := func(blob *azblob.Blob, prefix string) (bool, error) {
