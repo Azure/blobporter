@@ -52,7 +52,9 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
+
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -73,7 +75,15 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 		BaseBlobURL: targetBaseBlobURL}
 
 	ap = targets.NewAzurePageTargetPipeline(tparams)
-	fp = sources.NewHTTPSourcePipeline([]string{sourceURI}, []string{sourceFile}, true)
+	
+	httpparams := sources.HTTPSourceParams{SourceParams: sources.SourceParams{
+		CalculateMD5: true},
+		SourceURIs:[]string{sourceURI},
+		TargetAliases:[]string{sourceFile},
+	}
+
+	fpf = <- sources.NewHTTPSourcePipelineFactory(httpparams)
+	fp = fpf.Source
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -93,7 +103,8 @@ func TestFileToPage(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -122,7 +133,8 @@ func TestFileToFile(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	ft := targets.NewFileSystemTargetPipeline(true, numOfWorkers)
 
 	tfer := NewTransfer(&fp, &ft, numOfReaders, numOfWorkers, blockSize)
@@ -146,7 +158,8 @@ func TestFileToBlob(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -173,7 +186,8 @@ func TestFileToBlobToBlock(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -200,7 +214,8 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -229,8 +244,8 @@ func TestFilesToBlob(t *testing.T) {
 		NumOfPartitions:  numOfReaders,
 		KeepDirStructure: true,
 		MD5:              true}
-
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -262,7 +277,8 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
@@ -287,7 +303,14 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 
 	ap = targets.NewAzureBlockTargetPipeline(tparams)
 
-	fp = sources.NewHTTPSourcePipeline([]string{sourceURI}, []string{sourceFile}, true)
+	httpparams := sources.HTTPSourceParams{SourceParams: sources.SourceParams{
+		CalculateMD5: true},
+		SourceURIs:[]string{sourceURI},
+		TargetAliases:[]string{sourceFile},
+	}
+
+	fpf = <- sources.NewHTTPSourcePipelineFactory(httpparams)
+	fp = fpf.Source
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -306,7 +329,8 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -324,7 +348,16 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 
 	sourceFiles[0] = sourceFile + "d"
 	ap = targets.NewFileSystemTargetPipeline(true, numOfWorkers)
-	fp = sources.NewHTTPSourcePipeline([]string{sourceURI}, sourceFiles, true)
+
+	
+	httpparams := sources.HTTPSourceParams{SourceParams: sources.SourceParams{
+		CalculateMD5: true},
+		SourceURIs:[]string{sourceURI},
+		TargetAliases:[]string{sourceFile},
+	}
+
+	fpf = <- sources.NewHTTPSourcePipelineFactory(httpparams)
+	fp = fpf.Source
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -345,7 +378,8 @@ func TestFileToBlobToFile(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -368,7 +402,9 @@ func TestFileToBlobToFile(t *testing.T) {
 			CalculateMD5:      true,
 			KeepDirStructure:  true,
 			UseExactNameMatch: false}}
-	fp = sources.NewAzureBlobSourcePipeline(azureBlobParams)[0]
+	
+	fpf = <-sources.NewAzBlobSourcePipelineFactory(azureBlobParams)
+	fp = fpf.Source
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()
@@ -390,7 +426,8 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 		KeepDirStructure: true,
 		MD5:              true}
 
-	fp := sources.NewFileSystemSourcePipeline(sourceParams)[0]
+	fpf := <-sources.NewFileSystemSourcePipelineFactory(sourceParams)
+	fp := fpf.Source
 	tparams := targets.AzureTargetParams{
 		AccountName: accountName,
 		AccountKey:  accountKey,
@@ -414,7 +451,8 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 			CalculateMD5:      true,
 			KeepDirStructure:  true,
 			UseExactNameMatch: true}}
-	fp = sources.NewAzureBlobSourcePipeline(azureBlobParams)[0]
+	fpf = <- sources.NewAzBlobSourcePipelineFactory(azureBlobParams) 
+	fp = fpf.Source
 	tfer = NewTransfer(&fp, &ap, numOfReaders, numOfWorkers, blockSize)
 	tfer.StartTransfer(None, delegate)
 	tfer.WaitForCompletion()

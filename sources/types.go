@@ -1,10 +1,9 @@
 package sources
 
-import "github.com/Azure/blobporter/pipeline"
 
-//objectListManager abstracs the oerations required to get a list of sources/objects from a underlying service such as Azure Object storage and S3
-type objectListManager interface {
-	getSourceInfo() ([]pipeline.SourceInfo, error)
+
+type objectListProvider interface {
+	listObjects(filter SourceFilter) <-chan ObjectListingResult
 }
 
 //SourceParams input base parameters for blob and S3 based pipelines

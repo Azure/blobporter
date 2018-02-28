@@ -9,11 +9,11 @@ import (
 	"github.com/Azure/blobporter/transfer"
 )
 
-func newTransferPipelines(params *validatedParameters) ([]pipeline.SourcePipeline, pipeline.TargetPipeline, error) {
+func newTransferPipelines(params *validatedParameters) (<-chan sources.FactoryResult, pipeline.TargetPipeline, error) {
 
 	fact := newPipelinesFactory(params)
 
-	var sourcesp []pipeline.SourcePipeline
+	var sourcesp <-chan sources.FactoryResult
 	var targetp pipeline.TargetPipeline
 	var err error
 
@@ -72,7 +72,7 @@ func (p *pipelinesFactory) newTargetPipeline() (pipeline.TargetPipeline, error) 
 	return nil, fmt.Errorf("Invalid target segment:%v", p.target)
 }
 
-func (p *pipelinesFactory) newSourcePipelines() ([]pipeline.SourcePipeline, error) {
+func (p *pipelinesFactory) newSourcePipelines() (<-chan sources.FactoryResult, error) {
 
 	params, err := p.newSourceParams()
 
@@ -83,18 +83,19 @@ func (p *pipelinesFactory) newSourcePipelines() ([]pipeline.SourcePipeline, erro
 	switch p.source {
 	case transfer.File:
 		params := params.(sources.FileSystemSourceParams)
-		return sources.NewFileSystemSourcePipeline(&params), nil
+		return sources.NewFileSystemSourcePipelineFactory(&params), nil
 	case transfer.HTTP:
 		params := params.(sources.HTTPSourceParams)
-		return []pipeline.SourcePipeline{sources.NewHTTPSourcePipeline(params.SourceURIs, params.TargetAliases, params.SourceParams.CalculateMD5)}, nil
+		return sources.NewHTTPSourcePipelineFactory(params), nil
 	case transfer.S3:
 		params := params.(sources.S3Params)
-		return sources.NewS3SourcePipeline(&params), nil
+		return sources.NewS3SourcePipelineFactory(&params), nil
 	case transfer.Blob:
 		params := params.(sources.AzureBlobParams)
-		return sources.NewAzureBlobSourcePipeline(&params), nil
+		return sources.NewAzBlobSourcePipelineFactory(&params), nil
 	case transfer.Perf:
-		return sources.NewPerfSourcePipeline(params.(sources.PerfSourceParams)), nil
+		params := params.(sources.PerfSourceParams)
+		return sources.NewPerfSourcePipelineFactory(params), nil
 	}
 
 	return nil, fmt.Errorf("Invalid source segment:%v", p.source)

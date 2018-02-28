@@ -50,10 +50,10 @@ type FileSystemSourceParams struct {
 	KeepDirStructure bool
 }
 
-// NewFileSystemSourcePipeline creates a new MultiFilePipeline.
+// newFileSystemSourcePipeline creates a new MultiFilePipeline.
 // If the sourcePattern results in a single file and the targetAlias is set, the alias will be used as the target name.
 // Otherwise the original file name will be used.
-func NewFileSystemSourcePipeline(params *FileSystemSourceParams) []pipeline.SourcePipeline {
+func newFileSystemSourcePipeline(params *FileSystemSourceParams) []pipeline.SourcePipeline {
 	var files []string
 	var err error
 	//get files from patterns

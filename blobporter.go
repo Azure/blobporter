@@ -10,12 +10,11 @@ import (
 	"strconv"
 	"sync/atomic"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/transfer"
 	"github.com/Azure/blobporter/util"
-	"github.com/Azure/blobporter/internal"
 )
-
 
 var argsUtil paramParserValidator
 
@@ -95,33 +94,29 @@ func init() {
 var dataTransferred uint64
 var targetRetries int32
 
-func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo, numOfBatches int, batchNumber int) {
-	if numOfBatches == 1 {
-		fmt.Printf("Files to Transfer (%v) :\n", argsUtil.params.transferType)
-		var totalSize uint64
-		summary := ""
+func displayFilesToTransfer(sourcesInfo []pipeline.SourceInfo) {
+	fmt.Printf("\nFiles to Transfer (%v) :\n", argsUtil.params.transferType)
+	var totalSize uint64
+	summary := ""
 
-		for _, source := range sourcesInfo {
-			//if the source is URL, remove the QS
-			display := source.SourceName
-			if u, err := url.Parse(source.SourceName); err == nil {
-				display = fmt.Sprintf("%v%v", u.Hostname(), u.Path)
-			}
-			summary = summary + fmt.Sprintf("Source: %v Size:%v \n", display, source.Size)
-			totalSize = totalSize + source.Size
+	for _, source := range sourcesInfo {
+		//if the source is URL, remove the QS
+		display := source.SourceName
+		if u, err := url.Parse(source.SourceName); err == nil {
+			display = fmt.Sprintf("%v%v", u.Hostname(), u.Path)
 		}
+		summary = summary + fmt.Sprintf("Source: %v Size:%v \n", display, source.Size)
+		totalSize = totalSize + source.Size
+	}
 
-		if len(sourcesInfo) < 10 {
-			fmt.Printf(summary)
-			return
-		}
-
-		fmt.Printf("%v files. Total size:%v\n", len(sourcesInfo), totalSize)
-
+	if len(sourcesInfo) < 10 {
+		fmt.Printf(summary)
 		return
 	}
 
-	fmt.Printf("\nBatch transfer (%v).\nFiles per Batch: %v.\nBatch: %v of %v\n ", argsUtil.params.transferType, len(sourcesInfo), batchNumber+1, numOfBatches)
+	fmt.Printf("%v files. Total size:%v\n", len(sourcesInfo), totalSize)
+
+	return
 }
 
 func main() {
@@ -141,12 +136,17 @@ func main() {
 
 	stats := transfer.NewStats(argsUtil.params.numberOfWorkers, argsUtil.params.numberOfReaders)
 
-	for b, sourcePipeline := range sourcePipelines {
-		sourcesInfo := sourcePipeline.GetSourcesInfo()
+	for sourcePipeline := range sourcePipelines {
 
-		tfer := transfer.NewTransfer(&sourcePipeline, &targetPipeline, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, argsUtil.params.blockSize)
+		if sourcePipeline.Err != nil {
+			log.Fatal(sourcePipeline.Err)
+		}
 
-		displayFilesToTransfer(sourcesInfo, len(sourcePipelines), b)
+		sourcesInfo := sourcePipeline.Source.GetSourcesInfo()
+
+		tfer := transfer.NewTransfer(&sourcePipeline.Source, &targetPipeline, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, argsUtil.params.blockSize)
+
+		displayFilesToTransfer(sourcesInfo)
 		pb := getProgressBarDelegate(tfer.TotalSize, argsUtil.params.quietMode)
 
 		tfer.StartTransfer(argsUtil.params.dedupeLevel, pb)

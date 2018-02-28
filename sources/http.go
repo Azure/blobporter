@@ -30,51 +30,10 @@ type HTTPSource struct {
 	includeMD5 bool
 }
 
-type sourceHTTPPipelineFactory func(httpSource HTTPSource) (pipeline.SourcePipeline, error)
 
-func newHTTPSource(sourceListManager objectListManager, pipelineFactory sourceHTTPPipelineFactory, numOfFilePerPipeline int, includeMD5 bool) ([]pipeline.SourcePipeline, error) {
-	var err error
-	var sourceInfos []pipeline.SourceInfo
-
-	if sourceInfos, err = sourceListManager.getSourceInfo(); err != nil {
-		return nil, err
-	}
-
-	if numOfFilePerPipeline <= 0 {
-		return nil, fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero")
-	}
-
-	numOfBatches := (len(sourceInfos) + numOfFilePerPipeline - 1) / numOfFilePerPipeline
-	pipelines := make([]pipeline.SourcePipeline, numOfBatches)
-	numOfFilesInBatch := numOfFilePerPipeline
-	filesSent := len(sourceInfos)
-	start := 0
-
-	for b := 0; b < numOfBatches; b++ {
-
-		start = b * numOfFilesInBatch
-
-		if filesSent < numOfFilesInBatch {
-			numOfFilesInBatch = filesSent
-		}
-
-		httpSource := HTTPSource{Sources: sourceInfos[start : start+numOfFilesInBatch], HTTPClient: httpSourceHTTPClient, includeMD5: includeMD5}
-
-		pipelines[b], err = pipelineFactory(httpSource)
-
-		if err != nil {
-			return nil, err
-		}
-
-		filesSent = filesSent - numOfFilesInBatch
-	}
-
-	return pipelines, err
-}
-
-//NewHTTPSourcePipeline creates a new instance of an HTTP source
+//newHTTPSourcePipeline creates a new instance of an HTTP source
 //To get the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
-func NewHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
+func newHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
 	setTargetAlias := len(sourceURIs) == len(targetAliases)
 	sources := make([]pipeline.SourceInfo, len(sourceURIs))
 	for i := 0; i < len(sourceURIs); i++ {
