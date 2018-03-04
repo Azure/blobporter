@@ -6,7 +6,7 @@ import (
 )
 
 //ProgramVersion blobporter version
-const ProgramVersion = "0.6.10"
+const ProgramVersion = "0.6.11"
 
 //HTTPClientTimeout  HTTP client timeout when reading from HTTP sources and try timeout for blob storage operations.
 var HTTPClientTimeout = 90

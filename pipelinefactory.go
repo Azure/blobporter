@@ -105,13 +105,16 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 	switch p.source {
 	case transfer.File:
 		return sources.FileSystemSourceParams{
-			SourcePatterns:   p.valParams.sourceURIs,
-			BlockSize:        p.valParams.blockSize,
-			TargetAliases:    p.valParams.targetAliases,
-			NumOfPartitions:  p.valParams.numberOfReaders, //TODO make this more explicit by numofpartitions as param..
-			MD5:              p.valParams.calculateMD5,
-			KeepDirStructure: p.valParams.keepDirStructure,
-			FilesPerPipeline: p.valParams.numberOfFilesInBatch}, nil
+			SourcePatterns:  p.valParams.sourceURIs,
+			BlockSize:       p.valParams.blockSize,
+			TargetAliases:   p.valParams.targetAliases,
+			NumOfPartitions: p.valParams.numberOfReaders, //TODO make this more explicit by numofpartitions as param..
+			SourceParams: sources.SourceParams{
+				Tracker:           p.valParams.tracker,
+				CalculateMD5:      p.valParams.calculateMD5,
+				UseExactNameMatch: p.valParams.useExactMatch,
+				FilesPerPipeline:  p.valParams.numberOfFilesInBatch,
+				KeepDirStructure:  p.valParams.keepDirStructure}}, nil
 	case transfer.HTTP:
 		return sources.HTTPSourceParams{
 			SourceURIs:    p.valParams.sourceURIs,
@@ -127,6 +130,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 			AccessKey:       p.valParams.s3Source.accessKey,
 			SecretKey:       p.valParams.s3Source.secretKey,
 			SourceParams: sources.SourceParams{
+				Tracker:           p.valParams.tracker,
 				CalculateMD5:      p.valParams.calculateMD5,
 				UseExactNameMatch: p.valParams.useExactMatch,
 				FilesPerPipeline:  p.valParams.numberOfFilesInBatch,
@@ -141,6 +145,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 			BaseBlobURL: p.valParams.blobSource.baseBlobURL,
 			SasExp:      p.valParams.blobSource.sasExpMin,
 			SourceParams: sources.SourceParams{
+				Tracker:           p.valParams.tracker,
 				CalculateMD5:      p.valParams.calculateMD5,
 				UseExactNameMatch: p.valParams.useExactMatch,
 				FilesPerPipeline:  p.valParams.numberOfFilesInBatch,

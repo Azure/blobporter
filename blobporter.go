@@ -45,6 +45,7 @@ func init() {
 		numberOfHandlersPerFileMsg = "Number of open handles for concurrent reads and writes per file."
 		numberOfFilesInBatchMsg    = "Maximum number of files in a transfer.\n\tIf the number is exceeded new transfers are created"
 		readTokenExpMsg            = "Expiration in minutes of the read-only access token that will be generated to read from S3 or Azure Blob sources."
+		transferStatusFileMsg      = "Transfer status file location. If set, blobporter will use this file to track the status of the transfer.\n\tIn case of failure and if the option is set the same status file, source files that were transferred will be skipped.\n\tIf the transfer is successful a summary will be created at then."
 	)
 
 	flag.Usage = func() {
@@ -67,6 +68,7 @@ func init() {
 		util.PrintUsageDefaults("h", "handles_per_file", strconv.Itoa(argsUtil.args.numberOfHandlesPerFile), numberOfHandlersPerFileMsg)
 		util.PrintUsageDefaults("x", "files_per_transfer", strconv.Itoa(argsUtil.args.numberOfFilesInBatch), numberOfFilesInBatchMsg)
 		util.PrintUsageDefaults("o", "read_token_exp", strconv.Itoa(defaultReadTokenExp), readTokenExpMsg)
+		util.PrintUsageDefaults("l", "transfer_status", "", transferStatusFileMsg)
 	}
 
 	util.StringListVarAlias(&argsUtil.args.sourceURIs, "f", "source_file", "", fileMsg)
@@ -88,7 +90,7 @@ func init() {
 	util.IntVarAlias(&argsUtil.args.numberOfHandlesPerFile, "h", "handles_per_file", defaultNumberOfHandlesPerFile, numberOfHandlersPerFileMsg)
 	util.IntVarAlias(&argsUtil.args.numberOfFilesInBatch, "x", "files_per_transfer", defaultNumberOfFilesInBatch, numberOfFilesInBatchMsg)
 	util.IntVarAlias(&argsUtil.args.readTokenExp, "o", "read_token_exp", defaultReadTokenExp, readTokenExpMsg)
-
+	util.StringVarAlias(&argsUtil.args.transferStatusPath, "l", "transfer_status", "", transferStatusFileMsg)
 }
 
 var dataTransferred uint64
@@ -144,16 +146,22 @@ func main() {
 
 		sourcesInfo := sourcePipeline.Source.GetSourcesInfo()
 
-		tfer := transfer.NewTransfer(&sourcePipeline.Source, &targetPipeline, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, argsUtil.params.blockSize)
+		tfer := transfer.NewTransfer(sourcePipeline.Source, targetPipeline, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, argsUtil.params.blockSize)
+		tfer.SetTransferTracker(argsUtil.params.tracker)
 
 		displayFilesToTransfer(sourcesInfo)
 		pb := getProgressBarDelegate(tfer.TotalSize, argsUtil.params.quietMode)
 
 		tfer.StartTransfer(argsUtil.params.dedupeLevel, pb)
-
 		tfer.WaitForCompletion()
 
 		stats.AddTransferInfo(tfer.GetStats())
+	}
+
+	if argsUtil.params.tracker != nil {
+		if err = argsUtil.params.tracker.TrackTransferComplete(); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	stats.DisplaySummary()

@@ -2,6 +2,7 @@
 *.o
 *.a
 *.so
+__*.*
 
 # Folders
 _obj
@@ -11,6 +12,7 @@ _build/windows_amd64
 _wd
 _old
 .vscode
+*_testdata
 
 # Architecture specific extensions/prefixes
 *.[568vq]

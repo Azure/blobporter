@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"net/url"
 )
 
 // Verbose mode active?
@@ -202,61 +199,9 @@ func RetriableOperation(operation func(r int) error) (duration time.Duration, st
 	}
 }
 
-//AskUser places a yes/no question to the user provided by the stdin
-func AskUser(question string) bool {
-	fmt.Printf(question)
-	for {
-		var input string
-		n, err := fmt.Scanln(&input)
-		if n < 1 || err != nil {
-			fmt.Println("invalid input")
-		}
-		input = strings.ToLower(input)
-		switch input {
-		case "y":
-			return true
-		case "n":
-			return false
-		default:
-			fmt.Printf("Invalid response.\n")
-			fmt.Printf(question)
-		}
-	}
-}
-
-//isValidContainerName is true if the name of the container is valid, false if not
-func isValidContainerName(name string) bool {
-	if len(name) < 3 {
-		return false
-	}
-	expr := "^[a-z0-9]+([-]?[a-z0-9]){1,63}$"
-	valid := regexp.MustCompile(expr)
-	resp := valid.MatchString(name)
-	if !resp {
-		fmt.Printf("The name provided for the container is invalid, it must conform the following rules:\n")
-		fmt.Printf("1. Container names must start with a letter or number, and can contain only letters, numbers, and the dash (-) character.\n")
-		fmt.Printf("2. Every dash (-) character must be immediately preceded and followed by a letter or number; consecutive dashes are not permitted in container names.\n")
-		fmt.Printf("3. All letters in a container name must be lowercase.\n")
-		fmt.Printf("4. Container names must be from 3 through 63 characters long.\n")
-	}
-	return resp
-}
-
 func handleExceededRetries(err error) {
-	errMsg := fmt.Sprintf("The number of retries has exceeded the maximum allowed.\nError: %v\nSuggestion:%v\n", err.Error(), getSuggestion(err))
+	errMsg := fmt.Sprintf("The number of retries has exceeded the maximum allowed.\nError: %v\n", err.Error())
 	log.Fatal(errMsg)
-}
-func getSuggestion(err error) string {
-	switch {
-	case strings.Contains(err.Error(), "ErrorMessage=The specified blob or block content is invalid"):
-		return "Try using a different container or upload and then delete a small blob with the same name."
-	case strings.Contains(err.Error(), "Client.Timeout"):
-		return "Try increasing the timeout using the -s option or reducing the number of workers and readers, options: -r and -g"
-	case strings.Contains(err.Error(), "too many open files"):
-		return "Try reducing the number of sources or batch size"
-	default:
-		return ""
-	}
 }
 
 //PrintfIfDebug TODO
@@ -265,22 +210,4 @@ func PrintfIfDebug(format string, values ...interface{}) {
 		msg := fmt.Sprintf(format, values...)
 		fmt.Printf("%v\t%s\n", time.Now(), msg)
 	}
-}
-
-//GetFileNameFromURL returns last part of URL (filename)
-func GetFileNameFromURL(sourceURI string) (string, error) {
-
-	purl, err := url.Parse(sourceURI)
-
-	if err != nil {
-		return "", err
-	}
-
-	parts := strings.Split(purl.Path, "/")
-
-	if len(parts) == 0 {
-		return "", fmt.Errorf("Invalid URL file was not found in the path")
-	}
-
-	return parts[len(parts)-1], nil
 }

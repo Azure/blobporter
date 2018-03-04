@@ -1,9 +1,9 @@
 package sources
 
-
+import "github.com/Azure/blobporter/internal"
 
 type objectListProvider interface {
-	listObjects(filter SourceFilter) <-chan ObjectListingResult
+	listObjects(filter internal.SourceFilter) <-chan ObjectListingResult
 }
 
 //SourceParams input base parameters for blob and S3 based pipelines
@@ -12,6 +12,7 @@ type SourceParams struct {
 	UseExactNameMatch bool
 	KeepDirStructure  bool
 	FilesPerPipeline  int
+	Tracker           *internal.TransferTracker
 }
 
 //HTTPSourceParams input parameters for HTTP pipelines

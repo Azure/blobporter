@@ -2,8 +2,8 @@ package sources
 
 import (
 	"fmt"
-	"path/filepath"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 )
 
@@ -59,7 +59,12 @@ func NewS3SourcePipelineFactory(params *S3Params) <-chan FactoryResult {
 		return factoryError(err)
 	}
 
-	filter := &defaultItemFilter{}
+	var filter internal.SourceFilter
+	filter = &defaultItemFilter{}
+
+	if params.Tracker != nil {
+		filter = params.Tracker
+	}
 	return newObjectListPipelineFactory(s3Provider, filter, params.CalculateMD5, params.FilesPerPipeline)
 }
 
@@ -67,67 +72,49 @@ func NewS3SourcePipelineFactory(params *S3Params) <-chan FactoryResult {
 func NewAzBlobSourcePipelineFactory(params *AzureBlobParams) <-chan FactoryResult {
 	azProvider := newazBlobInfoProvider(params)
 
-	filter := &defaultItemFilter{}
+	var filter internal.SourceFilter
+	filter = &defaultItemFilter{}
+
+	if params.Tracker != nil {
+		filter = params.Tracker
+	}
+
 	return newObjectListPipelineFactory(azProvider, filter, params.CalculateMD5, params.FilesPerPipeline)
 }
 
 //NewFileSystemSourcePipelineFactory TODO
 func NewFileSystemSourcePipelineFactory(params *FileSystemSourceParams) <-chan FactoryResult {
-	var files []string
-	var err error
 	result := make(chan FactoryResult, 1)
-
-	//get files from patterns
-	for i := 0; i < len(params.SourcePatterns); i++ {
-		var sourceFiles []string
-		if sourceFiles, err = filepath.Glob(params.SourcePatterns[i]); err != nil {
-			return factoryError(err)
-		}
-		files = append(files, sourceFiles...)
-	}
-
-	if params.FilesPerPipeline <= 0 {
-		err = fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero")
-		return factoryError(err)
-	}
-
-	if len(files) == 0 {
-		err = fmt.Errorf("The pattern(s) %v did not match any files", fmt.Sprint(params.SourcePatterns))
-		return factoryError(err)
-	}
+	provider := newfileInfoProvider(params)
 
 	go func() {
-		numOfBatches := (len(files) + params.FilesPerPipeline - 1) / params.FilesPerPipeline
-		numOfFilesInBatch := params.FilesPerPipeline
-		filesSent := len(files)
-		start := 0
-		for b := 0; b < numOfBatches; b++ {
-			var targetAlias []string
+		defer close(result)
+		for fInfoResp := range provider.listSourcesInfo() {
 
-			if filesSent < numOfFilesInBatch {
-				numOfFilesInBatch = filesSent
+			if fInfoResp.err != nil {
+				result <- FactoryResult{Err: fInfoResp.err}
+				return
 			}
-			start = b * numOfFilesInBatch
 
-			if len(params.TargetAliases) == len(files) {
-				targetAlias = params.TargetAliases[start : start+numOfFilesInBatch]
+			handlePool := internal.NewFileHandlePool(maxNumOfHandlesPerFile, internal.Read, false)
+			result <- FactoryResult{
+				Source: &FileSystemSource{filesInfo: fInfoResp.fileInfos,
+					totalNumberOfBlocks: int(fInfoResp.totalNumOfBlocks),
+					blockSize:           params.BlockSize,
+					totalSize:           uint64(fInfoResp.totalSize),
+					numOfPartitions:     params.NumOfPartitions,
+					includeMD5:          params.CalculateMD5,
+					handlePool:          handlePool,
+				},
 			}
-			result <- FactoryResult{Source: newMultiFilePipeline(files[start:start+numOfFilesInBatch],
-				targetAlias,
-				params.BlockSize,
-				params.NumOfPartitions,
-				params.MD5,
-				params.KeepDirStructure),
-			}
-			filesSent = filesSent - numOfFilesInBatch
 		}
-		close(result)
+		return
 	}()
 
 	return result
 }
 
-func newObjectListPipelineFactory(provider objectListProvider, filter SourceFilter, includeMD5 bool, filesPerPipeline int) <-chan FactoryResult {
+func newObjectListPipelineFactory(provider objectListProvider, filter internal.SourceFilter, includeMD5 bool, filesPerPipeline int) <-chan FactoryResult {
 	result := make(chan FactoryResult, 1)
 	var err error
 
@@ -166,13 +153,8 @@ type defaultItemFilter struct {
 }
 
 //IsIncluded TODO
-func (f *defaultItemFilter) IsIncluded(key string) bool {
-	return true
-}
-
-//SourceFilter TODO
-type SourceFilter interface {
-	IsIncluded(key string) bool
+func (f *defaultItemFilter) IsTransferredAndTrackIfNot(name string, size int64) (bool, error) {
+	return false, nil
 }
 
 //ObjectListingResult TODO

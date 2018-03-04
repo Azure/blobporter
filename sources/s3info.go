@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/minio/minio-go"
 )
@@ -61,7 +62,7 @@ func (s *s3InfoProvider) toSourceInfo(obj *minio.ObjectInfo) (*pipeline.SourceIn
 
 }
 
-func (s *s3InfoProvider) listObjects(filter SourceFilter) <-chan ObjectListingResult {
+func (s *s3InfoProvider) listObjects(filter internal.SourceFilter) <-chan ObjectListingResult {
 	sources := make(chan ObjectListingResult, 2)
 	go func() {
 		list := make([]pipeline.SourceInfo, 0)
@@ -84,7 +85,14 @@ func (s *s3InfoProvider) listObjects(filter SourceFilter) <-chan ObjectListingRe
 
 				isfolder := strings.HasSuffix(object.Key, "/") && object.Size == 0
 
-				if include && filter.IsIncluded(object.Key) && !isfolder {
+				transferred, err := filter.IsTransferredAndTrackIfNot(object.Key, object.Size)
+
+				if err != nil {
+					sources <- ObjectListingResult{Err: err}
+					return
+				}
+
+				if include && !isfolder && !transferred {
 					si, err := s.toSourceInfo(&object)
 
 					if err != nil {

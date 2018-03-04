@@ -72,6 +72,7 @@ type arguments struct {
 	readTokenExp             int
 	numberOfHandlesPerFile   int //numberOfHandlesPerFile = defaultNumberOfHandlesPerFile
 	numberOfFilesInBatch     int //numberOfFilesInBatch = defaultNumberOfFilesInBatch
+	transferStatusPath       string
 }
 
 //represents validated parameters
@@ -95,6 +96,7 @@ type validatedParameters struct {
 	blobSource             blobParams
 	blobTarget             blobParams
 	perfSourceDefinitions  []sources.SourceDefinition
+	tracker                *internal.TransferTracker
 }
 
 type s3Source struct {
@@ -166,6 +168,7 @@ func (p *paramParserValidator) parseAndValidate() error {
 	p.targetSegment = t
 	err = p.runParseAndValidationRules(
 		p.pvgCalculateReadersAndWorkers,
+		p.pvgTransferStatusPathIsPresent,
 		p.pvgBatchLimits,
 		p.pvgHTTPTimeOut,
 		p.pvgDupCheck,
@@ -254,6 +257,22 @@ func (p *paramParserValidator) getSourceRules() ([]parseAndValidationRule, error
 //**************************
 
 //Global rules....
+func (p *paramParserValidator) pvgTransferStatusPathIsPresent() error {
+
+	if p.args.transferStatusPath != "" {
+		if !p.args.quietMode{
+			fmt.Printf("Transfer is resumable. Transfer status file:%v \n", p.args.transferStatusPath)
+		}
+		tracker, err := internal.NewTransferTracker(p.args.transferStatusPath)
+
+		if err != nil {
+			return err
+		}
+
+		p.params.tracker = tracker
+	}
+	return nil
+}
 func (p *paramParserValidator) pvgKeepDirectoryStructure() error {
 	p.params.keepDirStructure = !p.args.removeDirStructure
 	return nil

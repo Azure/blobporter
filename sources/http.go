@@ -11,6 +11,7 @@ import (
 
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
@@ -30,7 +31,6 @@ type HTTPSource struct {
 	includeMD5 bool
 }
 
-
 //newHTTPSourcePipeline creates a new instance of an HTTP source
 //To get the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
 func newHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
@@ -42,7 +42,7 @@ func newHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool
 			targetAlias = targetAliases[i]
 		} else {
 			var err error
-			targetAlias, err = util.GetFileNameFromURL(sourceURIs[i])
+			targetAlias, err = getFileNameFromURL(sourceURIs[i])
 
 			if err != nil {
 				log.Fatal(err)
@@ -55,6 +55,24 @@ func newHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool
 			SourceName:  sourceURIs[i]}
 	}
 	return &HTTPSource{Sources: sources, HTTPClient: httpSourceHTTPClient, includeMD5: md5}
+}
+
+// returns last part of URL (filename)
+func getFileNameFromURL(sourceURI string) (string, error) {
+
+	purl, err := url.Parse(sourceURI)
+
+	if err != nil {
+		return "", err
+	}
+
+	parts := strings.Split(purl.Path, "/")
+
+	if len(parts) == 0 {
+		return "", fmt.Errorf("Invalid URL file was not found in the path")
+	}
+
+	return parts[len(parts)-1], nil
 }
 
 func getSourceSize(sourceURI string) (size int) {

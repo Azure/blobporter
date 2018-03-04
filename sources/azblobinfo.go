@@ -58,7 +58,7 @@ func (b *azBlobInfoProvider) toSourceInfo(obj *azblob.Blob) (*pipeline.SourceInf
 		TargetAlias: targetAlias}, nil
 }
 
-func (b *azBlobInfoProvider) listObjects(filter SourceFilter) <-chan ObjectListingResult {
+func (b *azBlobInfoProvider) listObjects(filter internal.SourceFilter) <-chan ObjectListingResult {
 	sources := make(chan ObjectListingResult, 2)
 	list := make([]pipeline.SourceInfo, 0)
 	bsize := 0
@@ -68,7 +68,14 @@ func (b *azBlobInfoProvider) listObjects(filter SourceFilter) <-chan ObjectListi
 		if b.params.UseExactNameMatch {
 			include = blob.Name == prefix
 		}
-		if include && filter.IsIncluded(blob.Name) {
+
+		transferred, err := filter.IsTransferredAndTrackIfNot(blob.Name, int64(*blob.Properties.ContentLength))
+
+		if err != nil {
+			return true, err
+		}
+
+		if include && !transferred {
 
 			si, err := b.toSourceInfo(blob)
 
