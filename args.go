@@ -522,7 +522,7 @@ func (p *paramParserValidator) pvSourceInfoForS3IsReq() error {
 	burl, err := url.Parse(p.params.sourceURIs[0])
 
 	if err != nil {
-		return fmt.Errorf("Invalid S3 endpoint URL. Parsing error: %v.\nThe format is s3://[END_POINT]/[BUCKET]/[OBJECT]", err)
+		return fmt.Errorf("Invalid S3 endpoint URL. Parsing error: %v.\nThe format is s3://[END_POINT]/[BUCKET]/[PREFIX]", err)
 	}
 
 	p.params.s3Source.endpoint = burl.Hostname()
@@ -533,10 +533,14 @@ func (p *paramParserValidator) pvSourceInfoForS3IsReq() error {
 
 	segments := strings.Split(burl.Path, "/")
 
+	if len(segments) < 2 {
+		return fmt.Errorf("Invalid S3 endpoint URL. Bucket not specified. The format is s3://[END_POINT]/[BUCKET]/[PREFIX]")		
+	}
+
 	p.params.s3Source.bucket = segments[1]
 
 	if p.params.s3Source.bucket == "" {
-		return fmt.Errorf("Invalid source S3 URI. Bucket name could be parsed")
+		return fmt.Errorf("Invalid source S3 URI. Bucket name could not be parsed")
 	}
 
 	prefix := ""

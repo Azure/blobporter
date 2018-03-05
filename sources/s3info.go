@@ -33,6 +33,7 @@ type s3InfoProvider struct {
 func newS3InfoProvider(params *S3Params) (*s3InfoProvider, error) {
 	s3client, err := minio.New(params.Endpoint, params.AccessKey, params.SecretKey, true)
 
+
 	if err != nil {
 		log.Fatalln(err)
 	}
