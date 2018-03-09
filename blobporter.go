@@ -45,7 +45,7 @@ func init() {
 		numberOfHandlersPerFileMsg = "Number of open handles for concurrent reads and writes per file."
 		numberOfFilesInBatchMsg    = "Maximum number of files in a transfer.\n\tIf the number is exceeded new transfers are created"
 		readTokenExpMsg            = "Expiration in minutes of the read-only access token that will be generated to read from S3 or Azure Blob sources."
-		transferStatusFileMsg      = "Transfer status file location. If set, blobporter will use this file to track the status of the transfer.\n\tIn case of failure and if the option is set the same status file, source files that were transferred will be skipped.\n\tIf the transfer is successful a summary will be created at then."
+		transferStatusFileMsg      = "Transfer status file location. If set, blobporter will use this file to track the status of the transfer.\n\tIn case of failure and if the option is set the same status file, source files that were transferred will be skipped.\n\tIf the transfer is successful a summary will be appended."
 	)
 
 	flag.Usage = func() {
