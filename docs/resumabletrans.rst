@@ -1,14 +1,21 @@
 Resumable Transfers
-======================================
-BlobPorter supports resumable transfers. To enable this feature you need to set the -l option with a path to the transfer status file. In case of failure, you can reference the same status file and BlobPorter will skip files that were already transferred.
+===================
 
-``blobporter -f "manyfiles/*" -c many -l mylog``
+BlobPorter supports resumable transfers. This feature is enabled when the -l option is set. This option must specify the path where the transfer status file will be created.
+In case of failure, if the same status file is specified, BlobPorter will skip files that were already transferred.
+
+::
+
+    blobporter -f "manyfiles/*" -c many -l mylog
 
 For each file in the transfer two entries will be created in the status file.  One when file is queued (Started) and another when the file is successfully transferred (Completed).
 
 The log entries are created with the following tab-delimited format:
 
-``[Timestamp] [Filename] [Status (1:Started,2:Completed,3:Ignored)] [Size] [Transfer ID ]`` 
+::
+
+    [Timestamp] [Filename] [Status (1:Started,2:Completed,3:Ignored)] [Size] [Transfer ID ]
+
 
 The following output from a transfer status file shows that three files were included in the transfer:  **file10** ,  **file11**  and  **file15** .
 However, only  **file10**  and  **file11**  were successfully transferred.  For  **file15**  the output indicates that it was queued but the lack of a second entry confirming completion (status = 2), indicates that the transfer process was interrupted. ::

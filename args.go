@@ -174,7 +174,8 @@ func (p *paramParserValidator) parseAndValidate() error {
 		p.pvgDupCheck,
 		p.pvgParseBlockSize,
 		p.pvgQuietMode,
-		p.pvgKeepDirectoryStructure)
+		p.pvgKeepDirectoryStructure,
+		p.pvgUseExactMatch)
 
 	if err != nil {
 		return err
@@ -257,6 +258,11 @@ func (p *paramParserValidator) getSourceRules() ([]parseAndValidationRule, error
 //**************************
 
 //Global rules....
+func (p *paramParserValidator) pvgUseExactMatch() error {
+	p.params.useExactMatch = p.args.exactNameMatch
+	return nil
+}
+
 func (p *paramParserValidator) pvgTransferStatusPathIsPresent() error {
 
 	if p.args.transferStatusPath != "" {
