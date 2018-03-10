@@ -1,7 +1,7 @@
 Resumable Transfers
 ===================
 
-BlobPorter supports resumable transfers. This feature is enabled when the -l option is set. This option must specify the path where the transfer status file will be created.
+BlobPorter supports resumable transfers. This feature is enabled when the -l option is set with the path where the transfer status file will be created.
 In case of failure, if the same status file is specified, BlobPorter will skip files that were already transferred.
 
 ::

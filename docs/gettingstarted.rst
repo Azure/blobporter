@@ -19,7 +19,9 @@ Set environment variables: ::
     export ACCOUNT_NAME=<STORAGE_ACCOUNT_NAME>
     export ACCOUNT_KEY=<STORAGE_ACCOUNT_KEY>
 
-**Note:** You can also set these values via `options <options.html>`__
+.. note:: 
+
+    You can also set these values via options
 
 Windows
 -------
@@ -40,7 +42,9 @@ Set environment variables (if using PowerShell): ::
 Command Options
 ---------------
 
- -f, --source_file          (string) URL, Azure Blob or S3 Endpoint, file or files (e.g. /data/\*.gz) to upload.
+ -f, --source_file          (string) URL, Azure Blob or S3 Endpoint,
+                            file or files (e.g. /data/\*.gz) to upload.
+
  -c, --container_name       (string) Container name (e.g. mycontainer).
  -n, --blob_name            (string) Blob name (e.g. myblob.txt) or prefix for download scenarios.
  -g, --concurrent_workers   (int) Number of go-routines for parallel upload.
@@ -57,13 +61,18 @@ Command Options
                             
                             Can also be specified via the ACCOUNT_KEY environment variable.
  -s, --http_timeout         (int) HTTP client timeout in seconds. Default value is 600s.
- -d, --dup_check_level      (string) Desired level of effort to detect duplicate data blocks to minimize upload size.
- 
-                            Must be one of None, ZeroOnly, Full (default "None")
  -t, --transfer_type        (string) Defines the source and target of the transfer.
  
-                            Must be one of file-blockblob, file-pageblob, http-blockblob, http-pageblob, blob-file, pageblock-file (alias of blob-file), blockblob-file (alias of blob-file), http-file, blob-pageblob, blob-blockblob, s3-pageblob and s3-blockblob.
- -m, --compute_blockmd5     (bool) If set, block level MD5 has will be computed and included as a header when the block is sent to blob storage.
+                            Must be one of ::
+
+                                                file-blockblob, file-pageblob, http-blockblob, 
+                                                http-pageblob, blob-file, pageblock-file (alias of blob-file), 
+                                                blockblob-file (alias of blob-file), http-file, 
+                                                blob-pageblob, blob-blockblob, s3-pageblob and s3-blockblob.
+
+
+ -m, --compute_blockmd5     (bool) If set, block level MD5 has will be computed and included
+                             as a header when the block is sent to blob storage.
  
                             Default is false.
  -q, --quiet_mode           (bool) If set, the progress indicator is not displayed. 
