@@ -80,8 +80,8 @@ type PerfSourceParams struct {
 	BlockSize   uint64
 }
 
-//NewPerfSourcePipeline TODO
-func NewPerfSourcePipeline(params PerfSourceParams) []pipeline.SourcePipeline {
+//newPerfSourcePipeline TODO
+func newPerfSourcePipeline(params PerfSourceParams) []pipeline.SourcePipeline {
 	ssps := make([]pipeline.SourcePipeline, 1)
 	ssp := PerfSourcePipeline{
 		definitions: params.Definitions,
