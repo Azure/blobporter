@@ -8,10 +8,7 @@ BlobPorter
 
 BlobPorter is a data transfer tool for Azure Blob Storage that maximizes throughput through concurrent reads and writes that can scale up and down independently.
 
-::
-    
-
-.. image :: bptransfer.png
+.. image:: bptransfer.png
 
 .. toctree::
    :maxdepth: 2
