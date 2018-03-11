@@ -1,7 +1,6 @@
 package sources
 
 import (
-	"fmt"
 	"log"
 	"path"
 	"time"
@@ -39,35 +38,59 @@ func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
 	return &azBlobInfoProvider{params: params, azUtil: azutil}
 }
 
-//getSourceInfo gets a list of SourceInfo that represent the list of azure blobs returned by the service
-// based on the provided criteria (container/prefix). If the exact match flag is set, then a specific match is
-// performed instead of the prefix. Marker semantics are also honored so a complete list is expected
-func (b *azBlobInfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
-	var err error
+func (b *azBlobInfoProvider) toSourceInfo(obj *azblob.Blob) (*pipeline.SourceInfo, error) {
 	exp := b.params.SasExp
 	if exp == 0 {
 		exp = defaultSasExpHours
 	}
 	date := time.Now().Add(time.Duration(exp) * time.Minute).UTC()
-	sourceURIs := make([]pipeline.SourceInfo, 0)
+
+	sourceURLWithSAS := b.azUtil.GetBlobURLWithReadOnlySASToken(obj.Name, date)
+
+	targetAlias := obj.Name
+	if !b.params.KeepDirStructure {
+		targetAlias = path.Base(obj.Name)
+	}
+
+	return &pipeline.SourceInfo{
+		SourceName:  sourceURLWithSAS.String(),
+		Size:        uint64(*obj.Properties.ContentLength),
+		TargetAlias: targetAlias}, nil
+}
+
+func (b *azBlobInfoProvider) listObjects(filter internal.SourceFilter) <-chan ObjectListingResult {
+	sources := make(chan ObjectListingResult, 2)
+	list := make([]pipeline.SourceInfo, 0)
+	bsize := 0
 
 	blobCallback := func(blob *azblob.Blob, prefix string) (bool, error) {
 		include := true
 		if b.params.UseExactNameMatch {
 			include = blob.Name == prefix
 		}
-		if include {
-			sourceURLWithSAS := b.azUtil.GetBlobURLWithReadOnlySASToken(blob.Name, date)
 
-			targetAlias := blob.Name
-			if !b.params.KeepDirStructure {
-				targetAlias = path.Base(blob.Name)
+		transferred, err := filter.IsTransferredAndTrackIfNot(blob.Name, int64(*blob.Properties.ContentLength))
+
+		if err != nil {
+			return true, err
+		}
+
+		if include && !transferred {
+
+			si, err := b.toSourceInfo(blob)
+
+			if err != nil {
+				return true, err
 			}
 
-			sourceURIs = append(sourceURIs, pipeline.SourceInfo{
-				SourceName:  sourceURLWithSAS.String(),
-				Size:        uint64(*blob.Properties.ContentLength),
-				TargetAlias: targetAlias})
+			list = append(list, *si)
+
+			if bsize++; bsize == b.params.FilesPerPipeline {
+				sources <- ObjectListingResult{Sources: list}
+				list = make([]pipeline.SourceInfo, 0)
+				bsize = 0
+			}
+
 			if b.params.UseExactNameMatch {
 				//true, stops iteration
 				return true, nil
@@ -78,19 +101,21 @@ func (b *azBlobInfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
 		return false, nil
 	}
 
-	for _, blobName := range b.params.BlobNames {
-		if err = b.azUtil.IterateBlobList(blobName, blobCallback); err != nil {
-			return nil, err
+	go func() {
+		for _, blobName := range b.params.BlobNames {
+			if err := b.azUtil.IterateBlobList(blobName, blobCallback); err != nil {
+				sources <- ObjectListingResult{Err: err}
+				return
+			}
+			if bsize > 0 {
+				sources <- ObjectListingResult{Sources: list}
+				list = make([]pipeline.SourceInfo, 0)
+				bsize = 0
+			}
 		}
-	}
+		close(sources)
 
-	if len(sourceURIs) == 0 {
-		nameMatchMode := "prefix"
-		if b.params.UseExactNameMatch {
-			nameMatchMode = "name"
-		}
-		return nil, fmt.Errorf(" the %v %s did not match any blob names ", nameMatchMode, b.params.BlobNames)
-	}
+	}()
 
-	return sourceURIs, nil
+	return sources
 }

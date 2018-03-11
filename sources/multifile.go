@@ -5,8 +5,6 @@ import (
 	"os"
 	"sync"
 
-	"path/filepath"
-
 	"fmt"
 
 	"io"
@@ -31,131 +29,16 @@ type FileSystemSource struct {
 	handlePool          *internal.FileHandlePool
 }
 
-//FileInfo Contains the metadata associated with a file to be transferred
-type FileInfo struct {
-	FileStats   *os.FileInfo
-	SourceURI   string
-	TargetAlias string
-	NumOfBlocks int
-}
-
 //FileSystemSourceParams parameters used to create a new instance of multi-file source pipeline
 type FileSystemSourceParams struct {
-	SourcePatterns   []string
-	BlockSize        uint64
-	TargetAliases    []string
-	NumOfPartitions  int
-	MD5              bool
-	FilesPerPipeline int
-	KeepDirStructure bool
-}
-
-// NewFileSystemSourcePipeline creates a new MultiFilePipeline.
-// If the sourcePattern results in a single file and the targetAlias is set, the alias will be used as the target name.
-// Otherwise the original file name will be used.
-func NewFileSystemSourcePipeline(params *FileSystemSourceParams) []pipeline.SourcePipeline {
-	var files []string
-	var err error
-	//get files from patterns
-	for i := 0; i < len(params.SourcePatterns); i++ {
-		var sourceFiles []string
-		if sourceFiles, err = filepath.Glob(params.SourcePatterns[i]); err != nil {
-			log.Fatal(err)
-		}
-		files = append(files, sourceFiles...)
-	}
-
-	if params.FilesPerPipeline <= 0 {
-		log.Fatal(fmt.Errorf("Invalid operation. The number of files per batch must be greater than zero"))
-	}
-
-	if len(files) == 0 {
-		log.Fatal(fmt.Errorf("The pattern(s) %v did not match any files", fmt.Sprint(params.SourcePatterns)))
-	}
-
-	numOfBatches := (len(files) + params.FilesPerPipeline - 1) / params.FilesPerPipeline
-	pipelines := make([]pipeline.SourcePipeline, numOfBatches)
-	numOfFilesInBatch := params.FilesPerPipeline
-	filesSent := len(files)
-	start := 0
-	for b := 0; b < numOfBatches; b++ {
-		var targetAlias []string
-
-		if filesSent < numOfFilesInBatch {
-			numOfFilesInBatch = filesSent
-		}
-		start = b * numOfFilesInBatch
-
-		if len(params.TargetAliases) == len(files) {
-			targetAlias = params.TargetAliases[start : start+numOfFilesInBatch]
-		}
-		pipelines[b] = newMultiFilePipeline(files[start:start+numOfFilesInBatch],
-			targetAlias,
-			params.BlockSize,
-			params.NumOfPartitions,
-			params.MD5,
-			params.KeepDirStructure)
-		filesSent = filesSent - numOfFilesInBatch
-	}
-
-	return pipelines
+	SourceParams
+	SourcePatterns  []string
+	BlockSize       uint64
+	TargetAliases   []string
+	NumOfPartitions int
 }
 
 const maxNumOfHandlesPerFile int = 4
-
-func newMultiFilePipeline(files []string, targetAliases []string, blockSize uint64, numOfPartitions int, md5 bool, keepDirStructure bool) pipeline.SourcePipeline {
-	totalNumberOfBlocks := 0
-	var totalSize uint64
-	var err error
-	fileInfos := make(map[string]FileInfo)
-	useTargetAlias := len(targetAliases) == len(files)
-	for f := 0; f < len(files); f++ {
-		var fileStat os.FileInfo
-		var sName string
-
-		if fileStat, err = os.Stat(files[f]); err != nil {
-			log.Fatalf("Error: %v", err)
-		}
-
-		//directories are not allowed... so skipping them
-		if fileStat.IsDir() {
-			continue
-		}
-
-		if fileStat.Size() == 0 {
-			log.Fatalf("Empty files are not allowed. The file %v is empty", files[f])
-		}
-		numOfBlocks := int(uint64(fileStat.Size())+(blockSize-1)) / int(blockSize)
-		totalSize = totalSize + uint64(fileStat.Size())
-		totalNumberOfBlocks = totalNumberOfBlocks + numOfBlocks
-
-		//use the param instead of the original filename only when
-		//the number of targets matches the number files to transfer
-		if useTargetAlias {
-			sName = targetAliases[f]
-		} else {
-			sName = fileStat.Name()
-			if keepDirStructure {
-				sName = files[f]
-			}
-
-		}
-
-		fileInfo := FileInfo{FileStats: &fileStat, SourceURI: files[f], TargetAlias: sName, NumOfBlocks: numOfBlocks}
-		fileInfos[files[f]] = fileInfo
-	}
-
-	handlePool := internal.NewFileHandlePool(maxNumOfHandlesPerFile, internal.Read, false)
-
-	return &FileSystemSource{filesInfo: fileInfos,
-		totalNumberOfBlocks: totalNumberOfBlocks,
-		blockSize:           blockSize,
-		totalSize:           totalSize,
-		numOfPartitions:     numOfPartitions,
-		includeMD5:          md5,
-		handlePool:          handlePool,
-	}
-}
 
 //ExecuteReader implements ExecuteReader from the pipeline.SourcePipeline Interface.
 //For each file the reader will maintain a open handle from which data will be read.
@@ -234,7 +117,7 @@ func (f *FileSystemSource) GetSourcesInfo() []pipeline.SourceInfo {
 	sources := make([]pipeline.SourceInfo, len(f.filesInfo))
 	var i = 0
 	for _, file := range f.filesInfo {
-		sources[i] = pipeline.SourceInfo{SourceName: file.SourceURI, TargetAlias: file.TargetAlias, Size: uint64((*file.FileStats).Size())}
+		sources[i] = pipeline.SourceInfo{SourceName: file.SourceURI, TargetAlias: file.TargetAlias, Size: uint64(file.FileStats.Size())}
 		i++
 	}
 
@@ -283,7 +166,7 @@ func (f *FileSystemSource) ConstructBlockInfoQueue(blockSize uint64) (partitions
 	pindex := 0
 	maxpartitionNumber := 0
 	for _, source := range f.filesInfo {
-		partitions := pipeline.ConstructPartsPartition(f.numOfPartitions, (*source.FileStats).Size(), int64(blockSize), source.SourceURI, source.TargetAlias, bufferQ)
+		partitions := pipeline.ConstructPartsPartition(f.numOfPartitions, source.FileStats.Size(), int64(blockSize), source.SourceURI, source.TargetAlias, bufferQ)
 		allPartitions[pindex] = partitions
 		if len(partitions) > maxpartitionNumber {
 			maxpartitionNumber = len(partitions)

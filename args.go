@@ -72,6 +72,7 @@ type arguments struct {
 	readTokenExp             int
 	numberOfHandlesPerFile   int //numberOfHandlesPerFile = defaultNumberOfHandlesPerFile
 	numberOfFilesInBatch     int //numberOfFilesInBatch = defaultNumberOfFilesInBatch
+	transferStatusPath       string
 }
 
 //represents validated parameters
@@ -95,6 +96,7 @@ type validatedParameters struct {
 	blobSource             blobParams
 	blobTarget             blobParams
 	perfSourceDefinitions  []sources.SourceDefinition
+	tracker                *internal.TransferTracker
 }
 
 type s3Source struct {
@@ -166,12 +168,14 @@ func (p *paramParserValidator) parseAndValidate() error {
 	p.targetSegment = t
 	err = p.runParseAndValidationRules(
 		p.pvgCalculateReadersAndWorkers,
+		p.pvgTransferStatusPathIsPresent,
 		p.pvgBatchLimits,
 		p.pvgHTTPTimeOut,
 		p.pvgDupCheck,
 		p.pvgParseBlockSize,
 		p.pvgQuietMode,
-		p.pvgKeepDirectoryStructure)
+		p.pvgKeepDirectoryStructure,
+		p.pvgUseExactMatch)
 
 	if err != nil {
 		return err
@@ -254,6 +258,27 @@ func (p *paramParserValidator) getSourceRules() ([]parseAndValidationRule, error
 //**************************
 
 //Global rules....
+func (p *paramParserValidator) pvgUseExactMatch() error {
+	p.params.useExactMatch = p.args.exactNameMatch
+	return nil
+}
+
+func (p *paramParserValidator) pvgTransferStatusPathIsPresent() error {
+
+	if p.args.transferStatusPath != "" {
+		if !p.args.quietMode{
+			fmt.Printf("Transfer is resumable. Transfer status file:%v \n", p.args.transferStatusPath)
+		}
+		tracker, err := internal.NewTransferTracker(p.args.transferStatusPath)
+
+		if err != nil {
+			return err
+		}
+
+		p.params.tracker = tracker
+	}
+	return nil
+}
 func (p *paramParserValidator) pvgKeepDirectoryStructure() error {
 	p.params.keepDirStructure = !p.args.removeDirStructure
 	return nil
@@ -503,7 +528,7 @@ func (p *paramParserValidator) pvSourceInfoForS3IsReq() error {
 	burl, err := url.Parse(p.params.sourceURIs[0])
 
 	if err != nil {
-		return fmt.Errorf("Invalid S3 endpoint URL. Parsing error: %v.\nThe format is s3://[END_POINT]/[BUCKET]/[OBJECT]", err)
+		return fmt.Errorf("Invalid S3 endpoint URL. Parsing error: %v.\nThe format is s3://[END_POINT]/[BUCKET]/[PREFIX]", err)
 	}
 
 	p.params.s3Source.endpoint = burl.Hostname()
@@ -514,10 +539,14 @@ func (p *paramParserValidator) pvSourceInfoForS3IsReq() error {
 
 	segments := strings.Split(burl.Path, "/")
 
+	if len(segments) < 2 {
+		return fmt.Errorf("Invalid S3 endpoint URL. Bucket not specified. The format is s3://[END_POINT]/[BUCKET]/[PREFIX]")		
+	}
+
 	p.params.s3Source.bucket = segments[1]
 
 	if p.params.s3Source.bucket == "" {
-		return fmt.Errorf("Invalid source S3 URI. Bucket name could be parsed")
+		return fmt.Errorf("Invalid source S3 URI. Bucket name could not be parsed")
 	}
 
 	prefix := ""

@@ -11,7 +11,7 @@ import (
 	"os"
 	"syscall"
 	"time"
-
+	"github.com/Azure/blobporter/util"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
@@ -189,6 +189,7 @@ func (p *AzUtil) PutBlockBlob(blobName string, body io.ReadSeeker, md5 []byte) e
 	bburl := p.containerURL.NewBlockBlobURL(blobName)
 
 	h := azblob.BlobHTTPHeaders{}
+
 
 	//16 is md5.Size
 	if len(md5) != 16 {
@@ -375,6 +376,24 @@ func isWinsockTimeOutError(err error) net.Error {
 	return nil
 }
 
+func isDialConnectError(err error) net.Error {
+	if uerr, ok := err.(*url.Error); ok {
+		if derr, ok := uerr.Err.(*net.OpError); ok {
+			if serr, ok := derr.Err.(*os.SyscallError); ok && serr.Syscall == "connect" {
+				return &retriableError{error: err}
+			}
+		}
+	}
+	return nil
+}
+
+func isRetriableDialError(err error) net.Error {
+	if derr := isWinsockTimeOutError(err); derr != nil {
+		return derr
+	}
+	return isDialConnectError(err)
+}
+
 type retriableError struct {
 	error
 }
@@ -387,11 +406,19 @@ func (*retriableError) Temporary() bool {
 	return true
 }
 
+const tcpKeepOpenMinLength = 8 * int64(util.MB) 
+
 func (p *clientPolicy) Do(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-	r, err := pipelineHTTPClient.Do(request.WithContext(ctx))
+	req := request.WithContext(ctx)
+	
+	if req.ContentLength < tcpKeepOpenMinLength {
+		req.Close=true
+	}
+
+	r, err := pipelineHTTPClient.Do(req)
 	pipresp := pipeline.NewHTTPResponse(r)
 	if err != nil {
-		if derr := isWinsockTimeOutError(err); derr != nil {
+		if derr := isRetriableDialError(err); derr != nil {
 			return pipresp, derr
 		}
 		err = pipeline.NewError(err, "HTTP request failed")
@@ -411,9 +438,9 @@ func newpipelineHTTPClient() *http.Client {
 				KeepAlive: 30 * time.Second,
 				DualStack: true,
 			}).Dial,
-			MaxIdleConns:           0,
+			MaxIdleConns:           100,
 			MaxIdleConnsPerHost:    100,
-			IdleConnTimeout:        90 * time.Second,
+			IdleConnTimeout:        60 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,

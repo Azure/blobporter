@@ -1,15 +1,15 @@
 package sources
 
 import (
-	"fmt"
 	"log"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
-	"github.com/minio/minio-go"
-
+	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
+	"github.com/minio/minio-go"
 )
 
 //S3Params parameters used to create a new instance of a S3 source pipeline
@@ -33,6 +33,7 @@ type s3InfoProvider struct {
 func newS3InfoProvider(params *S3Params) (*s3InfoProvider, error) {
 	s3client, err := minio.New(params.Endpoint, params.AccessKey, params.SecretKey, true)
 
+
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -41,89 +42,83 @@ func newS3InfoProvider(params *S3Params) (*s3InfoProvider, error) {
 
 }
 
-//getSourceInfo gets a list of SourceInfo that represent the list of objects returned by the service
-// based on the provided criteria (bucket/prefix). If the exact match flag is set, then a specific match is
-// performed instead of the prefix. Marker semantics are also honored so a complete list is expected
-func (s *s3InfoProvider) getSourceInfo() ([]pipeline.SourceInfo, error) {
+func (s *s3InfoProvider) toSourceInfo(obj *minio.ObjectInfo) (*pipeline.SourceInfo, error) {
+	exp := time.Duration(s.params.PreSignedExpMin) * time.Minute
 
-	objLists, err := s.getObjectLists()
+	u, err := s.s3client.PresignedGetObject(s.params.Bucket, obj.Key, exp, url.Values{})
+
 	if err != nil {
 		return nil, err
 	}
 
-	exp := time.Duration(s.params.PreSignedExpMin) * time.Minute
-
-	sourceURIs := make([]pipeline.SourceInfo, 0)
-	for prefix, objList := range objLists {
-
-		for _, obj := range objList {
-
-			include := true
-
-			if s.params.SourceParams.UseExactNameMatch {
-				include = obj.Key == prefix
-			}
-
-			if include {
-
-				var u *url.URL
-				u, err = s.s3client.PresignedGetObject(s.params.Bucket, obj.Key, exp, url.Values{})
-
-				if err != nil {
-					return nil, err
-				}
-
-				targetAlias := obj.Key
-				if !s.params.KeepDirStructure {
-					targetAlias = path.Base(obj.Key)
-				}
-
-				sourceURIs = append(sourceURIs, pipeline.SourceInfo{
-					SourceName:  u.String(),
-					Size:        uint64(obj.Size),
-					TargetAlias: targetAlias})
-
-			}
-		}
+	targetAlias := obj.Key
+	if !s.params.KeepDirStructure {
+		targetAlias = path.Base(obj.Key)
 	}
 
-	if len(sourceURIs) == 0 {
-		nameMatchMode := "prefix"
-		if s.params.UseExactNameMatch {
-			nameMatchMode = "name"
-		}
-		return nil, fmt.Errorf(" the %v %s did not match any object key(s) ", nameMatchMode, s.params.Prefixes)
-	}
-
-	return sourceURIs, nil
+	return &pipeline.SourceInfo{
+		SourceName:  u.String(),
+		Size:        uint64(obj.Size),
+		TargetAlias: targetAlias}, nil
 
 }
-func (s *s3InfoProvider) getObjectLists() (map[string][]minio.ObjectInfo, error) {
-	listLength := 1
 
-	if len(s.params.Prefixes) > 1 {
-		listLength = len(s.params.Prefixes)
-	}
+func (s *s3InfoProvider) listObjects(filter internal.SourceFilter) <-chan ObjectListingResult {
+	sources := make(chan ObjectListingResult, 2)
+	go func() {
+		list := make([]pipeline.SourceInfo, 0)
+		bsize := 0
 
-	listOfLists := make(map[string][]minio.ObjectInfo, listLength)
+		for _, prefix := range s.params.Prefixes {
+			// Create a done channel to control 'ListObjects' go routine.
+			done := make(chan struct{})
+			defer close(done)
+			for object := range s.s3client.ListObjects(s.params.Bucket, prefix, true, done) {
+				if object.Err != nil {
+					sources <- ObjectListingResult{Err: object.Err}
+					return
+				}
+				include := true
 
-	for _, prefix := range s.params.Prefixes {
-		list := make([]minio.ObjectInfo, 0)
+				if s.params.SourceParams.UseExactNameMatch {
+					include = object.Key == prefix
+				}
 
-		// Create a done channel to control 'ListObjects' go routine.
-		done := make(chan struct{})
+				isfolder := strings.HasSuffix(object.Key, "/") && object.Size == 0
 
-		defer close(done)
-		for object := range s.s3client.ListObjects(s.params.Bucket, prefix, true, done) {
-			if object.Err != nil {
-				return nil, object.Err
+				transferred, err := filter.IsTransferredAndTrackIfNot(object.Key, object.Size)
+
+				if err != nil {
+					sources <- ObjectListingResult{Err: err}
+					return
+				}
+
+				if include && !isfolder && !transferred {
+					si, err := s.toSourceInfo(&object)
+
+					if err != nil {
+						sources <- ObjectListingResult{Err: err}
+						return
+					}
+					list = append(list, *si)
+
+					if bsize++; bsize == s.params.FilesPerPipeline {
+						sources <- ObjectListingResult{Sources: list}
+						list = make([]pipeline.SourceInfo, 0)
+						bsize = 0
+					}
+				}
+
 			}
-			list = append(list, object)
+
+			if bsize > 0 {
+				sources <- ObjectListingResult{Sources: list}
+				list = make([]pipeline.SourceInfo, 0)
+				bsize = 0
+			}
 		}
+		close(sources)
+	}()
 
-		listOfLists[prefix] = list
-	}
-
-	return listOfLists, nil
-
+	return sources
 }
