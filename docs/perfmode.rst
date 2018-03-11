@@ -1,5 +1,5 @@
-Performance Consideration
-=========================
+Performance Considerations
+==========================
 
 Best Practices
 --------------
