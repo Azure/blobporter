@@ -18,7 +18,7 @@ The log entries are created with the following tab-delimited format:
 
 
 The following output from a transfer status file shows that three files were included in the transfer:  **file10** ,  **file11**  and  **file15** .
-However, only  **file10**  and  **file11**  were successfully transferred.  For  **file15**  the output indicates that it was queued but the lack of a second entry confirming completion (status = 2), indicates that the transfer process was interrupted. ::
+However, only  **file10**  and  **file11**  were successfully transferred.  For  **file15**  the output indicates that it was queued but there's no second entry confirming that it was transferred successfully (status = 2). ::
 
     2018-03-05T03:31:13.034245807Z  file10  1       104857600       938520246_mylog
     2018-03-05T03:31:13.034390509Z  file11  1       104857600       938520246_mylog
