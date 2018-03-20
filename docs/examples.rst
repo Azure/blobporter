@@ -9,7 +9,7 @@ Single file upload:
 
 ::
 
-    ./blobporter -f /datadrive/myfile.tar -c mycontainer -n myfile.tar
+    ./blobporter -f /datadrive/myfile.tar -c mycontainer
 
 .. note:: BlobPorter will create the container if it doesn't exist.
 
