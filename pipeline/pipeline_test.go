@@ -3,14 +3,10 @@ package pipeline
 import (
 	"testing"
 
-	"os"
-
 	"github.com/Azure/blobporter/util"
 	"github.com/stretchr/testify/assert"
 )
 
-var accountName = os.Getenv("ACCOUNT_NAME")
-var accountKey = os.Getenv("ACCOUNT_KEY")
 var blockSize = uint64(4 * util.MiByte)
 var numOfReaders = 10
 var numOfWorkers = 10
@@ -54,6 +50,109 @@ func TestCreatePartsInPartitionOfSize1(t *testing.T) {
 	assert.Equal(t, 1, len(parts))
 	assert.Equal(t, 2, ordinal)
 	assert.Equal(t, 1, numOfPartsInPartition)
+}
+func TestConstructPartitionsWhenSizeIsZero(t *testing.T) {
+	partitionNumber := 10
+	var size int64
+	var blockSize int64 = 10000
+	sourceURI := "S1"
+	targetAlias := "TA"
+	partitions := ConstructPartsPartition(partitionNumber, size, blockSize, sourceURI, targetAlias, nil)
+
+	assert.Equal(t, len(partitions), 1)
+
+	var offSet int64 = 1000
+	var i int64
+	var calcSize int64
+	var calcSize2 int64
+	j := 0
+	p := partitions[0]
+	assert.Equal(t, 1, p.NumOfParts)
+	assert.Equal(t, offSet*i, p.Offset)
+	assert.Equal(t, 1, int(p.TotalNumOfParts))
+	assert.Equal(t, size, p.TotalSize)
+	assert.Equal(t, 0, int(p.PartitionSize))
+	assert.Equal(t, 1, len(p.Parts))
+	calcSize = calcSize + p.PartitionSize
+
+	pip := p.Parts[0]
+	calcSize2 = calcSize2 + int64(pip.BytesToRead)
+	assert.Equal(t, j, pip.Ordinal)
+	j++
+
+	assert.Equal(t, calcSize, size)
+	assert.Equal(t, calcSize2, size)
+}
+func TestConstructPartitionsWhenSizeIsLessAsPartCap(t *testing.T) {
+	partitionNumber := 10
+	var size int64 = 10000
+	var blockSize int64 = 10000
+	sourceURI := "S1"
+	targetAlias := "TA"
+	partitions := ConstructPartsPartition(partitionNumber, size, blockSize, sourceURI, targetAlias, nil)
+
+	assert.Equal(t, len(partitions), int(size/blockSize))
+
+	var offSet int64 = 1000
+	var i int64
+	var calcSize int64
+	var calcSize2 int64
+	j := 0
+	for _, p := range partitions {
+		assert.Equal(t, 1, p.NumOfParts)
+		assert.Equal(t, offSet*i, p.Offset)
+		assert.Equal(t, (size+blockSize-1)/blockSize, p.TotalNumOfParts)
+		assert.Equal(t, size, p.TotalSize)
+		assert.Equal(t, size/int64(len(partitions)), p.PartitionSize)
+		assert.Equal(t, 1, len(p.Parts))
+		i++
+		calcSize = calcSize + p.PartitionSize
+
+		for _, pip := range p.Parts {
+			calcSize2 = calcSize2 + int64(pip.BytesToRead)
+			assert.Equal(t, j, pip.Ordinal)
+			j++
+		}
+	}
+
+	assert.Equal(t, calcSize, size)
+	assert.Equal(t, calcSize2, size)
+}
+
+func TestConstructPartitionsWhenSizeIsSameAsPartCap(t *testing.T) {
+	partitionNumber := 10
+	var size int64 = 10000
+	var blockSize int64 = 1000
+	sourceURI := "S1"
+	targetAlias := "TA"
+	partitions := ConstructPartsPartition(partitionNumber, size, blockSize, sourceURI, targetAlias, nil)
+
+	assert.Equal(t, partitionNumber, len(partitions))
+
+	var offSet int64 = 1000
+	var i int64
+	var calcSize int64
+	var calcSize2 int64
+	j := 0
+	for _, p := range partitions {
+		assert.Equal(t, 1, p.NumOfParts)
+		assert.Equal(t, offSet*i, p.Offset)
+		assert.Equal(t, (size+blockSize-1)/blockSize, p.TotalNumOfParts)
+		assert.Equal(t, size, p.TotalSize)
+		assert.Equal(t, (size+int64(partitionNumber)-1)/int64(partitionNumber), p.PartitionSize)
+		assert.Equal(t, ((size+int64(partitionNumber)-1)/int64(partitionNumber))/blockSize, int64(len(p.Parts)))
+		i++
+		calcSize = calcSize + p.PartitionSize
+
+		for _, pip := range p.Parts {
+			calcSize2 = calcSize2 + int64(pip.BytesToRead)
+			assert.Equal(t, j, pip.Ordinal)
+			j++
+		}
+	}
+
+	assert.Equal(t, calcSize, size)
+	assert.Equal(t, calcSize2, size)
 }
 
 func TestConstructPartitionExact(t *testing.T) {

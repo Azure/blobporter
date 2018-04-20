@@ -49,15 +49,15 @@ func PrintSize(bytes uint64) string {
 	var zeroTrim = true
 	var suffix = "GiB"
 
-	if bytes > GB { // most common case
+	if bytes >= GB { // most common case
 		str = fmt.Sprintf("%0.1f", float64(bytes)/GBF) //TODO: rounding
-	} else if bytes <= KB {
+	} else if bytes < KB {
 		str = fmt.Sprintf("%d", bytes)
-		suffix = "KiB"
-	} else if bytes < MB {
-		str = fmt.Sprintf("%d", bytes+KB-1)
 		suffix = "B"
-	} else { // if bytes < GB {
+	} else if bytes < MB {
+		str = fmt.Sprintf("%0.1f", float64(bytes)/KBF)
+		suffix = "KiB"
+	} else { // what's left is the MB range {
 		str = fmt.Sprintf("%0.1f", float64(bytes)/MBF)
 		suffix = "MiB"
 	}

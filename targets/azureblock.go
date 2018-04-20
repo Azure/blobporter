@@ -127,6 +127,12 @@ func (t *AzureBlockTarget) WritePart(part *pipeline.Part) (duration time.Duratio
 		md5 = part.MD5Bytes()
 	}
 	if part.NumberOfBlocks == 1 {
+		//empty blob
+		if part.BytesToRead == 0 {
+			err = t.azutil.PutEmptyBlockBlob(part.TargetAlias)
+			return
+		}
+
 		if err = t.azutil.PutBlockBlob(part.TargetAlias,
 			bytes.NewReader(part.Data), md5); err != nil {
 		}

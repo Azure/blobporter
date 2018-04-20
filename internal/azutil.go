@@ -11,8 +11,9 @@ import (
 	"os"
 	"syscall"
 	"time"
-	"github.com/Azure/blobporter/util"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/blobporter/util"
 
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 )
@@ -168,6 +169,12 @@ func (p *AzUtil) PutBlockList(blobName string, blockIDs []string) error {
 	return nil
 }
 
+//PutEmptyBlockBlob  TODO
+func (p *AzUtil) PutEmptyBlockBlob(blobName string) error {
+	empty := make([]string, 0)
+	return p.PutBlockList(blobName, empty)
+}
+
 //PutBlock TODO
 func (p *AzUtil) PutBlock(container string, blobName string, id string, body io.ReadSeeker) error {
 	curl := p.serviceURL.NewContainerURL(container)
@@ -189,7 +196,6 @@ func (p *AzUtil) PutBlockBlob(blobName string, body io.ReadSeeker, md5 []byte) e
 	bburl := p.containerURL.NewBlockBlobURL(blobName)
 
 	h := azblob.BlobHTTPHeaders{}
-
 
 	//16 is md5.Size
 	if len(md5) != 16 {
@@ -406,13 +412,13 @@ func (*retriableError) Temporary() bool {
 	return true
 }
 
-const tcpKeepOpenMinLength = 8 * int64(util.MB) 
+const tcpKeepOpenMinLength = 8 * int64(util.MB)
 
 func (p *clientPolicy) Do(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
 	req := request.WithContext(ctx)
-	
+
 	if req.ContentLength < tcpKeepOpenMinLength {
-		req.Close=true
+		req.Close = true
 	}
 
 	r, err := pipelineHTTPClient.Do(req)
