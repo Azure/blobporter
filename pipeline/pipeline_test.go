@@ -69,9 +69,9 @@ func TestConstructPartitionsWhenSizeIsZero(t *testing.T) {
 	p := partitions[0]
 	assert.Equal(t, 1, p.NumOfParts)
 	assert.Equal(t, offSet*i, p.Offset)
-	assert.Equal(t, 1, p.TotalNumOfParts)
+	assert.Equal(t, 1, int(p.TotalNumOfParts))
 	assert.Equal(t, size, p.TotalSize)
-	assert.Equal(t, 0, p.PartitionSize)
+	assert.Equal(t, 0, int(p.PartitionSize))
 	assert.Equal(t, 1, len(p.Parts))
 	calcSize = calcSize + p.PartitionSize
 
