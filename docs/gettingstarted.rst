@@ -9,7 +9,7 @@ Download, extract and set permissions
 
 ::
 
-    wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.6.12/bp_linux.tar.gz
+    wget -O bp_linux.tar.gz https://github.com/Azure/blobporter/releases/download/v0.6.14/bp_linux.tar.gz
     tar -xvf bp_linux.tar.gz linux_amd64/blobporter
     chmod +x ~/linux_amd64/blobporter
     cd ~/linux_amd64
@@ -26,7 +26,7 @@ Set environment variables: ::
 Windows
 -------
 
-Download `BlobPorter.exe <https://github.com/Azure/blobporter/releases/download/v0.6.12/bp_windows.zip>`_
+Download `BlobPorter.exe <https://github.com/Azure/blobporter/releases/download/v0.6.14/bp_windows.zip>`_
 
 Set environment variables (if using the command prompt): ::
 

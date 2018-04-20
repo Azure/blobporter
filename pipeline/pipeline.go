@@ -122,6 +122,25 @@ type PartsPartition struct {
 	Parts           []Part
 }
 
+func newEmptyPartition(blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) *PartsPartition {
+	return &PartsPartition{
+		Offset:          0,
+		NumOfParts:      1,
+		TotalNumOfParts: 1,
+		TotalSize:       0,
+		Parts: []Part{Part{
+			Offset:         0,
+			BlockSize:      uint32(blockSize),
+			BytesToRead:    0,
+			Ordinal:        0,
+			SourceURI:      sourceURI,
+			TargetAlias:    targetAlias,
+			NumberOfBlocks: 1,
+			BufferQ:        bufferQ,
+		}},
+	}
+}
+
 //createPartsInPartition creates the parts in the partition arithmetically.
 func createPartsInPartition(partitionSize int64, partitionOffSet int64, ordinalStart int, sourceNumOfBlocks int, blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) (parts []Part, ordinal int, numOfPartsInPartition int) {
 	var bytesLeft = partitionSize
@@ -150,7 +169,23 @@ func createPartsInPartition(partitionSize int64, partitionOffSet int64, ordinalS
 }
 
 //ConstructPartsPartition creates a slice of PartsPartition with a len of numberOfPartitions.
-func ConstructPartsPartition(numberOfPartitions int, size int64, blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) []PartsPartition {
+func ConstructPartsPartition(numOfPartitions int, size int64, blockSize int64, sourceURI string, targetAlias string, bufferQ chan []byte) []PartsPartition {
+
+	//if an empty file create a empty partition
+	if size == 0 {
+		partition := newEmptyPartition(blockSize, sourceURI, targetAlias, bufferQ)
+		return []PartsPartition{*partition}
+	}
+	numberOfPartitions := numOfPartitions
+
+	if size < (int64(numberOfPartitions) * blockSize) {
+		numberOfPartitions = int((size + blockSize - 1) / blockSize)
+
+		if numberOfPartitions == 0 {
+			numberOfPartitions = 1
+		}
+	}
+
 	numOfBlocks := int((size + blockSize - 1) / blockSize)
 	Partitions := make([]PartsPartition, numberOfPartitions)
 	//the size of the partition needs to be a multiple (blockSize * int) to make sure all but the last part/block

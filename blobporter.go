@@ -171,7 +171,7 @@ func main() {
 func getProgressBarDelegate(totalSize uint64, quietMode bool) func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
 	dataTransferred = 0
 	targetRetries = 0
-	if quietMode {
+	if quietMode || totalSize == 0 {
 		return func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
 			atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
 			dataTransferred = dataTransferred + uint64(r.BlockSize)
