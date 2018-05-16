@@ -170,12 +170,6 @@ func (f *HTTPSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, par
 			req.Header.Set("Range", header)
 			req.Header.Set("User-Agent", internal.UserAgentStr)
 
-			//set the close header only when the block is larger than the blob
-			//to minimize the number of open when transferring small files.
-			if p.BytesToRead < p.BlockSize {
-				req.Close = true
-			}
-
 			if res, err = f.HTTPClient.Do(req); err != nil || res.StatusCode != 206 {
 				var status int
 				if res != nil {
