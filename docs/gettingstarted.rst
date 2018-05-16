@@ -89,6 +89,10 @@ Command Options
  -l, --transfer_status      (string) Transfer status file location.
                             If set, blobporter will use this file to track the status of the transfer. 
                             
-                            In case of failure and the same file is referrenced, the source files that were transferred will be skipped.
+                            By referencing the same status file after a failure, the transfer will skip files already transferred.
                             
                             If the transfer is successful a summary will be appended.
+
+ -u, --endpoint_suffix      Endpoint suffix to be used for blob sources or targets.
+
+                            Default is blob.core.windows.net
