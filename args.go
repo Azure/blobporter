@@ -61,7 +61,6 @@ type arguments struct {
 	storageAccountKey        string
 	storageClientHTTPTimeout int
 	baseBlobURL              string
-	targetBaseBlobURL        string
 	sourceParameters         map[string]string
 	sourceAuthorization      string
 	quietMode                bool
@@ -206,11 +205,13 @@ func (p *paramParserValidator) getTargetRules() ([]parseAndValidationRule, error
 			p.pvKeepDirStructueIsFalseWarning}, nil
 	case transfer.PageBlob:
 		return []parseAndValidationRule{
+			p.pvTargetBaseURL,
 			p.pvTargetContainerIsReq,
 			p.pvBlockSizeCheckForPageBlobs,
 			p.pvTargetBlobAuthInfoIsReq}, nil
 	case transfer.BlockBlob:
 		return []parseAndValidationRule{
+			p.pvTargetBaseURL,
 			p.pvTargetContainerIsReq,
 			p.pvBlockSizeCheckForBlockBlobs,
 			p.pvTargetBlobAuthInfoIsReq}, nil
@@ -239,6 +240,7 @@ func (p *paramParserValidator) getSourceRules() ([]parseAndValidationRule, error
 			p.pvSourceInfoForS3IsReq}, nil
 	case transfer.Blob:
 		return []parseAndValidationRule{
+			p.pvSourceBaseURL,
 			p.pvSourceInfoForBlobIsReq,
 			p.pvSetEmptyPrefixIfNone}, nil
 	case transfer.Perf:
@@ -266,7 +268,7 @@ func (p *paramParserValidator) pvgUseExactMatch() error {
 func (p *paramParserValidator) pvgTransferStatusPathIsPresent() error {
 
 	if p.args.transferStatusPath != "" {
-		if !p.args.quietMode{
+		if !p.args.quietMode {
 			fmt.Printf("Transfer is resumable. Transfer status file:%v \n", p.args.transferStatusPath)
 		}
 		tracker, err := internal.NewTransferTracker(p.args.transferStatusPath)
@@ -345,6 +347,16 @@ func (p *paramParserValidator) pvgTransferType() error {
 }
 
 //Transfer segment specific rules...
+func (p *paramParserValidator) pvSourceBaseURL() error {
+	p.params.blobSource.baseBlobURL = p.args.baseBlobURL
+
+	return nil
+}
+func (p *paramParserValidator) pvTargetBaseURL() error {
+	p.params.blobTarget.baseBlobURL = p.args.baseBlobURL
+
+	return nil
+}
 func (p *paramParserValidator) pvSetTargetAliases() error {
 	p.params.targetAliases = p.args.blobNames
 
@@ -447,7 +459,7 @@ func (p *paramParserValidator) pvSetEmptyPrefixIfNone() error {
 // storage account that is the target in all other cases. And the second with the URI provided, as when blob to blob transfers occur.
 func (p *paramParserValidator) pvSourceInfoForBlobIsReq() error {
 
-	//if the scenarios is download then check if download is via short-mode
+	//if the scenario is download check for short-mode download
 	if p.params.transferType == transfer.BlobToFile {
 		p.params.blobSource.accountName = p.args.storageAccountName
 		if p.params.blobSource.accountName == "" {
@@ -477,7 +489,7 @@ func (p *paramParserValidator) pvSourceInfoForBlobIsReq() error {
 	err := p.pvSourceURIISReq()
 
 	if err != nil {
-		return err
+		return fmt.Errorf("%s \n Or the account name or key were not set", err)
 	}
 
 	var burl *url.URL
@@ -492,7 +504,7 @@ func (p *paramParserValidator) pvSourceInfoForBlobIsReq() error {
 	p.params.blobSource.accountName = host[0]
 
 	if p.params.blobSource.accountName == "" {
-		return fmt.Errorf("Invalid source Azure Blob URL. Account name could be parsed from the domain")
+		return fmt.Errorf("Invalid source Azure Blob URL. Account name could not be parsed from the domain")
 	}
 
 	segments := strings.Split(burl.Path, "/")
@@ -540,7 +552,7 @@ func (p *paramParserValidator) pvSourceInfoForS3IsReq() error {
 	segments := strings.Split(burl.Path, "/")
 
 	if len(segments) < 2 {
-		return fmt.Errorf("Invalid S3 endpoint URL. Bucket not specified. The format is s3://[END_POINT]/[BUCKET]/[PREFIX]")		
+		return fmt.Errorf("Invalid S3 endpoint URL. Bucket not specified. The format is s3://[END_POINT]/[BUCKET]/[PREFIX]")
 	}
 
 	p.params.s3Source.bucket = segments[1]
