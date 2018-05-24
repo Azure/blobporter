@@ -1,4 +1,4 @@
-FROM ubuntu:bionic-20180426
+FROM debian:9.4-slim
 
 ENV BP_RELEASE=0.6.12
 
