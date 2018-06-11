@@ -1,6 +1,6 @@
 FROM debian:9.4-slim
 
-ENV BP_RELEASE=0.6.12
+ENV BP_RELEASE=0.6.15
 
 RUN apt-get update && apt-get install --yes --no-install-recommends wget ca-certificates && mkdir /workdir && \
     cd /tmp && \
