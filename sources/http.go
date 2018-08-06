@@ -251,6 +251,7 @@ func newSourceHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: time.Duration(internal.HTTPClientTimeout) * time.Second,
 		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
 			Dial: (&net.Dialer{
 				Timeout:   30 * time.Second, // dial timeout
 				KeepAlive: 30 * time.Second,
