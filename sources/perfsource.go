@@ -50,8 +50,9 @@ func newSourceDefinition(def string) (*SourceDefinition, error) {
 		return nil, fmt.Errorf("Invalid format. The source definition must be [Size]:[NumOfSources]. Failed to parse the number of sources. Error:%v", err)
 	}
 	names := make([]string, numOfSrcs)
+	timestamp := time.Now().Nanosecond()
 	for n := 0; n < numOfSrcs; n++ {
-		names[n] = fmt.Sprintf("%s%v.dat", strings.Replace(def, ":", "_", 1), time.Now().Nanosecond())
+		names[n] = fmt.Sprintf("%s_%v_%06d.dat", strings.Replace(def, ":", "_", 1), timestamp, n)
 	}
 
 	return &SourceDefinition{Size: size, NumberOfSources: numOfSrcs, Names: names}, nil
