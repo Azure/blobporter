@@ -170,52 +170,54 @@ func (f *HTTPSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, par
 			continue
 		}
 
-		util.RetriableOperation(func(r int) error {
-			if req, err = http.NewRequest("GET", p.SourceURI, nil); err != nil {
-				log.Fatal(err)
-			}
-
-			header := fmt.Sprintf("bytes=%v-%v", p.Offset, p.Offset-1+uint64(p.BytesToRead))
-			req.Header.Set("Range", header)
-			req.Header.Set("User-Agent", internal.UserAgentStr)
-
-			if res, err = f.HTTPClient.Do(req); err != nil || res.StatusCode != 206 {
-				var status int
-				if res != nil {
-					status = res.StatusCode
-					err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
+		if p.BytesToRead > 0 {
+			util.RetriableOperation(func(r int) error {
+				if req, err = http.NewRequest("GET", p.SourceURI, nil); err != nil {
+					log.Fatal(err)
 				}
 
-				if res != nil && res.Body != nil {
-					res.Body.Close()
+				header := fmt.Sprintf("bytes=%v-%v", p.Offset, p.Offset-1+uint64(p.BytesToRead))
+				req.Header.Set("Range", header)
+				req.Header.Set("User-Agent", internal.UserAgentStr)
+
+				if res, err = f.HTTPClient.Do(req); err != nil || res.StatusCode != 206 {
+					var status int
+					if res != nil {
+						status = res.StatusCode
+						err = fmt.Errorf("Invalid status code in the response. Status: %v Bytes: %v", status, header)
+					}
+
+					if res != nil && res.Body != nil {
+						res.Body.Close()
+					}
+
+					util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v err:%v head:%v", p.BlockID, p.BytesToRead, status, err, header)
+
+					return err
 				}
 
-				util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v err:%v head:%v", p.BlockID, p.BytesToRead, status, err, header)
+				//p.Data, err = ioutil.ReadAll(res.Body)
+				p.GetBuffer()
+				_, err := io.ReadAtLeast(res.Body, p.Data, int(p.BytesToRead))
 
-				return err
-			}
+				if err != nil && err != io.ErrUnexpectedEOF {
+					return err
+				}
 
-			//p.Data, err = ioutil.ReadAll(res.Body)
-			p.GetBuffer()
-			_, err := io.ReadAtLeast(res.Body, p.Data, int(p.BytesToRead))
+				res.Body.Close()
+				if err != nil {
+					return err
+				}
 
-			if err != nil && err != io.ErrUnexpectedEOF {
-				return err
-			}
+				if f.includeMD5 {
+					p.MD5()
+				}
 
-			res.Body.Close()
-			if err != nil {
-				return err
-			}
+				util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v read:%v head:%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
 
-			if f.includeMD5 {
-				p.MD5()
-			}
-
-			util.PrintfIfDebug("ExecuteReader -> blockid:%v toread:%v status:%v read:%v head:%v", p.BlockID, p.BytesToRead, res.StatusCode, res.ContentLength, header)
-
-			return nil
-		})
+				return nil
+			})
+		}
 
 		readPartsQ <- p
 		blocksHandled++

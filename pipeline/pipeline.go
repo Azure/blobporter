@@ -229,6 +229,11 @@ func ConstructPartsQueue(size uint64, blockSize uint64, sourceURI string, target
 	var bsib = blockSize
 	numOfBlocks = int((size + (bsib - 1)) / bsib)
 
+	// Have at least 1 block.
+	if numOfBlocks == 0 {
+		numOfBlocks = 1
+	}
+
 	parts = make([]Part, numOfBlocks)
 
 	var curFileOffset uint64
