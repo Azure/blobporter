@@ -35,7 +35,8 @@ func NewHTTPSourcePipelineFactory(params HTTPSourceParams) <-chan FactoryResult 
 	result <- FactoryResult{
 		Source: newHTTPSourcePipeline(params.SourceURIs,
 			params.TargetAliases,
-			params.SourceParams.CalculateMD5),
+			params.SourceParams.CalculateMD5,
+			params.ReferenceMode),
 	}
 	return result
 }
@@ -65,7 +66,7 @@ func NewS3SourcePipelineFactory(params *S3Params) <-chan FactoryResult {
 	if params.Tracker != nil {
 		filter = params.Tracker
 	}
-	return newObjectListPipelineFactory(s3Provider, filter, params.CalculateMD5, params.FilesPerPipeline)
+	return newObjectListPipelineFactory(s3Provider, filter, params.CalculateMD5, params.FilesPerPipeline, params.ReferenceMode)
 }
 
 //NewAzBlobSourcePipelineFactory TODO
@@ -79,7 +80,7 @@ func NewAzBlobSourcePipelineFactory(params *AzureBlobParams) <-chan FactoryResul
 		filter = params.Tracker
 	}
 
-	return newObjectListPipelineFactory(azProvider, filter, params.CalculateMD5, params.FilesPerPipeline)
+	return newObjectListPipelineFactory(azProvider, filter, params.CalculateMD5, params.FilesPerPipeline, params.ReferenceMode)
 }
 
 //NewFileSystemSourcePipelineFactory TODO
@@ -114,7 +115,7 @@ func NewFileSystemSourcePipelineFactory(params *FileSystemSourceParams) <-chan F
 	return result
 }
 
-func newObjectListPipelineFactory(provider objectListProvider, filter internal.SourceFilter, includeMD5 bool, filesPerPipeline int) <-chan FactoryResult {
+func newObjectListPipelineFactory(provider objectListProvider, filter internal.SourceFilter, includeMD5 bool, filesPerPipeline int, referenceMode bool) <-chan FactoryResult {
 	result := make(chan FactoryResult, 1)
 	var err error
 
@@ -132,8 +133,9 @@ func newObjectListPipelineFactory(provider objectListProvider, filter internal.S
 			}
 
 			httpSource := &HTTPSource{Sources: lst.Sources,
-				HTTPClient: httpSourceHTTPClient,
-				includeMD5: includeMD5,
+				HTTPClient:    httpSourceHTTPClient,
+				referenceMode: referenceMode,
+				includeMD5:    includeMD5,
 			}
 			result <- FactoryResult{Source: httpSource}
 		}

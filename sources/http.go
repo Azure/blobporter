@@ -26,14 +26,15 @@ const sasTokenNumberOfHours = 4
 
 // HTTPSource  constructs parts  channel and implements data readers for file exposed via HTTP
 type HTTPSource struct {
-	Sources    []pipeline.SourceInfo
-	HTTPClient *http.Client
-	includeMD5 bool
+	Sources       []pipeline.SourceInfo
+	HTTPClient    *http.Client
+	includeMD5    bool
+	referenceMode bool
 }
 
 //newHTTPSourcePipeline creates a new instance of an HTTP source
 //To get the file size, a HTTP HEAD request is issued and the Content-Length header is inspected.
-func newHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool) pipeline.SourcePipeline {
+func newHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool, referenceMode bool) pipeline.SourcePipeline {
 	setTargetAlias := len(sourceURIs) == len(targetAliases)
 	sources := make([]pipeline.SourceInfo, len(sourceURIs))
 	for i := 0; i < len(sourceURIs); i++ {
@@ -54,7 +55,7 @@ func newHTTPSourcePipeline(sourceURIs []string, targetAliases []string, md5 bool
 			TargetAlias: targetAlias,
 			SourceName:  sourceURIs[i]}
 	}
-	return &HTTPSource{Sources: sources, HTTPClient: httpSourceHTTPClient, includeMD5: md5}
+	return &HTTPSource{Sources: sources, HTTPClient: httpSourceHTTPClient, includeMD5: md5, referenceMode: referenceMode}
 }
 
 // returns last part of URL (filename)
@@ -159,6 +160,14 @@ func (f *HTTPSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, par
 
 		if !ok {
 			return // no more blocks of file data to be read
+		}
+
+		//when in reference mode the assumption is that data won't be read, we just need to pass
+		// the reference (source info and byte range) to the workers. The target scenario is when the target
+		// reads directly from the source, which is the case of the Put Block from URL functionally for block blobs.
+		if f.referenceMode {
+			readPartsQ <- p
+			continue
 		}
 
 		util.RetriableOperation(func(r int) error {

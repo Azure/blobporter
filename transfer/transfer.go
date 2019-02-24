@@ -17,15 +17,6 @@ import (
 	"github.com/Azure/blobporter/util"
 )
 
-// Worker represents a worker routine that transfers data to a target
-type Worker struct {
-	WorkerID    int
-	WorkerQueue chan pipeline.Part
-	Result      chan pipeline.WorkerResult
-	Wg          *sync.WaitGroup
-	dupeLevel   DupeCheckLevel
-}
-
 // DupeCheckLevel -- degree to which we'll try to check for duplicate blocks
 type DupeCheckLevel int
 
@@ -223,48 +214,8 @@ func checkForDuplicateChunk(current *pipeline.Part, dupeLevel DupeCheckLevel) {
 	}
 }
 
-// newWorker creates a new instance of upload Worker
-func newWorker(workerID int, workerQueue chan pipeline.Part,
-	resultQueue chan pipeline.WorkerResult, wg *sync.WaitGroup, d DupeCheckLevel) Worker {
-	return Worker{
-		//Info:        sti,
-		WorkerQueue: workerQueue,
-		WorkerID:    workerID,
-		Wg:          wg,
-		Result:      resultQueue,
-		dupeLevel:   d}
-
-}
-
-// recordStatus -- record the upload status for a completed block to the results channel.
-// ... Can be executed sync or async.
-func (w *Worker) recordStatus(tb *pipeline.Part, startTime time.Time, d time.Duration, status string, retries int) {
-
-	var wStats = pipeline.WorkerResultStats{
-		StartTime: startTime,
-		Duration:  d,
-		Retries:   retries}
-
-	tb.Data = nil
-	tb.BufferQ = nil
-
-	w.Result <- pipeline.WorkerResult{
-		Stats:                   &wStats,
-		BlockSize:               int(tb.BytesToRead),
-		Result:                  status,
-		WorkerID:                w.WorkerID,
-		ItemID:                  tb.BlockID,
-		DuplicateOfBlockOrdinal: tb.DuplicateOfBlockOrdinal,
-		Ordinal:                 tb.Ordinal,
-		Offset:                  tb.Offset,
-		SourceURI:               tb.SourceURI,
-		NumberOfBlocks:          tb.NumberOfBlocks,
-		TargetName:              tb.TargetAlias}
-
-}
-
 //ProgressUpdate called whenever a worker completes successfully
-type ProgressUpdate func(results pipeline.WorkerResult, committedCount int, bufferSize int)
+//type ProgressUpdate func(results pipeline.WorkerResult, committedCount int, bufferSize int)
 
 //Transfer top data structure holding the state of the transfer.
 type Transfer struct {
@@ -277,18 +228,11 @@ type Transfer struct {
 	ThreadTarget         int
 	SyncWaitGroups       *WaitGroups
 	ControlChannels      *Channels
-	TimeStats            *TimeStatsInfo
 	tracker              *internal.TransferTracker
 	readPartsBufferSize  int
 	blockSize            uint64
 	totalNumberOfRetries int32
-}
-
-//TimeStatsInfo contains transfer statistics, used at the end of the transfer
-type TimeStatsInfo struct {
-	StartTime        time.Time
-	Duration         time.Duration
-	CumWriteDuration time.Duration
+	commitListHandler    *commitListHandler
 }
 
 //WaitGroups holds all wait groups involved in the transfer.
@@ -302,7 +246,6 @@ type WaitGroups struct {
 type Channels struct {
 	ReadParts  chan pipeline.Part
 	Parts      chan pipeline.Part
-	Results    chan pipeline.WorkerResult
 	Partitions chan pipeline.PartsPartition
 }
 
@@ -318,10 +261,15 @@ func NewTransfer(source pipeline.SourcePipeline, target pipeline.TargetPipeline,
 
 	wg := WaitGroups{}
 	channels := Channels{}
-	t := Transfer{ThreadTarget: threadTarget, NumOfReaders: readers, NumOfWorkers: workers, SourcePipeline: source,
-		TargetPipeline: target, SyncWaitGroups: &wg, ControlChannels: &channels,
-		TimeStats: &TimeStatsInfo{},
-		blockSize: blockSize}
+	t := Transfer{ThreadTarget: threadTarget,
+		NumOfReaders:    readers,
+		NumOfWorkers:    workers,
+		SourcePipeline:  source,
+		TargetPipeline:  target,
+		SyncWaitGroups:  &wg,
+		ControlChannels: &channels,
+		blockSize:       blockSize,
+	}
 
 	//validate that all sourceURIs are unique
 	sources := source.GetSourcesInfo()
@@ -332,15 +280,17 @@ func NewTransfer(source pipeline.SourcePipeline, target pipeline.TargetPipeline,
 	//Setup the wait groups
 	t.SyncWaitGroups.Readers.Add(readers)
 	t.SyncWaitGroups.Workers.Add(workers)
-	t.SyncWaitGroups.Commits.Add(1)
+	t.SyncWaitGroups.Commits.Add(workers)
 
 	//Create buffered channels
 	channels.Partitions, channels.Parts, t.TotalNumOfBlocks, t.TotalSize = source.ConstructBlockInfoQueue(blockSize)
 	readParts := make(chan pipeline.Part, t.getReadPartsBufferSize())
-	results := make(chan pipeline.WorkerResult, t.TotalNumOfBlocks)
 
 	channels.ReadParts = readParts
-	channels.Results = results
+
+	//we are ignoring the return error as the sink is a singleton so for the first transfer
+	// the assumption is that is not going to be flushed.
+	internal.EventSink.Reset()
 
 	return &t
 }
@@ -371,16 +321,13 @@ func (t *Transfer) getReadPartsBufferSize() int {
 
 //StartTransfer starts the readers and readers. Process and commits the results of the write operations.
 //The duration timer is started.
-func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel, progressBarDelegate ProgressUpdate) {
+func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel) {
 	t.preprocessSources()
-
-	t.TimeStats.StartTime = time.Now()
 
 	t.startReaders(t.ControlChannels.Partitions, t.ControlChannels.Parts, t.ControlChannels.ReadParts, t.NumOfReaders, &t.SyncWaitGroups.Readers, t.SourcePipeline)
 
-	t.startWorkers(t.ControlChannels.ReadParts, t.ControlChannels.Results, t.NumOfWorkers, &t.SyncWaitGroups.Workers, dupeLevel, t.TargetPipeline)
+	t.startWorkers(dupeLevel)
 
-	go t.processAndCommitResults(t.ControlChannels.Results, progressBarDelegate, t.TargetPipeline, &t.SyncWaitGroups.Commits)
 }
 
 //Concurrely calls the PreProcessSourceInfo implementation of the target pipeline for each source in the transfer.
@@ -403,90 +350,31 @@ func (t *Transfer) preprocessSources() {
 
 //WaitForCompletion blocks until the readers, writers and commit operations complete.
 //Duration property is set and returned.
-func (t *Transfer) WaitForCompletion() (time.Duration, time.Duration) {
+func (t *Transfer) WaitForCompletion() {
 
 	t.SyncWaitGroups.Readers.Wait()
 	close(t.ControlChannels.ReadParts)
 	t.SyncWaitGroups.Workers.Wait() // Ensure all upload workers complete
-	close(t.ControlChannels.Results)
-	t.SyncWaitGroups.Commits.Wait() // Ensure all commits complete
-	t.TimeStats.Duration = time.Now().Sub(t.TimeStats.StartTime)
-	return t.TimeStats.Duration, t.TimeStats.CumWriteDuration
-}
-
-//GetStats returns the statistics of the transfer.
-func (t *Transfer) GetStats() *StatInfo {
-	return &StatInfo{
-		NumberOfFiles:       len(t.SourcePipeline.GetSourcesInfo()),
-		Duration:            t.TimeStats.Duration,
-		CumWriteDuration:    t.TimeStats.CumWriteDuration,
-		TotalNumberOfBlocks: t.TotalNumOfBlocks,
-		TargetRetries:       t.totalNumberOfRetries,
-		TotalSize:           t.TotalSize}
+	t.commitListHandler.setDone()
+	t.commitListHandler.Wait()
+	t.SyncWaitGroups.Commits.Wait()
+	internal.EventSink.FlushAndWait()
+	return
 }
 
 // StartWorkers creates and starts the set of Workers to send data blocks
 // from the to the target. Workers are started after waiting workerDelayStarTime.
-func (t *Transfer) startWorkers(workerQ chan pipeline.Part, resultQ chan pipeline.WorkerResult, numOfWorkers int, wg *sync.WaitGroup, d DupeCheckLevel, target pipeline.TargetPipeline) {
-	for w := 0; w < numOfWorkers; w++ {
-		worker := newWorker(w, workerQ, resultQ, wg, d)
-		go worker.startWorker(target)
-	}
-}
-
-//ProcessAndCommitResults reads from the results channel and calls the target's implementations of the ProcessWrittenPart
-// and CommitList, if the last part is received. The update delegate is called as well.
-func (t *Transfer) processAndCommitResults(resultQ chan pipeline.WorkerResult, update ProgressUpdate, target pipeline.TargetPipeline, commitWg *sync.WaitGroup) {
-
-	lists := make(map[string]pipeline.TargetCommittedListInfo)
-	blocksProcessed := make(map[string]int)
-	committedCount := 0
-	var list pipeline.TargetCommittedListInfo
-	var numOfBlocks int
-	var requeue bool
-	var err error
-	var workerBufferLevel int
-	defer commitWg.Done()
-
-	for {
-		result, ok := <-resultQ
-
-		if !ok {
-			break
-		}
-
-		list = lists[result.SourceURI]
-		numOfBlocks = blocksProcessed[result.SourceURI]
-
-		if requeue, err = target.ProcessWrittenPart(&result, &list); err == nil {
-			lists[result.SourceURI] = list
-			if requeue {
-				resultQ <- result
-			} else {
-				numOfBlocks++
-				t.TimeStats.CumWriteDuration = t.TimeStats.CumWriteDuration + result.Stats.Duration
-				t.totalNumberOfRetries = t.totalNumberOfRetries + int32(result.Stats.Retries)
-				blocksProcessed[result.SourceURI] = numOfBlocks
-			}
-		} else {
-			log.Fatal(err)
-		}
-
-		if numOfBlocks == result.NumberOfBlocks {
-			if _, err := target.CommitList(&list, numOfBlocks, result.TargetName); err != nil {
-				log.Fatal(err)
-			}
-			committedCount++
-			if t.tracker != nil {
-				if err := t.tracker.TrackFileTransferComplete(result.TargetName); err != nil {
-					log.Fatal(err)
-				}
-			}
-		}
-
-		workerBufferLevel = int(float64(len(t.ControlChannels.ReadParts)) / float64(t.getReadPartsBufferSize()) * 100)
-		// call update delegate
-		update(result, committedCount, workerBufferLevel)
+//func (t *Transfer) startWorkers(workerQ chan pipeline.Part, numOfWorkers int, worker *sync.WaitGroup, d DupeCheckLevel, target pipeline.TargetPipeline, progressBarDelegate ProgressUpdate) {
+func (t *Transfer) startWorkers(d DupeCheckLevel) {
+	t.commitListHandler = newCommitListHandler(t.tracker, t.TargetPipeline)
+	for w := 0; w < t.NumOfWorkers; w++ {
+		worker := newWorker(w,
+			t.ControlChannels.ReadParts,
+			t.commitListHandler,
+			&t.SyncWaitGroups.Workers,
+			&t.SyncWaitGroups.Commits,
+			d)
+		go worker.startWorker(t.TargetPipeline)
 	}
 }
 
@@ -500,41 +388,4 @@ func (t *Transfer) startReaders(partitionsQ chan pipeline.PartsPartition, partsQ
 	for i := 0; i < numberOfReaders; i++ {
 		go pipeline.ExecuteReader(partitionsQ, partsQ, workerQ, i, wg)
 	}
-}
-
-// startWorker starts a worker that reads from the worker queue channel. Which contains the read parts from the source.
-// Calls the target's WritePart implementation and sends the result to the results channel.
-func (w *Worker) startWorker(target pipeline.TargetPipeline) {
-	var tb pipeline.Part
-	var ok bool
-	var duration time.Duration
-	var startTime time.Time
-	var retries int
-	var err error
-	var t = target
-	defer w.Wg.Done()
-	for {
-		tb, ok = <-w.WorkerQueue
-
-		if !ok { // Work queue has been closed, so done.
-			return
-		}
-
-		checkForDuplicateChunk(&tb, w.dupeLevel)
-
-		if tb.DuplicateOfBlockOrdinal >= 0 {
-			// This block is a duplicate of another, so don't upload it.
-			// Instead, just reflect it (with it's "duplicate" status)
-			// onwards in the completion channel
-			w.recordStatus(&tb, time.Now(), 0, "Success", 0)
-			continue
-		}
-		if duration, startTime, retries, err = t.WritePart(&tb); err == nil {
-			tb.ReturnBuffer()
-			w.recordStatus(&tb, startTime, duration, "Success", retries)
-		} else {
-			log.Fatal(err)
-		}
-	}
-
 }

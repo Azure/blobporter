@@ -3,6 +3,8 @@ package transfer
 import (
 	"testing"
 
+	"github.com/Azure/blobporter/internal"
+
 	"os"
 
 	"fmt"
@@ -10,7 +12,6 @@ import (
 
 	"log"
 
-	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/blobporter/pipeline"
 	"github.com/Azure/blobporter/sources"
 	"github.com/Azure/blobporter/targets"
@@ -24,8 +25,10 @@ import (
 // -- Tests create a working directory named transfer_testdata and temp files under it. Plase make sure the working directory is in .gitignore
 //********
 var sourceFiles = make([]string, 1)
+
 var accountName = os.Getenv("ACCOUNT_NAME")
 var accountKey = os.Getenv("ACCOUNT_KEY")
+
 var blockSize = uint64(4 * util.MiByte)
 var delegate = func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {}
 var numOfReaders = 10
@@ -64,7 +67,7 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 
 	ap := targets.NewAzurePageTargetPipeline(tparams)
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 	sourceURI, err := createSasTokenURL(sourceFile, container)
 
@@ -86,7 +89,7 @@ func TestFileToPageHTTPToPage(t *testing.T) {
 	fpf = <-sources.NewHTTPSourcePipelineFactory(httpparams)
 	fp = fpf.Source
 	tfer = NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -116,7 +119,7 @@ func TestFileToPage(t *testing.T) {
 	pt := targets.NewAzurePageTargetPipeline(tparams)
 
 	tfer := NewTransfer(fp, pt, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -141,7 +144,7 @@ func TestFileToFile(t *testing.T) {
 	ft := targets.NewFileSystemTargetPipeline(true, numOfWorkers)
 
 	tfer := NewTransfer(fp, ft, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -172,7 +175,7 @@ func TestFileToBlob(t *testing.T) {
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -200,7 +203,7 @@ func TestFileToBlobToBlock(t *testing.T) {
 
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -230,7 +233,7 @@ func TestFileToBlobWithLargeBlocks(t *testing.T) {
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, bsize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -262,7 +265,7 @@ func TestFilesToBlob(t *testing.T) {
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sf1)
@@ -297,7 +300,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 	sourceURI, err := createSasTokenURL(sourceFile, container)
 
@@ -320,7 +323,7 @@ func TestFileToBlobHTTPToBlob(t *testing.T) {
 	fpf = <-sources.NewHTTPSourcePipelineFactory(httpparams)
 	fp = fpf.Source
 	tfer = NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -349,7 +352,7 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 	sourceURI, err := createSasTokenURL(sourceFile, container)
 
@@ -367,7 +370,7 @@ func TestFileToBlobHTTPToFile(t *testing.T) {
 	fpf = <-sources.NewHTTPSourcePipelineFactory(httpparams)
 	fp = fpf.Source
 	tfer = NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile + "d")
@@ -397,7 +400,7 @@ func TestFileToBlobToFile(t *testing.T) {
 
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	ap = targets.NewFileSystemTargetPipeline(true, numOfWorkers)
@@ -415,7 +418,7 @@ func TestFileToBlobToFile(t *testing.T) {
 	fpf = <-sources.NewAzBlobSourcePipelineFactory(azureBlobParams)
 	fp = fpf.Source
 	tfer = NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -447,7 +450,7 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 	ap := targets.NewAzureBlockTargetPipeline(tparams)
 
 	tfer := NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	ap = targets.NewFileSystemTargetPipeline(true, numOfWorkers)
@@ -464,7 +467,7 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 	fpf = <-sources.NewAzBlobSourcePipelineFactory(azureBlobParams)
 	fp = fpf.Source
 	tfer = NewTransfer(fp, ap, numOfReaders, numOfWorkers, blockSize)
-	tfer.StartTransfer(None, delegate)
+	tfer.StartTransfer(None)
 	tfer.WaitForCompletion()
 
 	os.Remove(sourceFile)
@@ -472,7 +475,9 @@ func TestFileToBlobToFileWithAlias(t *testing.T) {
 
 }
 func deleteContainer(containerName string) {
-	_, err := getClient().DeleteContainerIfExists(containerName)
+	az, err := internal.NewAzUtil(accountName, accountKey, containerName, "")
+
+	err = az.DeleteContainerIfNotExists()
 	if err != nil {
 		panic(err)
 	}
@@ -482,13 +487,15 @@ func getContainers() (string, string) {
 }
 
 func createContainer(containerName string) string {
-	_, err := getClient().CreateContainerIfNotExists(containerName, storage.ContainerAccessTypePrivate)
+	az, err := internal.NewAzUtil(accountName, accountKey, containerName, "")
 
+	_, err = az.CreateContainerIfNotExists()
 	if err != nil {
 		panic(err)
 	}
 	return containerName
 }
+/*
 func getClient() storage.BlobStorageClient {
 	client, err := storage.NewBasicClient(accountName, accountKey)
 
@@ -499,9 +506,19 @@ func getClient() storage.BlobStorageClient {
 	return client.GetBlobService()
 
 }
+*/
 func createSasTokenURL(blobName string, container string) (string, error) {
+	az, err := internal.NewAzUtil(accountName, accountKey, container, "")
+
+	if err != nil {
+		return "", err
+	}
+
 	date := time.Now().UTC().AddDate(0, 0, 3)
-	return getClient().GetBlobSASURI(container, blobName, date, "r")
+	burl := az.GetBlobURLWithReadOnlySASToken(blobName, date)
+
+	return burl.String(), nil
+
 }
 func getStorageAccountCreds() *pipeline.StorageAccountCredentials {
 	return &pipeline.StorageAccountCredentials{AccountName: accountName, AccountKey: accountKey}

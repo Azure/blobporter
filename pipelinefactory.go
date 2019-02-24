@@ -120,7 +120,8 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 			SourceURIs:    p.valParams.sourceURIs,
 			TargetAliases: p.valParams.targetAliases,
 			SourceParams: sources.SourceParams{
-				CalculateMD5: p.valParams.calculateMD5}}, nil
+				ReferenceMode: p.valParams.referenceMode,
+				CalculateMD5:  p.valParams.calculateMD5}}, nil
 	case transfer.S3:
 		return sources.S3Params{
 			Bucket:          p.valParams.s3Source.bucket,
@@ -134,6 +135,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 				CalculateMD5:      p.valParams.calculateMD5,
 				UseExactNameMatch: p.valParams.useExactMatch,
 				FilesPerPipeline:  p.valParams.numberOfFilesInBatch,
+				ReferenceMode:     p.valParams.referenceMode,
 				//default to always true so blob names are kept
 				KeepDirStructure: p.valParams.keepDirStructure}}, nil
 	case transfer.Blob:
@@ -149,6 +151,7 @@ func (p *pipelinesFactory) newSourceParams() (interface{}, error) {
 				CalculateMD5:      p.valParams.calculateMD5,
 				UseExactNameMatch: p.valParams.useExactMatch,
 				FilesPerPipeline:  p.valParams.numberOfFilesInBatch,
+				ReferenceMode:     p.valParams.referenceMode,
 				KeepDirStructure:  p.valParams.keepDirStructure}}, nil
 	case transfer.Perf:
 		return sources.PerfSourceParams{
@@ -177,10 +180,11 @@ func (p *pipelinesFactory) newTargetParams() (interface{}, error) {
 			BaseBlobURL: p.valParams.blobTarget.baseBlobURL}, nil
 	case transfer.BlockBlob:
 		return targets.AzureTargetParams{
-			AccountName: p.valParams.blobTarget.accountName,
-			AccountKey:  p.valParams.blobTarget.accountKey,
-			Container:   p.valParams.blobTarget.container,
-			BaseBlobURL: p.valParams.blobTarget.baseBlobURL}, nil
+			AccountName:   p.valParams.blobTarget.accountName,
+			AccountKey:    p.valParams.blobTarget.accountKey,
+			Container:     p.valParams.blobTarget.container,
+			BaseBlobURL:   p.valParams.blobTarget.baseBlobURL,
+			UseServerSide: p.valParams.blobTarget.useServerSide}, nil
 	case transfer.Perf:
 		return nil, nil
 	}

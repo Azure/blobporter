@@ -10,24 +10,24 @@ type causer interface {
 }
 
 // ErrorNode can be an embedded field in a private error object. This field
-// adds Program Counter support and a 'cause' (reference to a preceeding error).
+// adds Program Counter support and a 'cause' (reference to a preceding error).
 // When initializing a error type with this embedded field, initialize the
 // ErrorNode field by calling ErrorNode{}.Initialize(cause).
 type ErrorNode struct {
 	pc    uintptr // Represents a Program Counter that you can get symbols for.
-	cause error   // Refers to the preceeding error (or nil)
+	cause error   // Refers to the preceding error (or nil)
 }
 
 // Error returns a string with the PC's symbols or "" if the PC is invalid.
 // When defining a new error type, have its Error method call this one passing
 // it the string representation of the error.
-func (e *ErrorNode) Error(format string, v ...interface{}) string {
+func (e *ErrorNode) Error(msg string) string {
 	s := ""
 	if fn := runtime.FuncForPC(e.pc); fn != nil {
 		file, line := fn.FileLine(e.pc)
 		s = fmt.Sprintf("-> %v, %v:%v\n", fn.Name(), file, line)
 	}
-	s += fmt.Sprintf(format, v...) + "\n\n"
+	s += msg + "\n\n"
 	if e.cause != nil {
 		s += e.cause.Error() + "\n"
 	}
@@ -78,7 +78,7 @@ func (e ErrorNode) Timeout() bool {
 }
 
 // Initialize is used to initialize an embedded ErrorNode field.
-// It captures the caller's program counter and saves the cause (preceeding error).
+// It captures the caller's program counter and saves the cause (preceding error).
 // To initialize the field, use "ErrorNode{}.Initialize(cause, 3)". A callersToSkip
 // value of 3 is very common; but, depending on your code nesting, you may need
 // a different value.
@@ -89,7 +89,7 @@ func (ErrorNode) Initialize(cause error, callersToSkip int) ErrorNode {
 	return ErrorNode{pc: pc[0], cause: cause}
 }
 
-// Cause walks all the preceeding errors and return the originating error.
+// Cause walks all the preceding errors and return the originating error.
 func Cause(err error) error {
 	for err != nil {
 		cause, ok := err.(causer)
@@ -102,11 +102,11 @@ func Cause(err error) error {
 }
 
 // NewError creates a simple string error (like Error.New). But, this
-// error also captures the caller's Program Counter and the preceeding error.
-func NewError(cause error, format string, v ...interface{}) error {
+// error also captures the caller's Program Counter and the preceding error.
+func NewError(cause error, msg string) error {
 	return &pcError{
 		ErrorNode: ErrorNode{}.Initialize(cause, 3),
-		msg:       fmt.Sprintf(format, v...),
+		msg:       msg,
 	}
 }
 
@@ -117,5 +117,5 @@ type pcError struct {
 }
 
 // Error satisfies the error interface. It shows the error with Program Counter
-// symbols and calls Error on the preceeding error so you can see the full error chain.
+// symbols and calls Error on the preceding error so you can see the full error chain.
 func (e *pcError) Error() string { return e.ErrorNode.Error(e.msg) }

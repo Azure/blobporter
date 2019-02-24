@@ -42,12 +42,12 @@ func WriteRequestWithResponse(b *bytes.Buffer, request *http.Request, response *
 	writeHeader(b, request.Header)
 	if response != nil {
 		fmt.Fprintln(b, "   --------------------------------------------------------------------------------")
-		fmt.Fprintf(b, "   RESPONSE Status: %s\n", response.Status)
+		fmt.Fprint(b, "   RESPONSE Status: "+response.Status+"\n")
 		writeHeader(b, response.Header)
 	}
 	if err != nil {
 		fmt.Fprintln(b, "   --------------------------------------------------------------------------------")
-		fmt.Fprintf(b, "   ERROR:\n%v\n", err)
+		fmt.Fprint(b, "   ERROR:\n"+err.Error()+"\n")
 	}
 }
 

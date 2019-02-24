@@ -157,4 +157,5 @@ can see the Response but cannot see the additional struct with the deserialized 
 Policy objects have returned, the pipeline.Response interface is returned by Pipeline's Do method.
 The caller of this method can perform a type assertion attempting to get back to the struct type
 really returned by the Policy object. If the type assertion is successful, the caller now has
-access to both the http.Response and the deserialized struct object.*/package pipeline
+access to both the http.Response and the deserialized struct object.*/
+package pipeline

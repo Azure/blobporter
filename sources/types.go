@@ -8,6 +8,7 @@ type objectListProvider interface {
 
 //SourceParams input base parameters for blob and S3 based pipelines
 type SourceParams struct {
+	ReferenceMode     bool
 	CalculateMD5      bool
 	UseExactNameMatch bool
 	KeepDirStructure  bool

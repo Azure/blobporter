@@ -43,6 +43,12 @@ type paramParserValidator struct {
 	params        *validatedParameters
 	sourceSegment transfer.TransferSegment
 	targetSegment transfer.TransferSegment
+	defaultValues defaults
+}
+
+type defaults struct {
+	defaultNumberOfReaders int
+	defaultNumberOfWorkers int
 }
 
 //respresents raw (not validated) the list of options/flags as received from the user
@@ -96,6 +102,7 @@ type validatedParameters struct {
 	blobTarget             blobParams
 	perfSourceDefinitions  []sources.SourceDefinition
 	tracker                *internal.TransferTracker
+	referenceMode          bool
 }
 
 type s3Source struct {
@@ -108,12 +115,13 @@ type s3Source struct {
 }
 
 type blobParams struct {
-	accountName string
-	accountKey  string
-	container   string
-	prefixes    []string
-	baseBlobURL string
-	sasExpMin   int
+	accountName   string
+	accountKey    string
+	container     string
+	prefixes      []string
+	baseBlobURL   string
+	sasExpMin     int
+	useServerSide bool
 }
 
 func (b blobParams) isSourceAuthAndContainerInfoSet() bool {
@@ -143,7 +151,8 @@ func newParamParserValidator() paramParserValidator {
 		transferDefStr:         string(transfer.FileToBlock),
 		numberOfHandlesPerFile: defaultNumberOfHandlesPerFile,
 		hTTPClientTimeout:      defaultHTTPClientTimeout,
-		numberOfFilesInBatch:   defaultNumberOfFilesInBatch}
+		numberOfFilesInBatch:   defaultNumberOfFilesInBatch,
+	}
 	params := &validatedParameters{
 		s3Source: s3Source{
 			preSignedExpMin: defaultReadTokenExp},
@@ -151,13 +160,19 @@ func newParamParserValidator() paramParserValidator {
 			sasExpMin: defaultReadTokenExp},
 		blobTarget: blobParams{}}
 
-	p := paramParserValidator{args: args, params: params}
+	p := paramParserValidator{args: args,
+		params: params,
+		defaultValues: defaults{
+			defaultNumberOfReaders: defaultNumberOfReaders,
+			defaultNumberOfWorkers: defaultNumberOfWorkers,
+		},
+	}
 
 	return p
 }
 
 func (p *paramParserValidator) parseAndValidate() error {
-	//Run global rules.. this will set the transfer type
+	//Run global rules.. this will set the transfer type which is needed in some of the global rules.
 	err := p.pvgTransferType()
 	if err != nil {
 		return err
@@ -166,6 +181,7 @@ func (p *paramParserValidator) parseAndValidate() error {
 	p.sourceSegment = s
 	p.targetSegment = t
 	err = p.runParseAndValidationRules(
+		p.pvgSetReferenceModeAndServerSide,
 		p.pvgCalculateReadersAndWorkers,
 		p.pvgTransferStatusPathIsPresent,
 		p.pvgBatchLimits,
@@ -180,7 +196,7 @@ func (p *paramParserValidator) parseAndValidate() error {
 		return err
 	}
 
-	//get and run target rules...
+	//get and run source and target rules...
 	var rules []parseAndValidationRule
 	if rules, err = p.getSourceRules(); err != nil {
 		return err
@@ -260,6 +276,16 @@ func (p *paramParserValidator) getSourceRules() ([]parseAndValidationRule, error
 //**************************
 
 //Global rules....
+func (p *paramParserValidator) pvgSetReferenceModeAndServerSide() error {
+	if p.targetSegment == transfer.BlockBlob {
+		if p.sourceSegment == transfer.Blob {
+			p.params.blobTarget.useServerSide = true
+			p.params.referenceMode = true
+		}
+	}
+	return nil
+}
+
 func (p *paramParserValidator) pvgUseExactMatch() error {
 	p.params.useExactMatch = p.args.exactNameMatch
 	return nil
@@ -301,6 +327,23 @@ func (p *paramParserValidator) pvgCalculateReadersAndWorkers() error {
 
 	p.params.numberOfWorkers = p.args.numberOfWorkers
 	p.params.numberOfReaders = p.args.numberOfReaders
+
+	//if using the default parameters and the transfer is blob-blockblob change
+	// params to maximes the transfer considering that this will be server-side sync
+	if p.defaultValues.defaultNumberOfReaders == p.params.numberOfReaders &&
+		p.defaultValues.defaultNumberOfWorkers == p.params.numberOfWorkers {
+
+		if p.params.transferType == transfer.BlobToBlock {
+			workers := 75 * runtime.NumCPU()
+
+			if workers > 200 {
+				workers = 200
+			}
+			p.params.numberOfWorkers = workers
+			p.params.numberOfReaders = 4
+		}
+
+	}
 
 	return nil
 

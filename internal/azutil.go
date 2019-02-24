@@ -15,7 +15,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/blobporter/util"
 
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 //AzUtil TODO
@@ -23,12 +23,17 @@ type AzUtil struct {
 	serviceURL   *azblob.ServiceURL
 	containerURL *azblob.ContainerURL
 	creds        *azblob.SharedKeyCredential
+	pipeline     pipeline.Pipeline
 }
 
 //NewAzUtil TODO
 func NewAzUtil(accountName string, accountKey string, container string, baseBlobURL string) (*AzUtil, error) {
 
-	creds := azblob.NewSharedKeyCredential(accountName, accountKey)
+	creds, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+
+	if err != nil {
+		return nil, err
+	}
 
 	pipeline := newPipeline(creds, azblob.PipelineOptions{
 		Telemetry: azblob.TelemetryOptions{
@@ -53,10 +58,18 @@ func NewAzUtil(accountName string, accountKey string, container string, baseBlob
 		creds:        creds}, nil
 }
 
+//DeleteContainerIfNotExists TODO
+func (p *AzUtil) DeleteContainerIfNotExists() error {
+	ctx := context.Background()
+	_, err := p.containerURL.Delete(ctx, azblob.ContainerAccessConditions{})
+
+	return err
+}
+
 //CreateContainerIfNotExists returs true if the container did not exist.
 func (p *AzUtil) CreateContainerIfNotExists() (bool, error) {
 	ctx := context.Background()
-	response, err := p.containerURL.GetPropertiesAndMetadata(ctx, azblob.LeaseAccessConditions{})
+	response, err := p.containerURL.GetProperties(ctx, azblob.LeaseAccessConditions{})
 
 	if response != nil {
 		defer response.Response().Body.Close()
@@ -85,7 +98,7 @@ func (p *AzUtil) CreateContainerIfNotExists() (bool, error) {
 
 func (p *AzUtil) blobExists(bburl azblob.BlockBlobURL) (bool, error) {
 	ctx := context.Background()
-	response, err := bburl.GetPropertiesAndMetadata(ctx, azblob.BlobAccessConditions{})
+	response, err := bburl.GetProperties(ctx, azblob.BlobAccessConditions{})
 
 	if response != nil {
 		defer response.Response().Body.Close()
@@ -144,10 +157,10 @@ func (p *AzUtil) CleanUncommittedBlocks(blobName string) error {
 
 	empty := make([]byte, 0)
 
-	var resp *azblob.BlobsPutResponse
+	var resp *azblob.BlockBlobUploadResponse
 	ctx = context.Background()
 
-	resp, err = bburl.PutBlob(ctx, bytes.NewReader(empty), azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	resp, err = bburl.Upload(ctx, bytes.NewReader(empty), azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
 	defer resp.Response().Body.Close()
 
 	return err
@@ -159,7 +172,7 @@ func (p *AzUtil) PutBlockList(blobName string, blockIDs []string) error {
 
 	h := azblob.BlobHTTPHeaders{}
 	ctx := context.Background()
-	resp, err := bburl.PutBlockList(ctx, blockIDs, azblob.Metadata{}, h, azblob.BlobAccessConditions{})
+	resp, err := bburl.CommitBlockList(ctx, blockIDs, h, azblob.Metadata{}, azblob.BlobAccessConditions{})
 
 	if err != nil {
 		return err
@@ -176,12 +189,12 @@ func (p *AzUtil) PutEmptyBlockBlob(blobName string) error {
 }
 
 //PutBlock TODO
-func (p *AzUtil) PutBlock(container string, blobName string, id string, body io.ReadSeeker) error {
+func (p *AzUtil) PutBlock(container string, blobName string, id string, body io.ReadSeeker, md5 []byte) error {
 	curl := p.serviceURL.NewContainerURL(container)
 	bburl := curl.NewBlockBlobURL(blobName)
 
 	ctx := context.Background()
-	resp, err := bburl.PutBlock(ctx, id, body, azblob.LeaseAccessConditions{})
+	resp, err := bburl.StageBlock(ctx, id, body, azblob.LeaseAccessConditions{}, md5)
 
 	if err != nil {
 		return err
@@ -191,22 +204,37 @@ func (p *AzUtil) PutBlock(container string, blobName string, id string, body io.
 	return nil
 }
 
+//PutBlockBlobFromURL TODO
+func (p *AzUtil) PutBlockBlobFromURL(blobName string, id string, sourceURL string, offset int64, length int64) error {
+	bburl := p.containerURL.NewBlockBlobURL(blobName)
+
+	ctx := context.Background()
+	surl, err := url.ParseRequestURI(sourceURL)
+	if err != nil {
+		return err
+	}
+	resp, err := bburl.StageBlockFromURL(ctx, id, *surl, offset, length, azblob.LeaseAccessConditions{})
+
+	if err != nil {
+		return err
+	}
+
+	resp.Response().Body.Close()
+
+	return nil
+
+}
+
 //PutBlockBlob TODO
 func (p *AzUtil) PutBlockBlob(blobName string, body io.ReadSeeker, md5 []byte) error {
 	bburl := p.containerURL.NewBlockBlobURL(blobName)
 
 	h := azblob.BlobHTTPHeaders{}
-
-	//16 is md5.Size
-	if len(md5) != 16 {
-		var md5bytes [16]byte
-		copy(md5bytes[:], md5)
-		h.ContentMD5 = md5bytes
-	}
+	h.ContentMD5 = md5
 
 	ctx := context.Background()
 
-	resp, err := bburl.PutBlob(ctx, body, h, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	resp, err := bburl.Upload(ctx, body, h, azblob.Metadata{}, azblob.BlobAccessConditions{})
 
 	if err != nil {
 		return err
@@ -223,7 +251,7 @@ func (p *AzUtil) CreatePageBlob(blobName string, size uint64) error {
 	h := azblob.BlobHTTPHeaders{}
 	ctx := context.Background()
 
-	resp, err := pburl.Create(ctx, int64(size), 0, azblob.Metadata{}, h, azblob.BlobAccessConditions{})
+	resp, err := pburl.Create(ctx, int64(size), 0, h, azblob.Metadata{}, azblob.BlobAccessConditions{})
 
 	if err != nil {
 		return err
@@ -234,14 +262,12 @@ func (p *AzUtil) CreatePageBlob(blobName string, size uint64) error {
 }
 
 //PutPages TODO
-func (p *AzUtil) PutPages(blobName string, start int64, end int64, body io.ReadSeeker) error {
+func (p *AzUtil) PutPages(blobName string, start int64, end int64, body io.ReadSeeker, md5 []byte) error {
 	pburl := p.containerURL.NewPageBlobURL(blobName)
-	pageRange := azblob.PageRange{
-		Start: start,
-		End:   end}
+
 	ctx := context.Background()
 
-	resp, err := pburl.PutPages(ctx, pageRange, body, azblob.BlobAccessConditions{})
+	resp, err := pburl.UploadPages(ctx, start, body, azblob.PageBlobAccessConditions{}, md5)
 
 	if err != nil {
 		return err
@@ -252,7 +278,7 @@ func (p *AzUtil) PutPages(blobName string, start int64, end int64, body io.ReadS
 }
 
 //GetBlobURLWithReadOnlySASToken  TODO
-func (p *AzUtil) GetBlobURLWithReadOnlySASToken(blobName string, expTime time.Time) url.URL {
+func (p *AzUtil) GetBlobURLWithReadOnlySASToken(blobName string, expTime time.Time) (*url.URL, error) {
 	bu := p.containerURL.NewBlobURL(blobName)
 	bp := azblob.NewBlobURLParts(bu.URL())
 
@@ -261,32 +287,36 @@ func (p *AzUtil) GetBlobURLWithReadOnlySASToken(blobName string, expTime time.Ti
 		ExpiryTime:    expTime,
 		Permissions:   "r"}
 
-	sq := sas.NewSASQueryParameters(p.creds)
+	sq, err := sas.NewSASQueryParameters(p.creds)
+	if err != nil {
+		return nil, err
+	}
 	bp.SAS = sq
-	return bp.URL()
+	burl := bp.URL()
+	return &burl, nil
 }
 
 //BlobCallback TODO
-type BlobCallback func(*azblob.Blob, string) (bool, error)
+type BlobCallback func(*azblob.BlobItem, string) (bool, error)
 
 //IterateBlobList TODO
 func (p *AzUtil) IterateBlobList(prefix string, callback BlobCallback) error {
 
 	var marker azblob.Marker
-	options := azblob.ListBlobsOptions{
+	options := azblob.ListBlobsSegmentOptions{
 		Details: azblob.BlobListingDetails{
 			Metadata: true},
 		Prefix: prefix}
 
 	for {
 		ctx := context.Background()
-		response, err := p.containerURL.ListBlobs(ctx, marker, options)
+		response, err := p.containerURL.ListBlobsFlatSegment(ctx, marker, options)
 
 		if err != nil {
 			return err
 		}
 		exit := false
-		for _, blob := range response.Blobs.Blob {
+		for _, blob := range response.Segment.BlobItems {
 			exit, err = callback(&blob, prefix)
 			if err != nil {
 				return err
@@ -453,4 +483,39 @@ func newpipelineHTTPClient() *http.Client {
 			DisableCompression:     false,
 			MaxResponseHeaderBytes: 0}}
 
+}
+
+//Custom header policy implementation. This policy allows the
+// injection of custom http headers in the requests via a value contained in the context
+// this approach is primarily a workaround because of feature gaps in the storage sdk
+
+func newCustomHeadersPolicyFactory() pipeline.Factory {
+	return &customHeadersPolicyFactory{}
+}
+
+type customHeadersPolicyFactory struct {
+}
+
+func (c *customHeadersPolicyFactory) New(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.Policy {
+	return &customHeaderPolicy{next: next, po: po}
+}
+
+type customHeaderPolicy struct {
+	po   *pipeline.PolicyOptions
+	next pipeline.Policy
+}
+type key int
+
+const customHeaderKey key = 0
+
+func (p *customHeaderPolicy) Do(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+	customHeaders, ok := ctx.Value(customHeaderKey).(map[string]string)
+	if ok && customHeaders != nil {
+		for header, value := range customHeaders {
+			request.Header.Del(header)
+			request.Header.Add(header, value)
+		}
+	}
+
+	return p.next.Do(ctx, request)
 }
