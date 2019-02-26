@@ -90,8 +90,8 @@ Then you can specify the URI of the source. The source could be a page, block or
 
 .. note::
 
-    BlobPorter will upload the data as it downloads it from the source.
-    The performance of the transfer will be constraint by the bandwidth of the host running BlobPorter. Consider running this type of transfer from a Virtual Machine running in the same Azure region as the target or the source.
+    BlobPorter won't use the bandwidth of the host for this scenario. BlobPorter uses the Put Block From URL API_.
+    .. _API:https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-from-url
 
 Transfer from an HTTP/HTTPS source to Azure Blob Storage
 --------------------------------------------------------

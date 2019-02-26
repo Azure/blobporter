@@ -14,6 +14,14 @@ type Factory interface {
 	New(next Policy, po *PolicyOptions) Policy
 }
 
+// FactoryFunc is an adapter that allows the use of an ordinary function as a Factory interface.
+type FactoryFunc func(next Policy, po *PolicyOptions) PolicyFunc
+
+// New calls f(next,po).
+func (f FactoryFunc) New(next Policy, po *PolicyOptions) Policy {
+	return f(next, po)
+}
+
 // The Policy interface represents a mutable Policy object created by a Factory. The object can mutate/process
 // the HTTP request and then forward it on to the next Policy object in the linked-list. The returned
 // Response goes backward through the linked-list for additional processing.
@@ -24,6 +32,14 @@ type Factory interface {
 // GetBody, TransferEncoding, Form, MultipartForm, Trailer, TLS, Cancel, and Response.
 type Policy interface {
 	Do(ctx context.Context, request Request) (Response, error)
+}
+
+// PolicyFunc is an adapter that allows the use of an ordinary function as a Policy interface.
+type PolicyFunc func(ctx context.Context, request Request) (Response, error)
+
+// Do calls f(ctx, request).
+func (f PolicyFunc) Do(ctx context.Context, request Request) (Response, error) {
+	return f(ctx, request)
 }
 
 // Options configures a Pipeline's behavior.
@@ -57,17 +73,21 @@ const (
 
 	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
 	LogInfo
+
+	// LogDebug tells a logger to log all LogDebug, LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogDebug
 )
 
 // LogOptions configures the pipeline's logging mechanism & level filtering.
 type LogOptions struct {
 	Log func(level LogLevel, message string)
 
-	// MinimumLevelToLog is called periodically allowing you to return the minimum level to log.
+	// ShouldLog is called periodically allowing you to return whether the specified LogLevel should be logged or not.
 	// An application can return different values over the its lifetime; this allows the application to dynamically
 	// alter what is logged. NOTE: This method can be called by multiple goroutines simultaneously so make sure
 	// you implement it in a goroutine-safe way. If nil, nothing is logged (the equivalent of returning LogNone).
-	MinimumLevelToLog func() LogLevel
+	// Usually, the function will be implemented simply like this: return level <= LogWarning
+	ShouldLog func(level LogLevel) bool
 }
 
 type pipeline struct {
@@ -152,14 +172,10 @@ type PolicyOptions struct {
 
 // ShouldLog returns true if the specified log level should be logged.
 func (po *PolicyOptions) ShouldLog(level LogLevel) bool {
-	if level == LogNone {
-		return false
+	if po.pipeline.options.Log.ShouldLog != nil {
+		return po.pipeline.options.Log.ShouldLog(level)
 	}
-	minimumLevel := LogNone
-	if po.pipeline.options.Log.MinimumLevelToLog != nil {
-		minimumLevel = po.pipeline.options.Log.MinimumLevelToLog()
-	}
-	return level <= minimumLevel
+	return false
 }
 
 // Log logs a string to the Pipeline's Logger.
@@ -185,52 +201,44 @@ func (po *PolicyOptions) Log(level LogLevel, msg string) {
 var pipelineHTTPClient = newDefaultHTTPClient()
 
 func newDefaultHTTPClient() *http.Client {
-
+	// We want the Transport to have a large connection pool
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
-			Dial: (&net.Dialer{
+			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
+			Dial /*Context*/ : (&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: true,
-			}).Dial,
-			MaxIdleConns:           0,
+			}).Dial, /*Context*/
+			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    100,
 			IdleConnTimeout:        90 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
 			DisableCompression:     false,
-			MaxResponseHeaderBytes: 0}}
-
+			MaxResponseHeaderBytes: 0,
+			//ResponseHeaderTimeout:  time.Duration{},
+			//ExpectContinueTimeout:  time.Duration{},
+		},
+	}
 }
 
 // newDefaultHTTPClientFactory creates a DefaultHTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
 func newDefaultHTTPClientFactory() Factory {
-	return &defaultHTTPClientPolicyFactory{}
+	return FactoryFunc(func(next Policy, po *PolicyOptions) PolicyFunc {
+		return func(ctx context.Context, request Request) (Response, error) {
+			r, err := pipelineHTTPClient.Do(request.WithContext(ctx))
+			if err != nil {
+				err = NewError(err, "HTTP request failed")
+			}
+			return NewHTTPResponse(r), err
+		}
+	})
 }
 
-type defaultHTTPClientPolicyFactory struct {
-}
-
-// Create initializes a logging policy object.
-func (f *defaultHTTPClientPolicyFactory) New(next Policy, po *PolicyOptions) Policy {
-	return &defaultHTTPClientPolicy{po: po}
-}
-
-type defaultHTTPClientPolicy struct {
-	po *PolicyOptions
-}
-
-func (p *defaultHTTPClientPolicy) Do(ctx context.Context, request Request) (Response, error) {
-	r, err := pipelineHTTPClient.Do(request.WithContext(ctx))
-	if err != nil {
-		err = NewError(err, "HTTP request failed")
-	}
-	return NewHTTPResponse(r), err
-}
-
-var mfm = methodFactoryMarker{}
+var mfm = methodFactoryMarker{} // Singleton
 
 // MethodFactoryMarker returns a special marker Factory object. When Pipeline's Do method is called, any
 // MethodMarkerFactory object is replaced with the specified methodFactory object. If nil is passed fro Do's
@@ -242,6 +250,6 @@ func MethodFactoryMarker() Factory {
 type methodFactoryMarker struct {
 }
 
-func (mpmf methodFactoryMarker) New(next Policy, po *PolicyOptions) Policy {
+func (methodFactoryMarker) New(next Policy, po *PolicyOptions) Policy {
 	panic("methodFactoryMarker policy should have been replaced with a method policy")
 }

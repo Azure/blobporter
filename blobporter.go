@@ -131,7 +131,6 @@ func main() {
 	if err := argsUtil.parseAndValidate(); err != nil {
 		log.Fatal(err)
 	}
-
 	//Create pipelines
 	sourcePipelines, targetPipeline, err := newTransferPipelines(argsUtil.params)
 
@@ -139,8 +138,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	stats := transfer.NewStats(argsUtil.params.numberOfWorkers, argsUtil.params.numberOfReaders)
-
+	prog := newProgressState(argsUtil.params.quietMode, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers)
 	for sourcePipeline := range sourcePipelines {
 
 		if sourcePipeline.Err != nil {
@@ -148,17 +146,13 @@ func main() {
 		}
 
 		sourcesInfo := sourcePipeline.Source.GetSourcesInfo()
-
 		tfer := transfer.NewTransfer(sourcePipeline.Source, targetPipeline, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, argsUtil.params.blockSize)
 		tfer.SetTransferTracker(argsUtil.params.tracker)
+		prog.newTransfer(float64(tfer.TotalSize), sourcesInfo, argsUtil.params.transferType)
 
-		displayFilesToTransfer(sourcesInfo)
-		pb := getProgressBarDelegate(tfer.TotalSize, argsUtil.params.quietMode)
-
-		tfer.StartTransfer(argsUtil.params.dedupeLevel, pb)
+		tfer.StartTransfer(argsUtil.params.dedupeLevel)
 		tfer.WaitForCompletion()
 
-		stats.AddTransferInfo(tfer.GetStats())
 	}
 
 	if argsUtil.params.tracker != nil {
@@ -167,7 +161,7 @@ func main() {
 		}
 	}
 
-	stats.DisplaySummary()
+	prog.displayGlobalSummary()
 
 }
 
@@ -176,15 +170,15 @@ func getProgressBarDelegate(totalSize uint64, quietMode bool) func(r pipeline.Wo
 	targetRetries = 0
 	if quietMode || totalSize == 0 {
 		return func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
-			atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
 			dataTransferred = dataTransferred + uint64(r.BlockSize)
 		}
 
 	}
 	return func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {
 
-		atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
-
+		if r.Stats != nil {
+			atomic.AddInt32(&targetRetries, int32(r.Stats.Retries))
+		}
 		dataTransferred = dataTransferred + uint64(r.BlockSize)
 		p := int(math.Ceil((float64(dataTransferred) / float64(totalSize)) * 100))
 		var ind string

@@ -8,8 +8,9 @@ type FileTargetParams struct {
 
 //AzureTargetParams TODO
 type AzureTargetParams struct {
-	AccountName string
-	AccountKey  string
-	Container   string
-	BaseBlobURL string
+	AccountName   string
+	AccountKey    string
+	Container     string
+	BaseBlobURL   string
+	UseServerSide bool
 }

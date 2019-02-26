@@ -20,7 +20,7 @@ const BufferQCapacity = 50
 const LargeBlockSizeMax = 100 * MB
 
 //LargeBlockAPIVersion API version that supports large block blobs
-const LargeBlockAPIVersion = "2016-05-31"
+const LargeBlockAPIVersion = "2018-03-28"
 
 //MiByte bytes in one MiB
 const MiByte = 1048576

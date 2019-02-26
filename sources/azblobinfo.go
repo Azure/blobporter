@@ -5,7 +5,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/blobporter/internal"
 	"github.com/Azure/blobporter/pipeline"
 )
@@ -38,14 +38,18 @@ func newazBlobInfoProvider(params *AzureBlobParams) *azBlobInfoProvider {
 	return &azBlobInfoProvider{params: params, azUtil: azutil}
 }
 
-func (b *azBlobInfoProvider) toSourceInfo(obj *azblob.Blob) (*pipeline.SourceInfo, error) {
+func (b *azBlobInfoProvider) toSourceInfo(obj *azblob.BlobItem) (*pipeline.SourceInfo, error) {
 	exp := b.params.SasExp
 	if exp == 0 {
 		exp = defaultSasExpHours
 	}
 	date := time.Now().Add(time.Duration(exp) * time.Minute).UTC()
 
-	sourceURLWithSAS := b.azUtil.GetBlobURLWithReadOnlySASToken(obj.Name, date)
+	sourceURLWithSAS, err := b.azUtil.GetBlobURLWithReadOnlySASToken(obj.Name, date)
+
+	if err != nil {
+		return nil, err
+	}
 
 	targetAlias := obj.Name
 	if !b.params.KeepDirStructure {
@@ -63,7 +67,7 @@ func (b *azBlobInfoProvider) listObjects(filter internal.SourceFilter) <-chan Ob
 	list := make([]pipeline.SourceInfo, 0)
 	bsize := 0
 
-	blobCallback := func(blob *azblob.Blob, prefix string) (bool, error) {
+	blobCallback := func(blob *azblob.BlobItem, prefix string) (bool, error) {
 		include := true
 		if b.params.UseExactNameMatch {
 			include = blob.Name == prefix

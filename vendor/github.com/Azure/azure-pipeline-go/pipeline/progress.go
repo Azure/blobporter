@@ -42,6 +42,14 @@ func (rbp *requestBodyProgress) Seek(offset int64, whence int) (offsetFromStart 
 	return rbp.requestBody.Seek(offset, whence)
 }
 
+// requestBodyProgress supports Close but the underlying stream may not; if it does, Close will close it.
+func (rbp *requestBodyProgress) Close() error {
+	if c, ok := rbp.requestBody.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
 // ********** The following are specific to the response body (a ReadCloser)
 
 // This struct is used when sending a body to the network

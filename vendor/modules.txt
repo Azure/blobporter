@@ -1,0 +1,30 @@
+# github.com/Azure/azure-pipeline-go v0.1.8
+github.com/Azure/azure-pipeline-go/pipeline
+# github.com/Azure/azure-storage-blob-go v0.0.0-20190123011202-457680cc0804
+github.com/Azure/azure-storage-blob-go/azblob
+# github.com/davecgh/go-spew v1.1.0
+github.com/davecgh/go-spew/spew
+# github.com/go-ini/ini v1.37.0
+github.com/go-ini/ini
+# github.com/minio/minio-go v0.0.0-20180307105924-9e124ec59547
+github.com/minio/minio-go
+github.com/minio/minio-go/pkg/credentials
+github.com/minio/minio-go/pkg/encrypt
+github.com/minio/minio-go/pkg/policy
+github.com/minio/minio-go/pkg/s3signer
+github.com/minio/minio-go/pkg/s3utils
+github.com/minio/minio-go/pkg/set
+# github.com/mitchellh/go-homedir v0.0.0-20180523094522-3864e76763d9
+github.com/mitchellh/go-homedir
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/stretchr/testify v1.2.2
+github.com/stretchr/testify/assert
+# golang.org/x/net v0.0.0-20180124060956-0ed95abb35c4
+golang.org/x/net/lex/httplex
+golang.org/x/net/idna
+# golang.org/x/text v0.3.0
+golang.org/x/text/secure/bidirule
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+golang.org/x/text/transform

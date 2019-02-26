@@ -21,8 +21,16 @@ Sources and targets are decoupled, this design enables the composition of variou
 
 *\*   The HTTP/HTTPS source must support HTTP byte ranges and return the file size as a response to a HTTP HEAD request.*
 
+### What's new (0.6.20) ?
+
+- Blob to Block Blobs transfers use the [Put Block from URL API](https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-from-url).
+- Proxy support.
+- Minor fixes and performance improvements.
+- Upgrade to Go 1.11
+
 
 ## Documentation
+
 
 * [Getting Started](http://blobporter.readthedocs.io/en/latest/gettingstarted.html)
 

@@ -43,14 +43,29 @@ func (r Request) SetBody(body io.ReadSeeker) error {
 	body.Seek(0, io.SeekStart)
 	r.ContentLength = size
 	r.Header["Content-Length"] = []string{strconv.FormatInt(size, 10)}
-	r.Body = &retryableRequestBody{body: body}
-	r.GetBody = func() (io.ReadCloser, error) {
-		_, err := body.Seek(0, io.SeekStart)
-		if err != nil {
-			return nil, err
+
+	if size != 0 {
+		r.Body = &retryableRequestBody{body: body}
+		r.GetBody = func() (io.ReadCloser, error) {
+			_, err := body.Seek(0, io.SeekStart)
+			if err != nil {
+				return nil, err
+			}
+			return r.Body, nil
 		}
-		return r.Body, nil
+	} else {
+		// in case the body is an empty stream, we need to use http.NoBody to explicitly provide no content
+		r.Body = http.NoBody
+		r.GetBody = func() (io.ReadCloser, error) {
+			return http.NoBody, nil
+		}
+
+		// close the user-provided empty body
+		if c, ok := body.(io.Closer); ok {
+			c.Close()
+		}
 	}
+
 	return nil
 }
 
@@ -77,7 +92,7 @@ func (r Request) Copy() Request {
 }
 
 func (r Request) close() error {
-	if r.Body != nil {
+	if r.Body != nil && r.Body != http.NoBody {
 		c, ok := r.Body.(*retryableRequestBody)
 		if !ok {
 			panic("unexpected request body type (should be *retryableReadSeekerCloser)")
@@ -89,7 +104,7 @@ func (r Request) close() error {
 
 // RewindBody seeks the request's Body stream back to the beginning so it can be resent when retrying an operation.
 func (r Request) RewindBody() error {
-	if r.Body != nil {
+	if r.Body != nil && r.Body != http.NoBody {
 		s, ok := r.Body.(io.Seeker)
 		if !ok {
 			panic("unexpected request body type (should be io.Seeker)")

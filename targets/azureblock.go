@@ -17,8 +17,9 @@ import (
 
 //AzureBlockTarget represents an Azure Block target
 type AzureBlockTarget struct {
-	container string
-	azutil    *internal.AzUtil
+	container     string
+	azutil        *internal.AzUtil
+	useServerSide bool
 }
 
 //NewAzureBlockTargetPipeline TODO
@@ -41,7 +42,9 @@ func NewAzureBlockTargetPipeline(params AzureTargetParams) pipeline.TargetPipeli
 		log.Fatal(err)
 	}
 
-	return &AzureBlockTarget{azutil: azutil, container: params.Container}
+	return &AzureBlockTarget{azutil: azutil,
+		useServerSide: params.UseServerSide,
+		container:     params.Container}
 }
 
 //CommitList implements CommitList from the pipeline.TargetPipeline interface.
@@ -50,7 +53,7 @@ func (t *AzureBlockTarget) CommitList(listInfo *pipeline.TargetCommittedListInfo
 	startTime := time.Now()
 
 	//Only commit if the number blocks is greater than one.
-	if numberOfBlocks == 1 {
+	if numberOfBlocks == 1 && !t.useServerSide {
 		msg = fmt.Sprintf("\rFile:%v, The blob is already committed.",
 			targetName)
 		err = nil
@@ -120,7 +123,17 @@ func (t *AzureBlockTarget) ProcessWrittenPart(result *pipeline.WorkerResult, lis
 func (t *AzureBlockTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	startTime = time.Now()
 	defer func() { duration = time.Now().Sub(startTime) }()
-	util.PrintfIfDebug("WritePart -> blockid:%v read:%v name:%v err:%v", part.BlockID, len(part.Data), part.TargetAlias, err)
+
+	if t.useServerSide {
+		err = t.azutil.PutBlockBlobFromURL(part.TargetAlias,
+			part.BlockID,
+			part.SourceURI,
+			int64(part.Offset),
+			int64(part.BytesToRead))
+
+		return
+	}
+
 	//computation of the MD5 happens is done by the readers.
 	var md5 []byte
 	if part.IsMD5Computed() {
@@ -140,8 +153,8 @@ func (t *AzureBlockTarget) WritePart(part *pipeline.Part) (duration time.Duratio
 		return
 	}
 	reader := bytes.NewReader(part.Data)
-	util.PrintfIfDebug("WritePart -> blockid:%v reader:%v name:%v err:%v", part.BlockID, reader.Len(), part.TargetAlias, err)
 
-	err = t.azutil.PutBlock(t.container, part.TargetAlias, part.BlockID, reader)
+	err = t.azutil.PutBlock(t.container, part.TargetAlias, part.BlockID, reader, md5)
+
 	return
 }

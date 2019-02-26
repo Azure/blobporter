@@ -476,8 +476,8 @@ func (c Client) ComposeObject(dst DestinationInfo, srcs []SourceInfo) error {
 
 	// Single source object case (i.e. when only one source is
 	// involved, it is being copied wholly and at most 5GiB in
-	// size).
-	if totalParts == 1 && srcs[0].start == -1 && totalSize <= maxPartSize {
+	// size, emptyfiles are also supported).
+	if (totalParts == 1 && srcs[0].start == -1 && totalSize <= maxPartSize) || (totalSize == 0) {
 		h := srcs[0].Headers
 		// Add destination encryption headers
 		for k, v := range dst.encryption.getSSEHeaders(false) {
@@ -527,6 +527,12 @@ func (c Client) ComposeObject(dst DestinationInfo, srcs []SourceInfo) error {
 	for k, v := range metaMap {
 		metaHeaders[k] = v
 	}
+
+	// Add destination encryption headers
+	for k, v := range dst.encryption.getSSEHeaders(false) {
+		metaHeaders[k] = v
+	}
+
 	uploadID, err := c.newUploadID(ctx, dst.bucket, dst.object, PutObjectOptions{UserMetadata: metaHeaders})
 	if err != nil {
 		return err

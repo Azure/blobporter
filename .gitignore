@@ -12,6 +12,7 @@ _build/linux_amd64
 _build/windows_amd64
 _wd
 _old
+_vendor*
 .vscode
 *_testdata
 

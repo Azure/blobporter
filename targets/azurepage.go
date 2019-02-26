@@ -94,7 +94,11 @@ func (t *AzurePageTarget) WritePart(part *pipeline.Part) (duration time.Duration
 	end := int64(part.Offset + uint64(part.BytesToRead) - 1)
 	defer util.PrintfIfDebug("WritePart -> start:%v end:%v name:%v err:%v", start, end, part.TargetAlias, err)
 
-	err = t.azUtil.PutPages(part.TargetAlias, start, end, bytes.NewReader(part.Data))
+	var md5 []byte
+	if part.IsMD5Computed() {
+		md5 = part.MD5Bytes()
+	}
+	err = t.azUtil.PutPages(part.TargetAlias, start, end, bytes.NewReader(part.Data), md5)
 
 	return
 }
