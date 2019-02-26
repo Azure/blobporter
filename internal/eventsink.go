@@ -88,13 +88,12 @@ type eventAggregateReq struct {
 
 type eventSink struct {
 	sync.Mutex
-	sums       map[string]EventItemAggregate
-	subs       map[EventSource][]EventSubscription
-	ondonesubs map[EventSource][]EventSubscription
-	eventsQ    chan EventItem
-	subsQ      chan EventSubscription
-	wg         *sync.WaitGroup
-	flushed    bool
+	sums         map[string]EventItemAggregate
+	subs         map[EventSource][]EventSubscription
+	ondonesubs   map[EventSource][]EventSubscription
+	eventsQ      chan EventItem
+	wg           *sync.WaitGroup
+	workerIsDone bool
 }
 
 func newEventSink() *eventSink {
@@ -104,72 +103,64 @@ func newEventSink() *eventSink {
 	return e
 
 }
-func (e *eventSink) Reset() error {
-	defer e.Unlock()
-	e.Lock()
-	if !e.flushed {
-		return fmt.Errorf("The sink is not flushed")
+func (e *eventSink) Reset() {
+
+	if !e.workerIsDone {
+		e.FlushAndWait()
 	}
+
 	e.init()
 	e.startWorker()
 
-	return nil
+	return
 }
 
 func (e *eventSink) startWorker() {
-	e.flushed = false
+	e.workerIsDone = false
 	go func() {
 		var sumEvent EventItemAggregate
-		defer func() { e.flushed = true }()
+		defer func() {
+			e.workerIsDone = true
+		}()
 		for {
-			select {
-			case event, ok := <-e.eventsQ:
-				if !ok {
-					defer func() {
-						for _, ondonesub := range e.ondonesubs {
-							for _, sub := range ondonesub {
-								for _, sumEvent := range e.sums {
-									if sub.Source == sumEvent.LastEventItem.Source {
-										sub.Delegate(sumEvent.LastEventItem, sumEvent)
-									}
+
+			event, ok := <-e.eventsQ
+
+			if !ok {
+
+				defer func() {
+					e.Lock()
+					defer e.Unlock()
+					for _, ondonesub := range e.ondonesubs {
+						for _, sub := range ondonesub {
+							for _, sumEvent := range e.sums {
+								if sub.Source == sumEvent.LastEventItem.Source {
+									sub.Delegate(sumEvent.LastEventItem, sumEvent)
 								}
 							}
 						}
-						e.wg.Done()
-					}()
-					return
-				}
+					}
+					e.wg.Done()
+				}()
 
-				if event.Action == Sum {
-					sumEvent = e.sums[event.key()]
-					sumEvent.NumItems++
-					sumEvent.LastEventItem = event
-					value := event.Data[0].Value.(float64)
-					sumEvent.Value += value
-					e.sums[event.key()] = sumEvent
-				}
-
-				esubs := e.subs[event.Source]
-				for _, sub := range esubs {
-					sub.Delegate(event, sumEvent)
-				}
-
-			case sub, ok := <-e.subsQ:
-				if !ok {
-					continue
-				}
-				switch sub.Type {
-				case RealTime:
-					subsForSource := e.subs[sub.Source]
-					subsForSource = append(subsForSource, sub)
-					e.subs[sub.Source] = subsForSource
-				case OnDone:
-					subsForSource := e.ondonesubs[sub.Source]
-					subsForSource = append(subsForSource, sub)
-					e.ondonesubs[sub.Source] = subsForSource
-				}
-
+				return
 			}
+
+			if event.Action == Sum {
+				sumEvent = e.sums[event.key()]
+				sumEvent.NumItems++
+				sumEvent.LastEventItem = event
+				value := event.Data[0].Value.(float64)
+				sumEvent.Value += value
+				e.sums[event.key()] = sumEvent
+			}
+
+			e.Lock()
+			esubs := e.subs[event.Source]
+			for _, sub := range esubs {
+				sub.Delegate(event, sumEvent)
+			}
+			e.Unlock()
 		}
 	}()
 }
@@ -178,7 +169,6 @@ func (e *eventSink) init() {
 	e.subs = make(map[EventSource][]EventSubscription)
 	e.ondonesubs = make(map[EventSource][]EventSubscription)
 	e.eventsQ = make(chan EventItem, 10000)
-	e.subsQ = make(chan EventSubscription, 100)
 	e.wg = &sync.WaitGroup{}
 	e.wg.Add(1)
 }
@@ -186,20 +176,30 @@ func (e *eventSink) init() {
 //FlushAndWait closese the sink's channels as waits for processing of pending events
 func (e *eventSink) FlushAndWait() {
 	close(e.eventsQ)
-	close(e.subsQ)
 	e.wg.Wait()
+
 }
 
 //AddSubscription adds a subscription to the event sink
 func (e *eventSink) AddSubscription(source EventSource, subType EventSubscriptionType, delegate EventDelegate) {
-	select {
-	case e.subsQ <- EventSubscription{
+	e.Lock()
+	defer e.Unlock()
+
+	sub := EventSubscription{
 		Delegate: delegate,
 		Source:   source,
 		Type:     subType,
-	}:
-	default:
-		panic(fmt.Errorf("AddSubscription failed the channel is closed or full"))
+	}
+
+	switch subType {
+	case RealTime:
+		subsForSource := e.subs[source]
+		subsForSource = append(subsForSource, sub)
+		e.subs[source] = subsForSource
+	case OnDone:
+		subsForSource := e.ondonesubs[source]
+		subsForSource = append(subsForSource, sub)
+		e.ondonesubs[source] = subsForSource
 	}
 }
 

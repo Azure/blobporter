@@ -252,6 +252,7 @@ type Channels struct {
 const workerDelayStarTime = 300 * time.Millisecond
 const maxMemReadPartsBufferSize = 500 * util.MB
 const extraThreadTarget = 4
+const numberOfCommitters = 4
 
 //NewTransfer creates a new Transfer, this will adjust the thread target
 //and initialize the channels and the wait groups for the writers, readers and the committers
@@ -280,7 +281,7 @@ func NewTransfer(source pipeline.SourcePipeline, target pipeline.TargetPipeline,
 	//Setup the wait groups
 	t.SyncWaitGroups.Readers.Add(readers)
 	t.SyncWaitGroups.Workers.Add(workers)
-	t.SyncWaitGroups.Commits.Add(workers)
+	t.SyncWaitGroups.Commits.Add(numberOfCommitters)
 
 	//Create buffered channels
 	channels.Partitions, channels.Parts, t.TotalNumOfBlocks, t.TotalSize = source.ConstructBlockInfoQueue(blockSize)
@@ -288,8 +289,6 @@ func NewTransfer(source pipeline.SourcePipeline, target pipeline.TargetPipeline,
 
 	channels.ReadParts = readParts
 
-	//we are ignoring the return error as the sink is a singleton so for the first transfer
-	// the assumption is that is not going to be flushed.
 	internal.EventSink.Reset()
 
 	return &t
@@ -326,7 +325,9 @@ func (t *Transfer) StartTransfer(dupeLevel DupeCheckLevel) {
 
 	t.startReaders(t.ControlChannels.Partitions, t.ControlChannels.Parts, t.ControlChannels.ReadParts, t.NumOfReaders, &t.SyncWaitGroups.Readers, t.SourcePipeline)
 
-	t.startWorkers(dupeLevel)
+	t.startWorkersAndCommitters(dupeLevel)
+
+	return
 
 }
 
@@ -350,7 +351,7 @@ func (t *Transfer) preprocessSources() {
 
 //WaitForCompletion blocks until the readers, writers and commit operations complete.
 //Duration property is set and returned.
-func (t *Transfer) WaitForCompletion() {
+func (t *Transfer) WaitForCompletion() time.Time {
 
 	t.SyncWaitGroups.Readers.Wait()
 	close(t.ControlChannels.ReadParts)
@@ -358,23 +359,26 @@ func (t *Transfer) WaitForCompletion() {
 	t.commitListHandler.setDone()
 	t.commitListHandler.Wait()
 	t.SyncWaitGroups.Commits.Wait()
+	done := time.Now()
 	internal.EventSink.FlushAndWait()
-	return
+	return done
 }
 
-// StartWorkers creates and starts the set of Workers to send data blocks
-// from the to the target. Workers are started after waiting workerDelayStarTime.
-//func (t *Transfer) startWorkers(workerQ chan pipeline.Part, numOfWorkers int, worker *sync.WaitGroup, d DupeCheckLevel, target pipeline.TargetPipeline, progressBarDelegate ProgressUpdate) {
-func (t *Transfer) startWorkers(d DupeCheckLevel) {
+// startWorkersAndCommitters creates and starts the Workers (writers) and the committers
+func (t *Transfer) startWorkersAndCommitters(d DupeCheckLevel) {
 	t.commitListHandler = newCommitListHandler(t.tracker, t.TargetPipeline)
 	for w := 0; w < t.NumOfWorkers; w++ {
 		worker := newWorker(w,
 			t.ControlChannels.ReadParts,
 			t.commitListHandler,
 			&t.SyncWaitGroups.Workers,
-			&t.SyncWaitGroups.Commits,
 			d)
 		go worker.startWorker(t.TargetPipeline)
+	}
+
+	for c := 0; c < numberOfCommitters; c++ {
+		committer := newCommitter(t.commitListHandler, &t.SyncWaitGroups.Commits)
+		go committer.startCommitter(t.TargetPipeline)
 	}
 }
 

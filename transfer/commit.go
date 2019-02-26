@@ -33,8 +33,8 @@ const (
 func newCommitListHandler(tracker *internal.TransferTracker, target pipeline.TargetPipeline) *commitListHandler {
 
 	commitInfos := make(map[string]commitInfo)
-	resultQ := make(chan pipeline.WorkerResult, 1000)
-	commitInfoReq := make(chan commitInfo, 1000)
+	resultQ := make(chan pipeline.WorkerResult, 10000)
+	commitInfoReq := make(chan commitInfo, 10000)
 	c := commitListHandler{
 		commitInfos:   commitInfos,
 		tracker:       tracker,
@@ -108,8 +108,8 @@ func (c *commitListHandler) addWorkerResult(workerID int, tb *pipeline.Part, sta
 		Duration:  d,
 		Retries:   retries}
 
-	tb.Data = nil
-	tb.BufferQ = nil
+	//tb.Data = nil
+	//tb.BufferQ = nil
 
 	wr := pipeline.WorkerResult{
 		Stats:                   &wStats,

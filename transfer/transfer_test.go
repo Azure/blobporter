@@ -495,6 +495,7 @@ func createContainer(containerName string) string {
 	}
 	return containerName
 }
+
 /*
 func getClient() storage.BlobStorageClient {
 	client, err := storage.NewBasicClient(accountName, accountKey)
@@ -515,7 +516,11 @@ func createSasTokenURL(blobName string, container string) (string, error) {
 	}
 
 	date := time.Now().UTC().AddDate(0, 0, 3)
-	burl := az.GetBlobURLWithReadOnlySASToken(blobName, date)
+	burl, err := az.GetBlobURLWithReadOnlySASToken(blobName, date)
+
+	if err != nil {
+		return "", err
+	}
 
 	return burl.String(), nil
 

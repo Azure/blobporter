@@ -149,11 +149,10 @@ func main() {
 		tfer := transfer.NewTransfer(sourcePipeline.Source, targetPipeline, argsUtil.params.numberOfReaders, argsUtil.params.numberOfWorkers, argsUtil.params.blockSize)
 		tfer.SetTransferTracker(argsUtil.params.tracker)
 		prog.newTransfer(float64(tfer.TotalSize), sourcesInfo, argsUtil.params.transferType)
-	
+
 		tfer.StartTransfer(argsUtil.params.dedupeLevel)
 		tfer.WaitForCompletion()
 
-	
 	}
 
 	if argsUtil.params.tracker != nil {
@@ -164,7 +163,6 @@ func main() {
 
 	prog.displayGlobalSummary()
 
-	
 }
 
 func getProgressBarDelegate(totalSize uint64, quietMode bool) func(r pipeline.WorkerResult, committedCount int, bufferLevel int) {

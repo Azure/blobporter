@@ -123,7 +123,6 @@ func (t *AzureBlockTarget) ProcessWrittenPart(result *pipeline.WorkerResult, lis
 func (t *AzureBlockTarget) WritePart(part *pipeline.Part) (duration time.Duration, startTime time.Time, numOfRetries int, err error) {
 	startTime = time.Now()
 	defer func() { duration = time.Now().Sub(startTime) }()
-	util.PrintfIfDebug("WritePart -> blockid:%v read:%v name:%v err:%v", part.BlockID, len(part.Data), part.TargetAlias, err)
 
 	if t.useServerSide {
 		err = t.azutil.PutBlockBlobFromURL(part.TargetAlias,
@@ -156,7 +155,6 @@ func (t *AzureBlockTarget) WritePart(part *pipeline.Part) (duration time.Duratio
 	reader := bytes.NewReader(part.Data)
 
 	err = t.azutil.PutBlock(t.container, part.TargetAlias, part.BlockID, reader, md5)
-	util.PrintfIfDebug("WritePart2 -> blockid:%v reader:%v name:%v err:%v", part.BlockID, reader.Len(), part.TargetAlias, err)
 
 	return
 }

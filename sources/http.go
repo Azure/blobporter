@@ -1,7 +1,7 @@
 package sources
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -194,8 +194,14 @@ func (f *HTTPSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, par
 
 				return err
 			}
-			p.Data, err = ioutil.ReadAll(res.Body)
-			//_, err = io.ReadFull(res.Body, p.Data[:p.BytesToRead])
+
+			//p.Data, err = ioutil.ReadAll(res.Body)
+			p.GetBuffer()
+			_, err := io.ReadAtLeast(res.Body, p.Data, int(p.BytesToRead))
+
+			if err != nil && err != io.ErrUnexpectedEOF {
+				return err
+			}
 
 			res.Body.Close()
 			if err != nil {
@@ -222,7 +228,8 @@ func (f *HTTPSource) ExecuteReader(partitionsQ chan pipeline.PartsPartition, par
 func (f *HTTPSource) ConstructBlockInfoQueue(blockSize uint64) (partitionsQ chan pipeline.PartsPartition, partsQ chan pipeline.Part, numOfBlocks int, size uint64) {
 	allParts := make([][]pipeline.Part, len(f.Sources))
 	//disable memory buffer for parts (bufferQ == nil)
-	var bufferQ chan []byte
+	//var bufferQ chan []byte
+	bufferQ := make(chan []byte, 10)
 	largestNumOfParts := 0
 	for i, source := range f.Sources {
 		size = size + source.Size

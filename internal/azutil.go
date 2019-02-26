@@ -32,7 +32,7 @@ func NewAzUtil(accountName string, accountKey string, container string, baseBlob
 	creds, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(" error in the credential. Check the key value. Error:%v", err)
 	}
 
 	pipeline := newPipeline(creds, azblob.PipelineOptions{

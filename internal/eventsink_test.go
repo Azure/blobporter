@@ -7,15 +7,19 @@ import (
 )
 
 type mockDel struct {
-	numOfEventItem          int
-	numOfEventItemAggregate int
-	numOfCalls              int
+	numOfEventItem  int
+	numOfCalls      int
+	aggregateResult int
 }
 
 func (m *mockDel) delegate(e EventItem, a EventItemAggregate) {
 	m.numOfEventItem++
-	m.numOfEventItemAggregate++
+
 	m.numOfCalls++
+
+	if e.Action == Sum {
+		m.aggregateResult = int(a.Value)
+	}
 }
 
 const testSource EventSource = 10
@@ -50,8 +54,8 @@ func TestOnDoneEvents(t *testing.T) {
 
 	es.FlushAndWait()
 
-	assert.Equal(t, md.numOfEventItemAggregate, 3, "Values must match")
-	assert.Equal(t, md.numOfCalls, 3, "Values must match")
+	assert.Equal(t, md.aggregateResult, 3, "Values must match")
+	assert.Equal(t, md.numOfCalls, 1, "Values must match")
 }
 
 func TestFlushCycle(t *testing.T) {
@@ -61,30 +65,25 @@ func TestFlushCycle(t *testing.T) {
 	es.AddSubscription(testSource, RealTime, md.delegate)
 	es.AddEvent(testSource, testEvent, "", EventData{Value: 1})
 
-	assert.Equal(t, md.numOfEventItem, 1, "Values must match")
-	assert.Equal(t, md.numOfCalls, 1, "Values must match")
+	es.Reset()
 
-	err := es.Reset()
-	assert.Error(t, err, "Reset must fail as it hasn't been flushed")
+	assert.Equal(t, 1, md.numOfEventItem, "Values must match")
+	assert.Equal(t, 1, md.numOfCalls, "Values must match")
 
-	//even if the reset fail the sink must be able to receive events
+	es.AddSubscription(testSource, RealTime, md.delegate)
 	es.AddEvent(testSource, testEvent, "", EventData{Value: 1})
-	assert.Equal(t, md.numOfEventItem, 2, "Values must match")
-	assert.Equal(t, md.numOfCalls, 2, "Values must match")
+
+	es.Reset()
+
+	assert.Equal(t, 2, md.numOfEventItem, "Values must match")
+	assert.Equal(t, 2, md.numOfCalls, "Values must match")
 
 	//add a sum event
 	es.AddSubscription(testSource, OnDone, md.delegate)
 	es.AddSumEvent(testSource, testEvent, "", oneFloat64)
 
-	//the sum event must be triggered at the end...
-	assert.Equal(t, md.numOfCalls, 2, "Values must match")
+	es.Reset()
 
-	es.FlushAndWait()
-
-	assert.Equal(t, md.numOfEventItemAggregate, 1, "Values must match")
-	assert.Equal(t, md.numOfCalls, 3, "Values must match")
-
-	err = es.Reset()
-	assert.NoError(t, err, "Reset must succeed as the sink is flushed")
-
+	assert.Equal(t, 1, md.aggregateResult, "Values must match")
+	assert.Equal(t, 3, md.numOfCalls,  "Values must match")
 }
