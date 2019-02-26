@@ -90,8 +90,7 @@ Then you can specify the URI of the source. The source could be a page, block or
 
 .. note::
 
-    BlobPorter won't use the bandwidth of the host for this scenario. BlobPorter uses the Put Block From URL API_.
-    .. _API:https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-from-url
+    BlobPorter won't use the bandwidth of the host for this scenario. BlobPorter uses the `Put Block From URL API <https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-from-url>`_.
 
 Transfer from an HTTP/HTTPS source to Azure Blob Storage
 --------------------------------------------------------
