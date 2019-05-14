@@ -79,7 +79,7 @@ First, you must set the account key of the source storage account.
 
 ::
 
-    export SOURCE_ACCOUNT_KEY=<YOUR  KEY>
+    export SRC_ACCOUNT_KEY=<YOUR  KEY>
 
 
 Then you can specify the URI of the source. The source could be a page, block or append blob. Prefixes are supported.
